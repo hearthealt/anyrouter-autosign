@@ -1,0 +1,21 @@
+:root {
+  --primary-color: #00b38a;
+  --primary-color-hover: #00cc9d;
+  --primary-color-pressed: #009973;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f7f9;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
