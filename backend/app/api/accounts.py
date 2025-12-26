@@ -12,7 +12,7 @@ from app.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountInfo,
     LastSign, ApiResponse
 )
-from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief
+from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest
 from app.services import anyrouter_service
 from app.utils import format_quota, format_quota_percent
 
@@ -544,4 +544,178 @@ def health_check_all_accounts(db: Session = Depends(get_db)):
             "unhealthy_count": unhealthy_count,
             "results": results
         }
+    )
+
+
+@router.post("/{account_id}/tokens", response_model=ApiResponse)
+def create_account_token(account_id: int, data: CreateTokenRequest, db: Session = Depends(get_db)):
+    """创建 API Token"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if not account.anyrouter_user_id:
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    success, result = anyrouter_service.create_token(
+        session_cookie=account.session_cookie,
+        user_id=str(account.anyrouter_user_id),
+        name=data.name,
+        remain_quota=data.remain_quota,
+        expired_time=data.expired_time,
+        unlimited_quota=data.unlimited_quota,
+        model_limits_enabled=data.model_limits_enabled,
+        model_limits=data.model_limits,
+        allow_ips=data.allow_ips,
+        group=data.group
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail=result.get("message", "创建令牌失败"))
+
+    # 创建成功后同步 tokens
+    sync_account_tokens(db, account)
+
+    return ApiResponse(
+        success=True,
+        message=result.get("message", "创建成功")
+    )
+
+
+@router.get("/{account_id}/models", response_model=ApiResponse)
+def get_account_models(account_id: int, db: Session = Depends(get_db)):
+    """获取账号可用的模型列表"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if not account.anyrouter_user_id:
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    success, result = anyrouter_service.get_models(
+        account.session_cookie,
+        str(account.anyrouter_user_id)
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail=result.get("message", "获取模型列表失败"))
+
+    return ApiResponse(
+        success=True,
+        data=result.get("models", [])
+    )
+
+
+@router.get("/{account_id}/groups", response_model=ApiResponse)
+def get_account_groups(account_id: int, db: Session = Depends(get_db)):
+    """获取账号可用的分组列表（AnyRouter 平台分组）"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if not account.anyrouter_user_id:
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    success, result = anyrouter_service.get_groups(
+        account.session_cookie,
+        str(account.anyrouter_user_id)
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail=result.get("message", "获取分组列表失败"))
+
+    return ApiResponse(
+        success=True,
+        data=result.get("groups", {})
+    )
+
+
+@router.delete("/{account_id}/tokens/{token_id}", response_model=ApiResponse)
+def delete_account_token(account_id: int, token_id: int, db: Session = Depends(get_db)):
+    """删除 API Token"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if not account.anyrouter_user_id:
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    # 尝试远程删除
+    success, result = anyrouter_service.delete_token(
+        session_cookie=account.session_cookie,
+        user_id=str(account.anyrouter_user_id),
+        token_id=token_id
+    )
+
+    # 无论远程删除是否成功，都删除本地记录并同步
+    # （远程可能已经删除了，或者网络问题等）
+    db.query(ApiToken).filter(
+        ApiToken.account_id == account_id,
+        ApiToken.token_id == token_id
+    ).delete()
+    db.commit()
+
+    # 同步令牌列表
+    sync_account_tokens(db, account)
+
+    if success:
+        return ApiResponse(success=True, message="删除成功")
+    else:
+        # 远程删除失败但本地已清理，返回成功但提示
+        return ApiResponse(success=True, message="本地已删除（远程可能已不存在）")
+
+
+@router.put("/{account_id}/tokens/{token_id}", response_model=ApiResponse)
+def update_account_token(account_id: int, token_id: int, data: dict, db: Session = Depends(get_db)):
+    """更新 API Token"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if not account.anyrouter_user_id:
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    # 确保 token_data 包含必要字段
+    data["id"] = token_id
+    data["user_id"] = account.anyrouter_user_id
+
+    success, result = anyrouter_service.update_token(
+        session_cookie=account.session_cookie,
+        user_id=str(account.anyrouter_user_id),
+        token_data=data
+    )
+
+    if not success:
+        # 更新失败，同步列表检查令牌是否还存在
+        sync_account_tokens(db, account)
+        # 检查本地是否还有这个令牌
+        token_exists = db.query(ApiToken).filter(
+            ApiToken.account_id == account_id,
+            ApiToken.token_id == token_id
+        ).first()
+
+        if not token_exists:
+            # 远程已删除
+            raise HTTPException(
+                status_code=400,
+                detail="更新失败：该令牌在远程已不存在，本地已同步清理"
+            )
+        else:
+            # 其他原因失败（网络等）
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("message", "更新令牌失败")
+            )
+
+    # 更新成功后同步 tokens
+    sync_account_tokens(db, account)
+
+    return ApiResponse(
+        success=True,
+        message=result.get("message", "更新成功")
     )

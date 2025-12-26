@@ -277,10 +277,16 @@
               <span class="tokens-count">{{ tokens.length }}</span>
               <span class="tokens-label">个令牌</span>
             </div>
-            <n-button size="small" secondary @click="handleSyncTokens" :loading="syncingTokens">
-              <template #icon><n-icon><RefreshOutline /></n-icon></template>
-              同步令牌
-            </n-button>
+            <div class="tokens-actions">
+              <n-button size="small" type="primary" @click="showAddTokenDrawer = true">
+                <template #icon><n-icon><AddOutline /></n-icon></template>
+                添加令牌
+              </n-button>
+              <n-button size="small" secondary @click="handleSyncTokens" :loading="syncingTokens">
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                同步令牌
+              </n-button>
+            </div>
           </div>
           <n-spin :show="loadingTokens">
             <div v-if="tokens.length > 0" class="tokens-list">
@@ -290,6 +296,7 @@
                   <div class="token-quota">
                     <span class="quota-used">已用 {{ formatQuota(token.used_quota) }}</span>
                     <n-tag v-if="token.unlimited_quota" size="tiny" :bordered="false" type="success">无限</n-tag>
+                    <n-tag v-else size="tiny" :bordered="false" type="info">{{ formatQuota(token.used_quota + token.remain_quota) }}</n-tag>
                   </div>
                 </div>
                 <div v-if="token.model_limits" class="token-models">
@@ -304,9 +311,22 @@
                 </div>
                 <div class="token-key-row">
                   <code class="token-key">sk-{{ token.key.slice(0, 8) }}...{{ token.key.slice(-4) }}</code>
-                  <n-button size="tiny" quaternary @click="copyToken(token.key)">
-                    <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
-                  </n-button>
+                  <div class="token-actions">
+                    <n-button size="tiny" quaternary @click="copyToken(token.key)">
+                      <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
+                    </n-button>
+                    <n-button size="tiny" quaternary @click="handleEditToken(token)">
+                      <template #icon><n-icon :size="14"><CreateOutline /></n-icon></template>
+                    </n-button>
+                    <n-popconfirm @positive-click="handleDeleteToken(token)">
+                      <template #trigger>
+                        <n-button size="tiny" quaternary :loading="deletingTokenId === token.token_id" style="color: #d03050;">
+                          <template #icon><n-icon :size="14"><TrashOutline /></n-icon></template>
+                        </n-button>
+                      </template>
+                      确定删除该令牌吗？
+                    </n-popconfirm>
+                  </div>
                 </div>
               </div>
             </div>
@@ -324,13 +344,85 @@
         </div>
       </div>
     </n-modal>
+
+    <!-- 添加/编辑令牌抽屉 -->
+    <n-drawer v-model:show="showAddTokenDrawer" :width="400" placement="right">
+      <n-drawer-content :title="editingToken ? '编辑令牌' : '添加令牌'" closable>
+        <div class="token-form">
+          <div class="form-item">
+            <label>令牌名称 <span class="required">*</span></label>
+            <n-input v-model:value="tokenForm.name" placeholder="请输入令牌名称" />
+          </div>
+          <div class="form-item">
+            <label>额度设置</label>
+            <n-switch v-model:value="tokenForm.unlimited_quota">
+              <template #checked>无限额度</template>
+              <template #unchecked>限制额度</template>
+            </n-switch>
+          </div>
+          <div class="form-item" v-if="!tokenForm.unlimited_quota">
+            <label>剩余额度</label>
+            <n-input-number v-model:value="tokenForm.remain_quota" :min="0" :step="100000" style="width: 100%;">
+              <template #suffix>（约 ${{ (tokenForm.remain_quota / 500000).toFixed(2) }}）</template>
+            </n-input-number>
+          </div>
+          <div class="form-item">
+            <label>过期时间</label>
+            <n-select
+              v-model:value="tokenForm.expired_time"
+              :options="expireOptions"
+              placeholder="选择过期时间"
+            />
+          </div>
+          <div class="form-item">
+            <label>模型限制</label>
+            <n-switch v-model:value="tokenForm.model_limits_enabled">
+              <template #checked>启用限制</template>
+              <template #unchecked>不限制</template>
+            </n-switch>
+          </div>
+          <div class="form-item" v-if="tokenForm.model_limits_enabled">
+            <label>可用模型</label>
+            <n-select
+              v-model:value="tokenForm.model_limits_array"
+              multiple
+              filterable
+              :options="availableModelOptions"
+              :loading="loadingModels"
+              placeholder="选择可用模型"
+            />
+          </div>
+          <div class="form-item">
+            <label>分组</label>
+            <n-select
+              v-model:value="tokenForm.group"
+              :options="tokenGroupOptions"
+              :loading="loadingTokenGroups"
+              placeholder="选择分组"
+            />
+          </div>
+          <div class="form-item">
+            <label>IP 白名单（可选）</label>
+            <n-input v-model:value="tokenForm.allow_ips" placeholder="留空表示不限制，多个 IP 用逗号分隔" />
+          </div>
+        </div>
+        <template #footer>
+          <div class="drawer-footer">
+            <n-button @click="showAddTokenDrawer = false">取消</n-button>
+            <n-button type="primary" @click="handleSaveToken" :loading="creatingToken">
+              {{ editingToken ? '保存修改' : '创建令牌' }}
+            </n-button>
+          </div>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, h } from 'vue'
+import { ref, reactive, onMounted, computed, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip } from 'naive-ui'
+import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip, NDrawer, NDrawerContent, NInputNumber } from 'naive-ui'
 import {
   PeopleOutline, CheckmarkCircleOutline, WalletOutline, GiftOutline,
   AddOutline, FlashOutline, CloseOutline, InformationCircleOutline,
@@ -376,6 +468,35 @@ const tokenAccount = ref<any>(null)
 const tokens = ref<any[]>([])
 const loadingTokens = ref(false)
 const syncingTokens = ref(false)
+const deletingTokenId = ref<number | null>(null)
+
+// 添加令牌
+const showAddTokenDrawer = ref(false)
+const creatingToken = ref(false)
+const editingToken = ref<any>(null)  // 编辑时存储原始令牌数据
+const loadingModels = ref(false)
+const loadingTokenGroups = ref(false)
+const availableModelOptions = ref<{ label: string; value: string }[]>([])
+const tokenGroupOptions = ref<{ label: string; value: string }[]>([])
+const tokenForm = ref({
+  name: '',
+  remain_quota: 500000,
+  expired_time: -1,
+  unlimited_quota: false,
+  model_limits_enabled: false,
+  model_limits_array: [] as string[],
+  group: 'default',
+  allow_ips: ''
+})
+const expireOptions = [
+  { label: '永不过期', value: -1 },
+  { label: '1 小时', value: 1 },
+  { label: '1 天', value: 24 },
+  { label: '7 天', value: 24 * 7 },
+  { label: '30 天', value: 24 * 30 },
+  { label: '90 天', value: 24 * 90 },
+  { label: '365 天', value: 24 * 365 }
+]
 
 // API 节点
 const apiEndpoints = ref<any[]>([])
@@ -404,12 +525,19 @@ watch(selectedGroupId, () => {
 })
 
 // 账号表格分页配置
-const accountPagination = {
+const accountPagination = reactive({
   page: 1,
   pageSize: 10,
   showSizePicker: true,
-  pageSizes: [10, 20, 50]
-}
+  pageSizes: [10, 20, 50],
+  onChange: (page: number) => {
+    accountPagination.page = page
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    accountPagination.pageSize = pageSize
+    accountPagination.page = 1
+  }
+})
 
 // 账号表格列定义
 const accountColumns = [
@@ -765,6 +893,154 @@ const handleSyncTokens = async () => {
     syncingTokens.value = false
   }
 }
+
+const handleDeleteToken = async (token: any) => {
+  if (!tokenAccount.value) return
+  deletingTokenId.value = token.token_id
+  try {
+    await accountApi.deleteToken(tokenAccount.value.id, token.token_id)
+    message.success('删除成功')
+    // 刷新令牌列表
+    const res = await accountApi.getTokens(tokenAccount.value.id)
+    tokens.value = res.data || []
+  } catch (e: any) {
+    message.error(e.message)
+  } finally {
+    deletingTokenId.value = null
+  }
+}
+
+// 加载可用模型列表
+const loadAvailableModels = async () => {
+  if (!tokenAccount.value) return
+  loadingModels.value = true
+  try {
+    const res = await accountApi.getAvailableModels(tokenAccount.value.id)
+    const models = res.data || []
+    availableModelOptions.value = models.map((m: string) => ({ label: m, value: m }))
+  } catch (e: any) {
+    console.error('Failed to load models:', e)
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+// 加载令牌分组
+const loadTokenGroups = async () => {
+  if (!tokenAccount.value) return
+  loadingTokenGroups.value = true
+  try {
+    const res = await accountApi.getAccountGroups(tokenAccount.value.id)
+    const groupsData = res.data || {}
+    tokenGroupOptions.value = Object.entries(groupsData).map(([key, val]: [string, any]) => ({
+      label: `${key} - ${val.desc || ''}`,
+      value: key
+    }))
+  } catch (e: any) {
+    console.error('Failed to load token groups:', e)
+  } finally {
+    loadingTokenGroups.value = false
+  }
+}
+
+// 重置令牌表单
+const resetTokenForm = () => {
+  editingToken.value = null
+  tokenForm.value = {
+    name: '',
+    remain_quota: 500000,
+    expired_time: -1,
+    unlimited_quota: false,
+    model_limits_enabled: false,
+    model_limits_array: [],
+    group: 'default',
+    allow_ips: ''
+  }
+}
+
+// 编辑令牌
+const handleEditToken = (token: any) => {
+  editingToken.value = token
+  tokenForm.value = {
+    name: token.name || '',
+    remain_quota: token.remain_quota || 500000,
+    expired_time: token.expired_time ?? -1,
+    unlimited_quota: token.unlimited_quota || false,
+    model_limits_enabled: token.model_limits_enabled || false,
+    model_limits_array: token.model_limits ? token.model_limits.split(',').filter((m: string) => m.trim()) : [],
+    group: token.group || 'default',
+    allow_ips: token.allow_ips || ''
+  }
+  showAddTokenDrawer.value = true
+}
+
+// 保存令牌（创建或更新）
+const handleSaveToken = async () => {
+  if (!tokenAccount.value) return
+  if (!tokenForm.value.name.trim()) {
+    message.warning('请输入令牌名称')
+    return
+  }
+  creatingToken.value = true
+  try {
+    const formData = {
+      name: tokenForm.value.name,
+      remain_quota: tokenForm.value.remain_quota,
+      expired_time: tokenForm.value.expired_time,
+      unlimited_quota: tokenForm.value.unlimited_quota,
+      model_limits_enabled: tokenForm.value.model_limits_enabled,
+      model_limits: tokenForm.value.model_limits_array.join(','),
+      allow_ips: tokenForm.value.allow_ips,
+      group: tokenForm.value.group
+    }
+
+    if (editingToken.value) {
+      // 编辑模式：合并原始数据
+      const updateData = {
+        ...editingToken.value,
+        ...formData
+      }
+      await accountApi.updateToken(tokenAccount.value.id, editingToken.value.token_id, updateData)
+      message.success('令牌更新成功')
+    } else {
+      // 创建模式
+      await accountApi.createToken(tokenAccount.value.id, formData)
+      message.success('令牌创建成功')
+    }
+
+    showAddTokenDrawer.value = false
+    resetTokenForm()
+    // 刷新令牌列表
+    const res = await accountApi.getTokens(tokenAccount.value.id)
+    tokens.value = res.data || []
+  } catch (e: any) {
+    message.error(e.message)
+    // 编辑模式下刷新列表（可能远程已删除导致本地被同步清理）
+    if (editingToken.value && tokenAccount.value) {
+      const res = await accountApi.getTokens(tokenAccount.value.id)
+      tokens.value = res.data || []
+      // 如果是远程不存在的错误，关闭抽屉
+      if (e.message.includes('不存在')) {
+        showAddTokenDrawer.value = false
+        resetTokenForm()
+      }
+    }
+  } finally {
+    creatingToken.value = false
+  }
+}
+
+// 监听抽屉打开，加载模型和分组数据
+watch(showAddTokenDrawer, (val) => {
+  if (val) {
+    // 编辑模式下不重置表单（handleEditToken 已设置）
+    if (!editingToken.value) {
+      resetTokenForm()
+    }
+    loadAvailableModels()
+    loadTokenGroups()
+  }
+})
 
 const copyToken = (key: string) => {
   const fullKey = `sk-${key}`
@@ -1259,6 +1535,11 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
+.tokens-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .tokens-list {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1357,6 +1638,13 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.token-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .tokens-empty {
   text-align: center;
   padding: 48px 20px;
@@ -1377,6 +1665,23 @@ onMounted(() => {
 .empty-hint {
   font-size: 13px;
   color: var(--text-tertiary);
+}
+
+/* 添加令牌抽屉 */
+.token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.token-form .form-item {
+  margin-bottom: 0;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {

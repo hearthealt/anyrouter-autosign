@@ -99,3 +99,15 @@ class AccountInfo(BaseModel):
     # 本地分组
     group_id: Optional[int] = None
     local_group: Optional[GroupBrief] = None
+
+
+class CreateTokenRequest(BaseModel):
+    """创建令牌请求"""
+    name: str
+    remain_quota: int = 500000
+    expired_time: int = -1  # -1 表示永不过期
+    unlimited_quota: bool = False
+    model_limits_enabled: bool = False
+    model_limits: str = ""  # 逗号分隔的模型列表
+    allow_ips: str = ""
+    group: str = "default"

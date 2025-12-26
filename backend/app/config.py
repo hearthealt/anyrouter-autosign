@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     anyrouter_user_api: str = "/api/user/self"
     anyrouter_sign_api: str = "/api/user/sign_in"
     anyrouter_console_url: str = "/console"
+    anyrouter_models_api: str = "/api/user/models"
+    anyrouter_groups_api: str = "/api/user/self/groups"
+    anyrouter_token_api: str = "/api/token/"
+    anyrouter_status_api: str = "/api/status"
 
     # 反爬虫配置
     anti_crawler_mask: str = "3000176000856006061501533003690027800375"

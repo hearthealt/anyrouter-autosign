@@ -63,6 +63,24 @@ export const accountApi = {
   // Token 相关
   getTokens: (id: number) => api.get(`/accounts/${id}/tokens`),
   syncTokens: (id: number) => api.post(`/accounts/${id}/tokens/sync`),
+  createToken: (id: number, data: {
+    name: string
+    remain_quota: number
+    expired_time: number  // -1 表示永不过期
+    unlimited_quota: boolean
+    model_limits_enabled: boolean
+    model_limits: string  // 逗号分隔的模型列表
+    allow_ips: string
+    group: string
+  }) => api.post(`/accounts/${id}/tokens`, data),
+  // 获取可用模型列表
+  getAvailableModels: (id: number) => api.get(`/accounts/${id}/models`),
+  // 获取账号分组列表
+  getAccountGroups: (id: number) => api.get(`/accounts/${id}/groups`),
+  // 删除令牌
+  deleteToken: (id: number, tokenId: number) => api.delete(`/accounts/${id}/tokens/${tokenId}`),
+  // 更新令牌
+  updateToken: (id: number, tokenId: number, data: any) => api.put(`/accounts/${id}/tokens/${tokenId}`, data),
   // 健康检查
   healthCheck: (id: number) => api.post(`/accounts/${id}/health-check`),
   healthCheckAll: () => api.post('/accounts/health-check/all')

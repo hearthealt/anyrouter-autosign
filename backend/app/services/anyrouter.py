@@ -247,7 +247,7 @@ class AnyRouterService:
         headers = self._get_headers(user_id)
 
         try:
-            url = f"{self.base_url}/api/token/?p={page}&size={size}"
+            url = f"{self.base_url}{settings.anyrouter_token_api}?p={page}&size={size}"
             response = self.session.get(
                 url,
                 headers=headers,
@@ -281,6 +281,247 @@ class AnyRouterService:
         except Exception as e:
             return False, {"message": f"未知错误: {str(e)}"}
 
+    def get_models(self, session_cookie: str, user_id: str) -> Tuple[bool, Dict[str, Any]]:
+        """
+        获取可用模型列表
+
+        Args:
+            session_cookie: Session Cookie
+            user_id: 用户 ID (new-api-user)
+
+        Returns:
+            Tuple[bool, Dict]: (是否成功, 模型列表或错误消息)
+        """
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        headers = self._get_headers(user_id)
+
+        try:
+            url = f"{self.base_url}{settings.anyrouter_models_api}"
+            response = self.session.get(
+                url,
+                headers=headers,
+                cookies=cookies,
+                timeout=settings.request_timeout
+            )
+
+            # 处理反爬虫挑战
+            if self._is_anti_crawler_challenge(response.text):
+                result = self.anti_crawler.solve(response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+                    response = self.session.get(
+                        url,
+                        headers=headers,
+                        cookies=cookies,
+                        timeout=settings.request_timeout
+                    )
+
+            data = response.json()
+            if data.get("success"):
+                return True, {"models": data.get("data", [])}
+            else:
+                return False, {"message": data.get("message", "获取模型列表失败")}
+
+        except json.JSONDecodeError:
+            return False, {"message": "响应解析失败"}
+        except requests.RequestException as e:
+            return False, {"message": f"网络请求失败: {str(e)}"}
+        except Exception as e:
+            return False, {"message": f"未知错误: {str(e)}"}
+
+    def get_groups(self, session_cookie: str, user_id: str) -> Tuple[bool, Dict[str, Any]]:
+        """
+        获取账号分组列表
+
+        Args:
+            session_cookie: Session Cookie
+            user_id: 用户 ID (new-api-user)
+
+        Returns:
+            Tuple[bool, Dict]: (是否成功, 分组列表或错误消息)
+        """
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        headers = self._get_headers(user_id)
+
+        try:
+            url = f"{self.base_url}{settings.anyrouter_groups_api}"
+            response = self.session.get(
+                url,
+                headers=headers,
+                cookies=cookies,
+                timeout=settings.request_timeout
+            )
+
+            # 处理反爬虫挑战
+            if self._is_anti_crawler_challenge(response.text):
+                result = self.anti_crawler.solve(response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+                    response = self.session.get(
+                        url,
+                        headers=headers,
+                        cookies=cookies,
+                        timeout=settings.request_timeout
+                    )
+
+            data = response.json()
+            if data.get("success"):
+                return True, {"groups": data.get("data", {})}
+            else:
+                return False, {"message": data.get("message", "获取分组列表失败")}
+
+        except json.JSONDecodeError:
+            return False, {"message": "响应解析失败"}
+        except requests.RequestException as e:
+            return False, {"message": f"网络请求失败: {str(e)}"}
+        except Exception as e:
+            return False, {"message": f"未知错误: {str(e)}"}
+
+    def _token_request(
+        self,
+        session_cookie: str,
+        user_id: str,
+        payload: Dict[str, Any],
+        method: str = "post",
+        success_msg: str = "操作成功",
+        fail_msg: str = "操作失败"
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """令牌相关请求的通用方法"""
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        headers = self._get_headers(user_id)
+        headers["content-type"] = "application/json"
+
+        try:
+            url = f"{self.base_url}{settings.anyrouter_token_api}"
+            request_fn = self.session.post if method == "post" else self.session.put
+            response = request_fn(
+                url,
+                headers=headers,
+                cookies=cookies,
+                json=payload,
+                timeout=settings.request_timeout
+            )
+
+            # 处理反爬虫挑战
+            if self._is_anti_crawler_challenge(response.text):
+                result = self.anti_crawler.solve(response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+                    response = request_fn(
+                        url,
+                        headers=headers,
+                        cookies=cookies,
+                        json=payload,
+                        timeout=settings.request_timeout
+                    )
+
+            data = response.json()
+            if data.get("success"):
+                return True, {"message": data.get("message", success_msg)}
+            else:
+                return False, {"message": data.get("message", fail_msg)}
+
+        except json.JSONDecodeError:
+            return False, {"message": "响应解析失败"}
+        except requests.RequestException as e:
+            return False, {"message": f"网络请求失败: {str(e)}"}
+        except Exception as e:
+            return False, {"message": f"未知错误: {str(e)}"}
+
+    def create_token(
+        self,
+        session_cookie: str,
+        user_id: str,
+        name: str,
+        remain_quota: int = 500000,
+        expired_time: int = -1,
+        unlimited_quota: bool = False,
+        model_limits_enabled: bool = False,
+        model_limits: str = "",
+        allow_ips: str = "",
+        group: str = "default"
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """创建访问令牌"""
+        payload = {
+            "name": name,
+            "remain_quota": remain_quota,
+            "expired_time": expired_time,
+            "unlimited_quota": unlimited_quota,
+            "model_limits_enabled": model_limits_enabled,
+            "model_limits": model_limits,
+            "allow_ips": allow_ips,
+            "group": group
+        }
+        return self._token_request(
+            session_cookie, user_id, payload,
+            method="post", success_msg="创建成功", fail_msg="创建令牌失败"
+        )
+
+    def update_token(
+        self,
+        session_cookie: str,
+        user_id: str,
+        token_data: Dict[str, Any]
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """更新访问令牌"""
+        return self._token_request(
+            session_cookie, user_id, token_data,
+            method="put", success_msg="更新成功", fail_msg="更新令牌失败"
+        )
+
+    def delete_token(self, session_cookie: str, user_id: str, token_id: int) -> Tuple[bool, Dict[str, Any]]:
+        """
+        删除访问令牌
+
+        Args:
+            session_cookie: Session Cookie
+            user_id: 用户 ID (new-api-user)
+            token_id: 令牌 ID
+
+        Returns:
+            Tuple[bool, Dict]: (是否成功, 结果或错误消息)
+        """
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        headers = self._get_headers(user_id)
+
+        try:
+            url = f"{self.base_url}{settings.anyrouter_token_api}/{token_id}"
+            response = self.session.delete(
+                url,
+                headers=headers,
+                cookies=cookies,
+                timeout=settings.request_timeout
+            )
+
+            # 处理反爬虫挑战
+            if self._is_anti_crawler_challenge(response.text):
+                result = self.anti_crawler.solve(response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+                    response = self.session.delete(
+                        url,
+                        headers=headers,
+                        cookies=cookies,
+                        timeout=settings.request_timeout
+                    )
+
+            data = response.json()
+            if data.get("success"):
+                return True, {"message": data.get("message", "删除成功")}
+            else:
+                return False, {"message": data.get("message", "删除令牌失败")}
+
+        except json.JSONDecodeError:
+            return False, {"message": "响应解析失败"}
+        except requests.RequestException as e:
+            return False, {"message": f"网络请求失败: {str(e)}"}
+        except Exception as e:
+            return False, {"message": f"未知错误: {str(e)}"}
+
     def get_api_status(self) -> Tuple[bool, Dict[str, Any]]:
         """
         获取 API 节点状态（公开接口，无需认证）
@@ -289,7 +530,7 @@ class AnyRouterService:
             Tuple[bool, Dict]: (是否成功, API 状态信息或错误消息)
         """
         try:
-            url = f"{self.base_url}/api/status"
+            url = f"{self.base_url}{settings.anyrouter_status_api}"
             response = self.session.get(
                 url,
                 headers=self.BASE_HEADERS,
