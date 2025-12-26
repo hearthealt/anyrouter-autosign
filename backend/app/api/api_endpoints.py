@@ -34,31 +34,24 @@ def sync_endpoints(db: Session = Depends(get_db)):
     if not api_info:
         raise HTTPException(status_code=500, detail="未获取到 API 节点信息")
 
+    # 先删除所有旧节点
+    db.query(ApiEndpoint).delete()
+
+    # 添加新节点
     synced_count = 0
     for info in api_info:
         endpoint_id = info.get("id")
         if not endpoint_id:
             continue
 
-        endpoint = db.query(ApiEndpoint).filter(
-            ApiEndpoint.endpoint_id == endpoint_id
-        ).first()
-
-        if endpoint:
-            endpoint.route = info.get("route", "")
-            endpoint.url = info.get("url", "")
-            endpoint.description = info.get("description", "")
-            endpoint.color = info.get("color", "")
-        else:
-            endpoint = ApiEndpoint(
-                endpoint_id=endpoint_id,
-                route=info.get("route", ""),
-                url=info.get("url", ""),
-                description=info.get("description", ""),
-                color=info.get("color", "")
-            )
-            db.add(endpoint)
-
+        endpoint = ApiEndpoint(
+            endpoint_id=endpoint_id,
+            route=info.get("route", ""),
+            url=info.get("url", ""),
+            description=info.get("description", ""),
+            color=info.get("color", "")
+        )
+        db.add(endpoint)
         synced_count += 1
 
     db.commit()

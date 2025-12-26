@@ -18,3 +18,4 @@ class SignLog(Base):
     success = Column(Boolean, nullable=False)
     message = Column(Text, nullable=True)
     reward_quota = Column(BigInteger, default=0)
+    retry_count = Column(Integer, default=0)  # 重试次数

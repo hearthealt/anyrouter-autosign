@@ -1,34 +1,71 @@
 import axios from 'axios'
+import { getToken, removeToken } from '../utils/auth'
 
 const api = axios.create({
   baseURL: '/api/v1',
   timeout: 30000
 })
 
+// 请求拦截器 - 添加 Token
+api.interceptors.request.use(
+  config => {
+    const token = getToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  error => {
+    return Promise.reject(error)
+  }
+)
+
 // 响应拦截器
 api.interceptors.response.use(
   response => response.data,
   error => {
+    const status = error.response?.status
     const message = error.response?.data?.detail || error.message
+
+    // 401 未授权 - 跳转登录页
+    if (status === 401) {
+      removeToken()
+      // 避免在登录页面重复跳转
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+
     return Promise.reject(new Error(message))
   }
 )
 
 export default api
 
+// 认证 API
+export const authApi = {
+  login: (data: { username: string; password: string }) => api.post('/auth/login', data),
+  getMe: () => api.get('/auth/me'),
+  changePassword: (data: { old_password: string; new_password: string }) => api.put('/auth/password', data)
+}
+
 // 账号 API
 export const accountApi = {
   getList: () => api.get('/accounts'),
-  create: (data: { session_cookie: string; user_id: string }) => api.post('/accounts', data),
+  create: (data: { session_cookie: string; user_id: string; group_id?: number }) => api.post('/accounts', data),
   get: (id: number) => api.get(`/accounts/${id}`),
   update: (id: number, data: any) => api.put(`/accounts/${id}`, data),
   delete: (id: number) => api.delete(`/accounts/${id}`),
   getInfo: (id: number) => api.get(`/accounts/${id}/info`),
+  getCachedInfo: (id: number) => api.get(`/accounts/${id}/cached-info`),
   getSignLogs: (id: number, page = 1, size = 20) =>
     api.get(`/accounts/${id}/sign-logs`, { params: { page, size } }),
   // Token 相关
   getTokens: (id: number) => api.get(`/accounts/${id}/tokens`),
-  syncTokens: (id: number) => api.post(`/accounts/${id}/tokens/sync`)
+  syncTokens: (id: number) => api.post(`/accounts/${id}/tokens/sync`),
+  // 健康检查
+  healthCheck: (id: number) => api.post(`/accounts/${id}/health-check`),
+  healthCheckAll: () => api.post('/accounts/health-check/all')
 }
 
 // 签到 API
@@ -67,4 +104,41 @@ export const settingsApi = {
 export const apiEndpointsApi = {
   getList: () => api.get('/api-endpoints'),
   sync: () => api.post('/api-endpoints/sync')
+}
+
+// 备份恢复 API
+export const backupApi = {
+  getInfo: () => api.get('/backup/info'),
+  export: (includeLogs = false) => {
+    // 返回下载 URL，需要带上 token
+    const token = getToken()
+    return `/api/v1/backup/export?include_logs=${includeLogs}&token=${token}`
+  },
+  import: (file: File, overwrite = false) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/backup/import?overwrite=${overwrite}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+}
+
+// 统计 API
+export const statisticsApi = {
+  getOverview: () => api.get('/statistics/overview'),
+  getDaily: (days = 30) => api.get('/statistics/daily', { params: { days } }),
+  getMonthly: (months = 12) => api.get('/statistics/monthly', { params: { months } }),
+  getAccounts: () => api.get('/statistics/accounts'),
+  export: (params?: { start_date?: string; end_date?: string; format?: string }) =>
+    api.get('/statistics/export', { params })
+}
+
+// 分组 API
+export const groupsApi = {
+  getList: () => api.get('/groups'),
+  create: (data: { name: string; description?: string; color?: string }) => api.post('/groups', data),
+  update: (id: number, data: { name?: string; description?: string; color?: string }) => api.put(`/groups/${id}`, data),
+  delete: (id: number) => api.delete(`/groups/${id}`),
+  addAccounts: (id: number, accountIds: number[]) => api.post(`/groups/${id}/accounts`, accountIds),
+  removeAccounts: (id: number, accountIds: number[]) => api.delete(`/groups/${id}/accounts`, { data: accountIds })
 }

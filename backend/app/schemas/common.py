@@ -35,10 +35,18 @@ class RecentSign(BaseModel):
     success: bool
 
 
+class DailyTrend(BaseModel):
+    """每日签到趋势"""
+    date: str
+    success: int
+    fail: int
+
+
 class DashboardResponse(BaseModel):
     """仪表盘数据"""
     account_count: int
     active_account_count: int
+    unhealthy_account_count: int = 0
     today_sign_count: int
     today_sign_success: int
     total_quota: int
@@ -46,4 +54,8 @@ class DashboardResponse(BaseModel):
     total_quota_display: str
     total_used_quota_display: str
     total_request_count: int
+    month_reward: int = 0
+    month_reward_display: str = "$0.00"
+    success_rate: float = 0
     recent_signs: List[RecentSign]
+    daily_trend: List[DailyTrend] = []

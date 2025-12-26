@@ -34,7 +34,9 @@
         :pagination="pagination"
         :loading="loading"
         :row-key="(row: any) => row.id"
+        remote
         @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
       />
     </n-card>
   </div>
@@ -60,9 +62,10 @@ const filters = ref({
 
 const pagination = ref({
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   itemCount: 0,
-  showSizePicker: false
+  showSizePicker: true,
+  pageSizes: [10, 20, 50]
 })
 
 const accountOptions = ref<{ label: string; value: number }[]>([])
@@ -147,6 +150,11 @@ const loadLogs = async (page = 1) => {
 
 const handlePageChange = (page: number) => {
   loadLogs(page)
+}
+
+const handlePageSizeChange = (pageSize: number) => {
+  pagination.value.pageSize = pageSize
+  loadLogs(1)
 }
 
 onMounted(() => {

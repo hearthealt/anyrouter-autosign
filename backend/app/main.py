@@ -3,7 +3,7 @@ FastAPI 应用入口
 """
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -13,8 +13,13 @@ from app.api import (
     notify_router,
     dashboard_router,
     settings_router,
-    api_endpoints_router
+    api_endpoints_router,
+    auth_router,
+    backup_router,
+    statistics_router,
+    groups_router
 )
+from app.api.deps import get_current_user
 from app.database import init_db
 from app.services.scheduler import init_scheduler, shutdown_scheduler
 
@@ -67,12 +72,19 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(accounts_router, prefix="/api/v1")
-app.include_router(sign_router, prefix="/api/v1")
-app.include_router(notify_router, prefix="/api/v1")
-app.include_router(dashboard_router, prefix="/api/v1")
-app.include_router(settings_router, prefix="/api/v1")
-app.include_router(api_endpoints_router, prefix="/api/v1")
+# 认证路由（无需认证）
+app.include_router(auth_router, prefix="/api/v1")
+
+# 需要认证的路由
+app.include_router(accounts_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(sign_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(notify_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(dashboard_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(settings_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(api_endpoints_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(backup_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(statistics_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(groups_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 
 
 @app.get("/")

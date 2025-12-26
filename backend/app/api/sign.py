@@ -2,6 +2,7 @@
 签到 API
 """
 import json
+import re
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.schemas import (
 )
 from app.services import anyrouter_service, NotifyFactory
 from app.utils import format_quota
+from app.config import settings
 
 router = APIRouter(tags=["签到"])
 
@@ -66,12 +68,12 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     # 判断签到状态：success=true 且 message 为空表示今日已签到
     already_signed = sign_success and not message
 
-    # 解析奖励配额
+    # 解析奖励配额（message 中的数字是美元值，需要转换为原始配额）
     if sign_success and message:
-        import re
-        match = re.search(r'(\d+)', message)
+        match = re.search(r'\$(\d+(?:\.\d+)?)', message)
         if match:
-            reward_quota = int(match.group(1))
+            usd_value = float(match.group(1))
+            reward_quota = int(usd_value * settings.quota_to_usd_rate)
 
     # 记录签到日志
     if already_signed:
@@ -144,10 +146,10 @@ def batch_sign(db: Session = Depends(get_db)):
         already_signed = sign_success and not message
 
         if sign_success and message:
-            import re
-            match = re.search(r'(\d+)', message)
+            match = re.search(r'\$(\d+(?:\.\d+)?)', message)
             if match:
-                reward_quota = int(match.group(1))
+                usd_value = float(match.group(1))
+                reward_quota = int(usd_value * settings.quota_to_usd_rate)
 
         # 记录日志
         if already_signed:

@@ -4,6 +4,10 @@ import naive from 'naive-ui'
 import App from './App.vue'
 import router from './router'
 import './styles/global.css'
+import { initTheme } from './utils'
+
+// 初始化主题
+initTheme()
 
 const app = createApp(App)
 

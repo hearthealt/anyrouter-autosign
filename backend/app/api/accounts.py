@@ -2,19 +2,19 @@
 账号管理 API
 """
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, SignLog, NotifyChannel, AccountNotify, ApiToken
+from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken
 from app.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountInfo,
     LastSign, ApiResponse
 )
-from app.schemas.account import NotifyChannelBrief
+from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief
 from app.services import anyrouter_service
-from app.utils import format_quota
+from app.utils import format_quota, format_quota_percent
 
 router = APIRouter(prefix="/accounts", tags=["账号管理"])
 
@@ -46,6 +46,16 @@ def get_account_notify_channels(db: Session, account_id: int) -> List[NotifyChan
     return [NotifyChannelBrief(id=c.id, type=c.type, name=c.name) for c in results]
 
 
+def get_group_brief(db: Session, group_id: Optional[int]) -> Optional[GroupBrief]:
+    """获取分组简要信息"""
+    if not group_id:
+        return None
+    group = db.query(AccountGroup).filter(AccountGroup.id == group_id).first()
+    if not group:
+        return None
+    return GroupBrief(id=group.id, name=group.name, color=group.color or "default")
+
+
 @router.get("", response_model=ApiResponse)
 def get_accounts(db: Session = Depends(get_db)):
     """获取账号列表"""
@@ -53,6 +63,7 @@ def get_accounts(db: Session = Depends(get_db)):
 
     result = []
     for account in accounts:
+        total_quota = account.cached_quota + account.cached_used_quota
         result.append(AccountResponse(
             id=account.id,
             username=account.username,
@@ -62,7 +73,16 @@ def get_accounts(db: Session = Depends(get_db)):
             created_at=account.created_at,
             updated_at=account.updated_at,
             notify_channels=get_account_notify_channels(db, account.id),
-            last_sign=get_last_sign(db, account.id)
+            last_sign=get_last_sign(db, account.id),
+            health_status=account.health_status or "unknown",
+            health_message=account.health_message,
+            last_health_check=account.last_health_check,
+            group_id=account.group_id,
+            group=get_group_brief(db, account.group_id),
+            cached_quota=account.cached_quota,
+            cached_used_quota=account.cached_used_quota,
+            quota_display=format_quota(account.cached_quota),
+            quota_percent=format_quota_percent(account.cached_quota, total_quota)
         ))
 
     return ApiResponse(success=True, data=result)
@@ -90,7 +110,19 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
         session_cookie=data.session_cookie,
         anyrouter_user_id=int(data.user_id),
         username=user_info.get("username"),
-        display_name=user_info.get("display_name")
+        display_name=user_info.get("display_name"),
+        health_status="healthy",
+        last_health_check=datetime.now(),
+        group_id=data.group_id,
+        # 初始化所有缓存字段
+        cached_quota=user_info.get("quota", 0),
+        cached_used_quota=user_info.get("used_quota", 0),
+        cached_request_count=user_info.get("request_count", 0),
+        cached_user_group=user_info.get("group", "default"),
+        cached_aff_code=user_info.get("aff_code"),
+        cached_aff_count=user_info.get("aff_count", 0),
+        cached_aff_history_quota=user_info.get("aff_history_quota", 0),
+        quota_updated_at=datetime.now()
     )
 
     db.add(account)
@@ -112,7 +144,10 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
             created_at=account.created_at,
             updated_at=account.updated_at,
             notify_channels=[],
-            last_sign=None
+            last_sign=None,
+            health_status=account.health_status,
+            health_message=account.health_message,
+            last_health_check=account.last_health_check
         )
     )
 
@@ -136,7 +171,10 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
             created_at=account.created_at,
             updated_at=account.updated_at,
             notify_channels=get_account_notify_channels(db, account.id),
-            last_sign=get_last_sign(db, account.id)
+            last_sign=get_last_sign(db, account.id),
+            health_status=account.health_status or "unknown",
+            health_message=account.health_message,
+            last_health_check=account.last_health_check
         )
     )
 
@@ -163,9 +201,21 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
         account.anyrouter_user_id = int(user_id)
         account.username = user_info.get("username")
         account.display_name = user_info.get("display_name")
+        # 更新所有缓存字段
+        account.cached_quota = user_info.get("quota", 0)
+        account.cached_used_quota = user_info.get("used_quota", 0)
+        account.cached_request_count = user_info.get("request_count", 0)
+        account.cached_user_group = user_info.get("group", "default")
+        account.cached_aff_code = user_info.get("aff_code")
+        account.cached_aff_count = user_info.get("aff_count", 0)
+        account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
+        account.quota_updated_at = datetime.now()
 
     if data.is_active is not None:
         account.is_active = data.is_active
+
+    if data.group_id is not None:
+        account.group_id = data.group_id if data.group_id > 0 else None
 
     account.updated_at = datetime.now()
     db.commit()
@@ -196,7 +246,7 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{account_id}/info", response_model=ApiResponse)
 def get_account_info(account_id: int, db: Session = Depends(get_db)):
-    """获取账号实时信息"""
+    """获取账号实时信息（会刷新缓存）"""
     account = db.query(Account).filter(Account.id == account_id).first()
 
     if not account:
@@ -215,7 +265,31 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
 
     quota = user_info.get("quota", 0)
     used_quota = user_info.get("used_quota", 0)
+    request_count = user_info.get("request_count", 0)
     aff_history_quota = user_info.get("aff_history_quota", 0)
+
+    # 更新所有缓存字段
+    account.cached_quota = quota
+    account.cached_used_quota = used_quota
+    account.cached_request_count = request_count
+    account.cached_user_group = user_info.get("group", "default")
+    account.cached_aff_code = user_info.get("aff_code")
+    account.cached_aff_count = user_info.get("aff_count", 0)
+    account.cached_aff_history_quota = aff_history_quota
+    account.quota_updated_at = datetime.now()
+    # 同时更新用户名
+    if user_info.get("username"):
+        account.username = user_info.get("username")
+    if user_info.get("display_name"):
+        account.display_name = user_info.get("display_name")
+    db.commit()
+
+    # 获取本地分组信息
+    local_group = None
+    if account.group_id:
+        group = db.query(AccountGroup).filter(AccountGroup.id == account.group_id).first()
+        if group:
+            local_group = GroupBrief(id=group.id, name=group.name, color=group.color or "default")
 
     return ApiResponse(
         success=True,
@@ -227,14 +301,57 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
             status=user_info.get("status", 0),
             quota=quota,
             used_quota=used_quota,
-            request_count=user_info.get("request_count", 0),
+            request_count=request_count,
             group=user_info.get("group", "default"),
             aff_code=user_info.get("aff_code"),
             aff_count=user_info.get("aff_count", 0),
             aff_history_quota=aff_history_quota,
             quota_display=format_quota(quota),
             used_quota_display=format_quota(used_quota),
-            aff_history_quota_display=format_quota(aff_history_quota)
+            quota_percent=format_quota_percent(quota, quota + used_quota),
+            aff_history_quota_display=format_quota(aff_history_quota),
+            group_id=account.group_id,
+            local_group=local_group
+        )
+    )
+
+
+@router.get("/{account_id}/cached-info", response_model=ApiResponse)
+def get_cached_account_info(account_id: int, db: Session = Depends(get_db)):
+    """获取账号缓存信息（不请求远程API，快速返回）"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    # 获取本地分组信息
+    local_group = None
+    if account.group_id:
+        group = db.query(AccountGroup).filter(AccountGroup.id == account.group_id).first()
+        if group:
+            local_group = GroupBrief(id=group.id, name=group.name, color=group.color or "default")
+
+    return ApiResponse(
+        success=True,
+        data=AccountInfo(
+            id=account.anyrouter_user_id,
+            username=account.username,
+            display_name=account.display_name,
+            role=0,
+            status=1 if account.is_active else 0,
+            quota=account.cached_quota,
+            used_quota=account.cached_used_quota,
+            request_count=account.cached_request_count,
+            group=account.cached_user_group or "default",
+            aff_code=account.cached_aff_code,
+            aff_count=account.cached_aff_count,
+            aff_history_quota=account.cached_aff_history_quota,
+            quota_display=format_quota(account.cached_quota),
+            used_quota_display=format_quota(account.cached_used_quota),
+            quota_percent=format_quota_percent(account.cached_quota, account.cached_quota + account.cached_used_quota),
+            aff_history_quota_display=format_quota(account.cached_aff_history_quota),
+            group_id=account.group_id,
+            local_group=local_group
         )
     )
 
@@ -319,4 +436,112 @@ def sync_tokens(account_id: int, db: Session = Depends(get_db)):
         success=True,
         message=f"同步完成，共 {count} 个 Token",
         data={"count": count}
+    )
+
+
+def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
+    """
+    检查单个账号的健康状态
+
+    Args:
+        db: 数据库会话
+        account: 账号对象
+
+    Returns:
+        HealthCheckResponse: 健康检查结果
+    """
+    now = datetime.now()
+
+    if not account.anyrouter_user_id:
+        account.health_status = "unhealthy"
+        account.health_message = "缺少 user_id"
+        account.last_health_check = now
+        db.commit()
+        return HealthCheckResponse(
+            account_id=account.id,
+            health_status="unhealthy",
+            health_message="缺少 user_id",
+            checked_at=now
+        )
+
+    # 尝试获取用户信息来验证凭证
+    success, user_info = anyrouter_service.get_user_info(
+        account.session_cookie,
+        str(account.anyrouter_user_id)
+    )
+
+    if success:
+        account.health_status = "healthy"
+        account.health_message = None
+        # 顺便更新用户名
+        if user_info.get("username"):
+            account.username = user_info.get("username")
+        if user_info.get("display_name"):
+            account.display_name = user_info.get("display_name")
+        # 更新所有缓存字段
+        account.cached_quota = user_info.get("quota", 0)
+        account.cached_used_quota = user_info.get("used_quota", 0)
+        account.cached_request_count = user_info.get("request_count", 0)
+        account.cached_user_group = user_info.get("group", "default")
+        account.cached_aff_code = user_info.get("aff_code")
+        account.cached_aff_count = user_info.get("aff_count", 0)
+        account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
+        account.quota_updated_at = now
+    else:
+        account.health_status = "unhealthy"
+        account.health_message = user_info.get("message", "凭证验证失败")
+
+    account.last_health_check = now
+    db.commit()
+
+    return HealthCheckResponse(
+        account_id=account.id,
+        health_status=account.health_status,
+        health_message=account.health_message,
+        checked_at=now
+    )
+
+
+@router.post("/{account_id}/health-check", response_model=ApiResponse)
+def health_check_account(account_id: int, db: Session = Depends(get_db)):
+    """对单个账号执行健康检查"""
+    account = db.query(Account).filter(Account.id == account_id).first()
+
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    result = check_account_health(db, account)
+
+    return ApiResponse(
+        success=True,
+        message=f"健康检查完成: {result.health_status}",
+        data=result.model_dump()
+    )
+
+
+@router.post("/health-check/all", response_model=ApiResponse)
+def health_check_all_accounts(db: Session = Depends(get_db)):
+    """对所有启用的账号执行健康检查"""
+    accounts = db.query(Account).filter(Account.is_active == True).all()
+
+    results = []
+    healthy_count = 0
+    unhealthy_count = 0
+
+    for account in accounts:
+        result = check_account_health(db, account)
+        results.append(result.model_dump())
+        if result.health_status == "healthy":
+            healthy_count += 1
+        else:
+            unhealthy_count += 1
+
+    return ApiResponse(
+        success=True,
+        message=f"健康检查完成: {healthy_count} 个健康, {unhealthy_count} 个异常",
+        data={
+            "healthy_count": healthy_count,
+            "unhealthy_count": unhealthy_count,
+            "results": results
+        }
     )

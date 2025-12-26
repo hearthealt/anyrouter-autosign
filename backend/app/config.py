@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     # 配额换算 (1 USD = 500000 quota)
     quota_to_usd_rate: int = 500000
 
+    # JWT 配置
+    jwt_secret_key: str = "anyrouter-admin-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_hours: int = 24
+
+    # 默认管理员
+    default_admin_username: str = "admin"
+    default_admin_password: str = "admin123"
+
     class Config:
         env_file = ".env"
 

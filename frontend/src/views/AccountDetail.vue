@@ -47,6 +47,12 @@
               <n-descriptions-item label="用户组">
                 {{ accountInfo?.group || '-' }}
               </n-descriptions-item>
+              <n-descriptions-item label="所属分组">
+                <n-tag v-if="accountInfo?.local_group || account?.group" size="small" :bordered="false" :style="{ background: getGroupColor((accountInfo?.local_group || account?.group)?.color), color: '#fff' }">
+                  {{ (accountInfo?.local_group || account?.group)?.name }}
+                </n-tag>
+                <span v-else>未分组</span>
+              </n-descriptions-item>
               <n-descriptions-item label="创建时间">
                 {{ account ? formatDateTime(account.created_at) : '-' }}
               </n-descriptions-item>
@@ -69,6 +75,9 @@
               </n-descriptions-item>
               <n-descriptions-item label="已用额度">
                 {{ accountInfo?.used_quota_display || formatQuota(accountInfo?.used_quota || 0) }}
+              </n-descriptions-item>
+              <n-descriptions-item label="剩余比例">
+                <n-text type="info">{{ accountInfo?.quota_percent || '0.00%' }}</n-text>
               </n-descriptions-item>
               <n-descriptions-item label="总请求数">
                 {{ (accountInfo?.request_count || 0).toLocaleString() }}
@@ -100,7 +109,9 @@
           :data="signLogs"
           :pagination="pagination"
           :loading="loadingLogs"
+          remote
           @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
         />
       </n-card>
     </n-spin>
@@ -120,6 +131,14 @@
             <template #unchecked>禁用</template>
           </n-switch>
         </n-form-item>
+        <n-form-item label="所属分组">
+          <n-select
+            v-model:value="editForm.group_id"
+            :options="groups.map(g => ({ label: g.name, value: g.id }))"
+            placeholder="选择分组"
+            clearable
+          />
+        </n-form-item>
       </n-form>
       <template #action>
         <n-button @click="showEditModal = false">取消</n-button>
@@ -134,8 +153,8 @@ import { ref, onMounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, NTag } from 'naive-ui'
 import { RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline } from '@vicons/ionicons5'
-import { accountApi, signApi } from '../api'
-import { formatDateTime, formatQuota } from '../utils'
+import { accountApi, signApi, groupsApi } from '../api'
+import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,14 +176,33 @@ const showEditModal = ref(false)
 const editForm = ref({
   user_id: '',
   session_cookie: '',
-  is_active: true
+  is_active: true,
+  group_id: null as number | null
 })
+
+// 分组
+const groups = ref<any[]>([])
+
+const getGroupColor = (color: string) => {
+  const colors: Record<string, string> = {
+    default: '#8b8b8b',
+    blue: '#2080f0',
+    green: '#18a058',
+    red: '#d03050',
+    orange: '#f0a020',
+    purple: '#8b5cf6',
+    pink: '#ec4899',
+    cyan: '#06b6d4'
+  }
+  return colors[color] || colors.default
+}
 
 const pagination = ref({
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   itemCount: 0,
-  showSizePicker: false
+  showSizePicker: true,
+  pageSizes: [10, 20, 50]
 })
 
 const columns = [
@@ -201,6 +239,7 @@ const loadAccount = async () => {
     account.value = res.data
     // 初始化编辑表单
     editForm.value.is_active = res.data.is_active
+    editForm.value.group_id = res.data.group_id || null
   } catch (e: any) {
     message.error(e.message)
   } finally {
@@ -210,7 +249,8 @@ const loadAccount = async () => {
 
 const loadAccountInfo = async () => {
   try {
-    const res = await accountApi.getInfo(accountId)
+    // 使用缓存接口快速加载，不请求远程API
+    const res = await accountApi.getCachedInfo(accountId)
     accountInfo.value = res.data
   } catch (e: any) {
     // 静默失败，不影响页面加载
@@ -236,6 +276,11 @@ const handlePageChange = (page: number) => {
   loadSignLogs(page)
 }
 
+const handlePageSizeChange = (pageSize: number) => {
+  pagination.value.pageSize = pageSize
+  loadSignLogs(1)
+}
+
 const handleRefreshInfo = async () => {
   refreshing.value = true
   try {
@@ -258,7 +303,10 @@ const handleSign = async () => {
     } else {
       message.success('签到成功')
     }
-    loadAccountInfo()
+    // 签到后静默刷新信息（更新缓存）
+    accountApi.getInfo(accountId).then(r => {
+      accountInfo.value = r.data
+    }).catch(() => {})
     loadSignLogs(1)
   } catch (e: any) {
     message.error(e.message)
@@ -280,6 +328,10 @@ const handleUpdate = async () => {
     if (editForm.value.session_cookie.trim()) {
       data.session_cookie = editForm.value.session_cookie.trim()
     }
+    // 分组 ID (0 表示移除分组)
+    if (editForm.value.group_id !== account.value?.group_id) {
+      data.group_id = editForm.value.group_id || 0
+    }
 
     await accountApi.update(accountId, data)
     message.success('账号信息已更新')
@@ -300,7 +352,7 @@ const handleUpdate = async () => {
 const copyAffLink = () => {
   if (accountInfo.value?.aff_code) {
     const link = `https://anyrouter.top/register?aff=${accountInfo.value.aff_code}`
-    navigator.clipboard.writeText(link).then(() => {
+    copyToClipboard(link).then(() => {
       message.success('推广链接已复制')
     }).catch(() => {
       message.error('复制失败')
@@ -308,9 +360,19 @@ const copyAffLink = () => {
   }
 }
 
+const loadGroups = async () => {
+  try {
+    const res = await groupsApi.getList()
+    groups.value = res.data || []
+  } catch (e: any) {
+    console.error('Failed to load groups:', e)
+  }
+}
+
 onMounted(() => {
   loadAccount()
   loadAccountInfo()
   loadSignLogs()
+  loadGroups()
 })
 </script>

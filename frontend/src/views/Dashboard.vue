@@ -10,6 +10,9 @@
           <div class="stat-value">{{ dashboard?.account_count || 0 }}</div>
           <div class="stat-label">账号总数</div>
         </div>
+        <div class="stat-badge warning" v-if="dashboard?.unhealthy_account_count > 0">
+          {{ dashboard.unhealthy_account_count }} 异常
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: rgba(24,160,88,0.1); color: #18a058;">
@@ -19,9 +22,21 @@
           <div class="stat-value">{{ dashboard?.today_sign_success || 0 }}<span class="stat-sub">/{{ dashboard?.today_sign_count || 0 }}</span></div>
           <div class="stat-label">今日签到</div>
         </div>
+        <div class="stat-badge success" v-if="dashboard?.success_rate">
+          {{ dashboard.success_rate }}%
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon" style="background: rgba(240,160,32,0.1); color: #f0a020;">
+          <n-icon :size="20"><GiftOutline /></n-icon>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ dashboard?.month_reward_display || '$0.00' }}</div>
+          <div class="stat-label">本月奖励</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(32,128,240,0.1); color: #2080f0;">
           <n-icon :size="20"><WalletOutline /></n-icon>
         </div>
         <div class="stat-content">
@@ -29,13 +44,33 @@
           <div class="stat-label">总剩余额度</div>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon" style="background: rgba(32,128,240,0.1); color: #2080f0;">
-          <n-icon :size="20"><TrendingUpOutline /></n-icon>
+    </div>
+
+    <!-- 7天签到趋势 -->
+    <div class="trend-section" v-if="dashboard?.daily_trend?.length > 0">
+      <div class="section-header">
+        <h3 class="section-title">近7天签到趋势</h3>
+        <div class="trend-legend">
+          <span class="legend-item"><span class="dot success"></span>成功</span>
+          <span class="legend-item"><span class="dot fail"></span>失败</span>
         </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ formatNumber(dashboard?.total_request_count || 0) }}</div>
-          <div class="stat-label">总请求数</div>
+      </div>
+      <div class="trend-chart">
+        <div v-for="item in dashboard.daily_trend" :key="item.date" class="trend-bar-group">
+          <div class="trend-bars">
+            <n-tooltip>
+              <template #trigger>
+                <div class="trend-bar-wrapper">
+                  <div class="trend-bar success" :style="{ height: getTrendBarHeight(item.success) + 'px' }"></div>
+                  <div class="trend-bar fail" :style="{ height: getTrendBarHeight(item.fail) + 'px' }"></div>
+                </div>
+              </template>
+              <div>{{ item.date }}</div>
+              <div>成功: {{ item.success }}</div>
+              <div>失败: {{ item.fail }}</div>
+            </n-tooltip>
+          </div>
+          <div class="trend-label">{{ item.date }}</div>
         </div>
       </div>
     </div>
@@ -69,8 +104,21 @@
     <!-- 账号列表 -->
     <div class="account-section">
       <div class="section-header">
-        <h3 class="section-title">账号管理</h3>
+        <div class="section-title-row">
+          <h3 class="section-title">账号管理</h3>
+          <n-select
+            v-model:value="selectedGroupId"
+            :options="groupOptions"
+            size="small"
+            style="width: 140px; margin-left: 12px;"
+            :consistent-menu-width="false"
+          />
+        </div>
         <div class="section-actions">
+          <n-button size="small" @click="handleHealthCheckAll" :loading="healthChecking">
+            <template #icon><n-icon><PulseOutline /></n-icon></template>
+            健康检查
+          </n-button>
           <n-button size="small" @click="handleBatchSign" :loading="batchSigning">
             <template #icon><n-icon><FlashOutline /></n-icon></template>
             批量签到
@@ -83,90 +131,13 @@
       </div>
 
       <n-spin :show="loading">
-        <div class="account-table" v-if="accounts.length > 0">
-          <div class="table-header">
-            <div class="col-account">账号</div>
-            <div class="col-status">状态</div>
-            <div class="col-sign">最近签到</div>
-            <div class="col-actions">操作</div>
-          </div>
-          <div class="table-body">
-            <div v-for="account in accounts" :key="account.id" class="table-row">
-              <div class="col-account">
-                <div class="account-cell">
-                  <div class="avatar" :class="{ disabled: !account.is_active }">
-                    {{ (account.username || 'U')[0].toUpperCase() }}
-                  </div>
-                  <div class="account-info">
-                    <div class="account-name">{{ account.username }}</div>
-                    <div class="account-id">ID: {{ account.anyrouter_user_id }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-status">
-                <span class="status-dot" :class="account.is_active ? 'active' : 'inactive'"></span>
-                <span class="status-text">{{ account.is_active ? '正常' : '禁用' }}</span>
-              </div>
-              <div class="col-sign">
-                <template v-if="account.last_sign">
-                  <n-tag :type="account.last_sign.success ? 'success' : 'error'" size="small" :bordered="false">
-                    {{ account.last_sign.success ? '成功' : '失败' }}
-                  </n-tag>
-                  <span class="sign-time">{{ formatTime(account.last_sign.time) }}</span>
-                </template>
-                <span v-else class="no-sign">未签到</span>
-              </div>
-              <div class="col-actions">
-                <n-button
-                  size="tiny"
-                  type="primary"
-                  @click="handleSign(account)"
-                  :loading="signingId === account.id"
-                  :disabled="!account.is_active"
-                >
-                  签到
-                </n-button>
-                <n-tooltip trigger="hover">
-                  <template #trigger>
-                    <n-button size="tiny" quaternary @click="showEditModalFn(account)">
-                      <template #icon><n-icon><CreateOutline /></n-icon></template>
-                    </n-button>
-                  </template>
-                  编辑
-                </n-tooltip>
-                <n-tooltip trigger="hover">
-                  <template #trigger>
-                    <n-button size="tiny" quaternary @click="showTokensModal(account)">
-                      <template #icon><n-icon><KeyOutline /></n-icon></template>
-                    </n-button>
-                  </template>
-                  API 令牌
-                </n-tooltip>
-                <n-tooltip trigger="hover">
-                  <template #trigger>
-                    <n-button size="tiny" quaternary @click="router.push(`/account/${account.id}`)">
-                      <template #icon><n-icon><OpenOutline /></n-icon></template>
-                    </n-button>
-                  </template>
-                  详情
-                </n-tooltip>
-                <n-popconfirm @positive-click="handleDelete(account.id)">
-                  <template #trigger>
-                    <n-tooltip trigger="hover">
-                      <template #trigger>
-                        <n-button size="tiny" quaternary class="delete-btn">
-                          <template #icon><n-icon><TrashOutline /></n-icon></template>
-                        </n-button>
-                      </template>
-                      删除
-                    </n-tooltip>
-                  </template>
-                  确定删除此账号？
-                </n-popconfirm>
-              </div>
-            </div>
-          </div>
-        </div>
+        <n-data-table
+          v-if="filteredAccounts.length > 0"
+          :columns="accountColumns"
+          :data="filteredAccounts"
+          :pagination="accountPagination"
+          :row-key="(row: any) => row.id"
+        />
         <n-empty v-else description="暂无账号" style="padding: 60px 0;">
           <template #extra>
             <n-button size="small" @click="showAddModalVisible = true">添加账号</n-button>
@@ -186,12 +157,32 @@
         </div>
         <div class="modal-body">
           <div class="form-item">
-            <label>User ID</label>
+            <label>User ID <span class="required">*</span></label>
             <n-input v-model:value="addForm.user_id" placeholder="请求头 new-api-user 的值" />
           </div>
           <div class="form-item">
-            <label>Session Cookie</label>
+            <label>Session Cookie <span class="required">*</span></label>
             <n-input v-model:value="addForm.session_cookie" type="textarea" :rows="3" placeholder="Cookie 中 session 的值" />
+          </div>
+          <div class="form-item">
+            <label>分组（可选）</label>
+            <n-select
+              v-model:value="addForm.group_id"
+              :options="groups.map(g => ({ label: g.name, value: g.id }))"
+              placeholder="选择分组"
+              clearable
+            />
+          </div>
+          <div class="form-item">
+            <label>签到推送渠道（可选）</label>
+            <n-select
+              v-model:value="addForm.notify_channel_ids"
+              multiple
+              :options="channelOptions"
+              placeholder="选择推送渠道（可多选）"
+              clearable
+              :loading="loadingChannels"
+            />
           </div>
           <div class="form-tip">
             <n-icon><InformationCircleOutline /></n-icon>
@@ -229,6 +220,15 @@
               <template #checked>启用</template>
               <template #unchecked>禁用</template>
             </n-switch>
+          </div>
+          <div class="form-item">
+            <label>所属分组</label>
+            <n-select
+              v-model:value="editForm.group_id"
+              :options="groups.map(g => ({ label: g.name, value: g.id }))"
+              placeholder="选择分组"
+              clearable
+            />
           </div>
           <n-divider style="margin: 16px 0;" />
           <div class="form-item">
@@ -328,17 +328,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip } from 'naive-ui'
 import {
-  PeopleOutline, CheckmarkCircleOutline, WalletOutline, TrendingUpOutline,
+  PeopleOutline, CheckmarkCircleOutline, WalletOutline, GiftOutline,
   AddOutline, FlashOutline, CloseOutline, InformationCircleOutline,
   CreateOutline, OpenOutline, TrashOutline, KeyOutline, RefreshOutline, CopyOutline,
-  SyncOutline
+  SyncOutline, PulseOutline
 } from '@vicons/ionicons5'
-import { accountApi, signApi, dashboardApi, notifyApi, apiEndpointsApi } from '../api'
-import { formatQuota } from '../utils'
+import { accountApi, signApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi } from '../api'
+import { formatQuota, copyToClipboard } from '../utils'
 
 const router = useRouter()
 const message = useMessage()
@@ -356,7 +356,7 @@ const channelOptions = ref<{ label: string; value: number }[]>([])
 // 添加账号
 const showAddModalVisible = ref(false)
 const adding = ref(false)
-const addForm = ref({ session_cookie: '', user_id: '' })
+const addForm = ref({ session_cookie: '', user_id: '', group_id: null as number | null, notify_channel_ids: [] as number[] })
 
 // 编辑账号
 const showEditModalVisible = ref(false)
@@ -366,7 +366,8 @@ const editForm = ref({
   user_id: '',
   session_cookie: '',
   is_active: true,
-  notify_channel_ids: [] as number[]
+  notify_channel_ids: [] as number[],
+  group_id: null as number | null
 })
 
 // API 令牌
@@ -380,11 +381,171 @@ const syncingTokens = ref(false)
 const apiEndpoints = ref<any[]>([])
 const syncingEndpoints = ref(false)
 
-const formatNumber = (num: number) => {
-  if (num >= 10000) {
-    return (num / 10000).toFixed(1) + 'w'
+// 健康检查
+const healthChecking = ref(false)
+const healthCheckingId = ref<number | null>(null)
+
+// 分组
+const groups = ref<any[]>([])
+const selectedGroupId = ref<number | null>(null)
+const groupOptions = ref<{ label: string; value: number | null }[]>([{ label: '全部分组', value: null }])
+
+// 根据分组筛选账号
+const filteredAccounts = computed(() => {
+  if (selectedGroupId.value === null) {
+    return accounts.value
   }
-  return num.toLocaleString()
+  return accounts.value.filter(a => a.group_id === selectedGroupId.value)
+})
+
+// 监听分组变化，重置页码
+watch(selectedGroupId, () => {
+  accountPagination.page = 1
+})
+
+// 账号表格分页配置
+const accountPagination = {
+  page: 1,
+  pageSize: 10,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50]
+}
+
+// 账号表格列定义
+const accountColumns = [
+  {
+    title: '账号',
+    key: 'username',
+    render: (row: any) => {
+      return h('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
+        h('div', {
+          style: `width: 32px; height: 32px; border-radius: 6px; background: ${row.is_active ? 'linear-gradient(135deg, #00b38a, #00d4a0)' : 'linear-gradient(135deg, #aaa, #ccc)'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; flex-shrink: 0;`
+        }, (row.username || 'U')[0].toUpperCase()),
+        h('div', { style: 'min-width: 0;' }, [
+          h('div', { style: 'display: flex; align-items: center; gap: 6px;' }, [
+            h('span', { style: 'font-weight: 600; font-size: 13px; color: var(--text-primary);' }, row.username || '-'),
+            row.group ? h(NTag, { size: 'tiny', bordered: false, style: `background: ${getGroupColor(row.group.color)}; color: #fff;` }, { default: () => row.group.name }) : null
+          ]),
+          h('div', { style: 'font-size: 11px; color: var(--text-tertiary); margin-top: 2px;' }, `ID: ${row.anyrouter_user_id || '-'}`)
+        ])
+      ])
+    }
+  },
+  {
+    title: '剩余额度',
+    key: 'quota_display',
+    render: (row: any) => h('span', { style: 'font-weight: 500; color: #18a058;' }, row.quota_display || '$0.00')
+  },
+  {
+    title: '剩余比例',
+    key: 'quota_percent',
+    render: (row: any) => h('span', { style: 'color: var(--text-secondary);' }, row.quota_percent || '0.00%')
+  },
+  {
+    title: '健康',
+    key: 'health_status',
+    width: 80,
+    render: (row: any) => h(NTag, {
+      type: getHealthStatusType(row.health_status),
+      size: 'small',
+      bordered: false
+    }, { default: () => getHealthStatusText(row.health_status) })
+  },
+  {
+    title: '状态',
+    key: 'is_active',
+    width: 80,
+    render: (row: any) => h('div', { style: 'display: flex; align-items: center; gap: 4px;' }, [
+      h('span', { style: `width: 6px; height: 6px; border-radius: 50%; background: ${row.is_active ? '#00b38a' : 'var(--text-tertiary)'};` }),
+      h('span', { style: 'font-size: 12px; color: var(--text-secondary);' }, row.is_active ? '启用' : '禁用')
+    ])
+  },
+  {
+    title: '最近签到',
+    key: 'last_sign',
+    render: (row: any) => {
+      if (!row.last_sign) {
+        return h('span', { style: 'color: var(--text-tertiary); font-size: 12px;' }, '暂无')
+      }
+      return h('div', { style: 'display: flex; align-items: center; gap: 6px;' }, [
+        h(NTag, { type: row.last_sign.success ? 'success' : 'error', size: 'tiny', bordered: false }, { default: () => row.last_sign.success ? '成功' : '失败' }),
+        h('span', { style: 'font-size: 11px; color: var(--text-tertiary);' }, formatTime(row.last_sign.time))
+      ])
+    }
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 200,
+    fixed: 'right' as const,
+    render: (row: any) => {
+      return h(NSpace, { size: 4 }, {
+        default: () => [
+          h(NTooltip, {}, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              loading: signingId.value === row.id,
+              onClick: () => handleSign(row)
+            }, { icon: () => h(NIcon, {}, { default: () => h(FlashOutline) }) }),
+            default: () => '签到'
+          }),
+          h(NTooltip, {}, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              loading: healthCheckingId.value === row.id,
+              onClick: () => handleHealthCheck(row)
+            }, { icon: () => h(NIcon, {}, { default: () => h(PulseOutline) }) }),
+            default: () => '健康检查'
+          }),
+          h(NTooltip, {}, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              onClick: () => showEditModalFn(row)
+            }, { icon: () => h(NIcon, {}, { default: () => h(CreateOutline) }) }),
+            default: () => '编辑'
+          }),
+          h(NTooltip, {}, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              onClick: () => showTokensModal(row)
+            }, { icon: () => h(NIcon, {}, { default: () => h(KeyOutline) }) }),
+            default: () => 'API令牌'
+          }),
+          h(NTooltip, {}, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              onClick: () => router.push(`/account/${row.id}`)
+            }, { icon: () => h(NIcon, {}, { default: () => h(OpenOutline) }) }),
+            default: () => '详情'
+          }),
+          h(NPopconfirm, {
+            onPositiveClick: () => handleDelete(row.id)
+          }, {
+            trigger: () => h(NButton, {
+              size: 'tiny',
+              quaternary: true,
+              style: 'color: #d03050;'
+            }, { icon: () => h(NIcon, {}, { default: () => h(TrashOutline) }) }),
+            default: () => '确定删除该账号吗？'
+          })
+        ]
+      })
+    }
+  }
+]
+
+const getTrendBarHeight = (value: number) => {
+  if (!dashboard.value?.daily_trend) return 0
+  const max = Math.max(
+    ...dashboard.value.daily_trend.map((d: any) => d.success + d.fail),
+    1
+  )
+  return Math.max(2, (value / max) * 50)
 }
 
 const formatTime = (time: string) => {
@@ -428,13 +589,27 @@ const handleAdd = async () => {
   }
   adding.value = true
   try {
-    await accountApi.create({
+    const res = await accountApi.create({
       session_cookie: addForm.value.session_cookie,
-      user_id: addForm.value.user_id
+      user_id: addForm.value.user_id,
+      group_id: addForm.value.group_id || undefined
     })
+
+    // 如果选择了通知渠道，保存配置
+    if (addForm.value.notify_channel_ids.length > 0 && res.data?.id) {
+      const notifyData = {
+        channels: addForm.value.notify_channel_ids.map(id => ({
+          channel_id: id,
+          is_enabled: true,
+          notify_config: {}
+        }))
+      }
+      await notifyApi.updateAccountNotify(res.data.id, notifyData)
+    }
+
     message.success('账号添加成功')
     showAddModalVisible.value = false
-    addForm.value = { session_cookie: '', user_id: '' }
+    addForm.value = { session_cookie: '', user_id: '', group_id: null, notify_channel_ids: [] }
     loadData()
   } catch (e: any) {
     message.error(e.message)
@@ -457,13 +632,27 @@ const loadChannels = async () => {
   }
 }
 
+const loadGroups = async () => {
+  try {
+    const res = await groupsApi.getList()
+    groups.value = res.data || []
+    groupOptions.value = [
+      { label: '全部分组', value: null },
+      ...groups.value.map((g: any) => ({ label: g.name, value: g.id }))
+    ]
+  } catch (e: any) {
+    console.error('Failed to load groups:', e)
+  }
+}
+
 const showEditModalFn = async (account: any) => {
   editingAccount.value = account
   editForm.value = {
     user_id: '',
     session_cookie: '',
     is_active: account.is_active,
-    notify_channel_ids: []
+    notify_channel_ids: [],
+    group_id: account.group_id || null
   }
   showEditModalVisible.value = true
 
@@ -484,6 +673,10 @@ const handleUpdate = async () => {
     const data: any = { is_active: editForm.value.is_active }
     if (editForm.value.user_id.trim()) data.user_id = editForm.value.user_id.trim()
     if (editForm.value.session_cookie.trim()) data.session_cookie = editForm.value.session_cookie.trim()
+    // 分组 ID (0 表示移除分组)
+    if (editForm.value.group_id !== editingAccount.value.group_id) {
+      data.group_id = editForm.value.group_id || 0
+    }
 
     await accountApi.update(editingAccount.value.id, data)
 
@@ -575,7 +768,7 @@ const handleSyncTokens = async () => {
 
 const copyToken = (key: string) => {
   const fullKey = `sk-${key}`
-  navigator.clipboard.writeText(fullKey).then(() => {
+  copyToClipboard(fullKey).then(() => {
     message.success('已复制到剪贴板')
   }).catch(() => {
     message.error('复制失败')
@@ -610,17 +803,81 @@ const handleSyncEndpoints = async () => {
 }
 
 const copyEndpoint = (url: string) => {
-  navigator.clipboard.writeText(url).then(() => {
+  copyToClipboard(url).then(() => {
     message.success('已复制')
   }).catch(() => {
     message.error('复制失败')
   })
 }
 
+// 健康检查
+const handleHealthCheck = async (account: any) => {
+  healthCheckingId.value = account.id
+  try {
+    const res = await accountApi.healthCheck(account.id)
+    const status = res.data?.health_status
+    if (status === 'healthy') {
+      message.success('账号状态正常')
+    } else {
+      message.warning(`账号异常: ${res.data?.health_message || '凭证验证失败'}`)
+    }
+    loadData()
+  } catch (e: any) {
+    message.error(e.message)
+  } finally {
+    healthCheckingId.value = null
+  }
+}
+
+const handleHealthCheckAll = async () => {
+  healthChecking.value = true
+  try {
+    const res = await accountApi.healthCheckAll()
+    const { healthy_count, unhealthy_count } = res.data
+    if (unhealthy_count > 0) {
+      message.warning(`健康检查完成: ${healthy_count} 个正常, ${unhealthy_count} 个异常`)
+    } else {
+      message.success(`健康检查完成: 所有 ${healthy_count} 个账号正常`)
+    }
+    loadData()
+  } catch (e: any) {
+    message.error(e.message)
+  } finally {
+    healthChecking.value = false
+  }
+}
+
+const getHealthStatusType = (status: string) => {
+  if (status === 'healthy') return 'success'
+  if (status === 'unhealthy') return 'error'
+  return 'default'
+}
+
+const getHealthStatusText = (status: string) => {
+  if (status === 'healthy') return '正常'
+  if (status === 'unhealthy') return '异常'
+  return '未知'
+}
+
+const getGroupColor = (color: string) => {
+  const colors: Record<string, string> = {
+    default: '#8b8b8b',
+    blue: '#2080f0',
+    green: '#18a058',
+    red: '#d03050',
+    orange: '#f0a020',
+    purple: '#8b5cf6',
+    pink: '#ec4899',
+    cyan: '#06b6d4'
+  }
+  return colors[color] || colors.default
+}
+
 onMounted(() => {
   loadData()
   loadChannels()
   loadEndpoints()
+  loadGroups()
 })
 </script>
 
@@ -633,13 +890,14 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm);
+  position: relative;
 }
 
 .stat-icon {
@@ -658,27 +916,123 @@ onMounted(() => {
 .stat-value {
   font-size: 24px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-primary);
   line-height: 1.2;
 }
 
 .stat-sub {
   font-size: 14px;
   font-weight: 400;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .stat-label {
   font-size: 13px;
-  color: #999;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.stat-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.stat-badge.warning {
+  background: rgba(208,48,80,0.1);
+  color: #d03050;
+}
+
+.stat-badge.success {
+  background: rgba(24,160,88,0.1);
+  color: #18a058;
+}
+
+/* 签到趋势 */
+.trend-section {
+  background: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+  padding: 16px 20px;
+}
+
+.trend-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.legend-item .dot.success { background: #18a058; }
+.legend-item .dot.fail { background: #d03050; }
+
+.trend-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 80px;
+  margin-top: 12px;
+  padding: 0 10px;
+}
+
+.trend-bar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.trend-bars {
+  display: flex;
+  align-items: flex-end;
+  height: 60px;
+}
+
+.trend-bar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.trend-bar {
+  width: 16px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  transition: height 0.3s;
+}
+
+.trend-bar.success { background: #18a058; }
+.trend-bar.fail { background: #d03050; margin-top: 1px; }
+
+.trend-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
 /* API 节点 */
 .api-endpoints-section {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm);
   margin-bottom: 24px;
 }
 
@@ -694,15 +1048,15 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: #f8f9fa;
-  border: 1px solid #eee;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   transition: all 0.2s;
 }
 
 .endpoint-card:hover {
-  border-color: #ddd;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .endpoint-status {
@@ -725,7 +1079,7 @@ onMounted(() => {
 .endpoint-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -733,7 +1087,7 @@ onMounted(() => {
 
 .endpoint-url {
   font-size: 11px;
-  color: #999;
+  color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -744,14 +1098,14 @@ onMounted(() => {
   grid-column: 1 / -1;
   text-align: center;
   padding: 24px;
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
 .account-section {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .section-header {
@@ -759,14 +1113,19 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
   margin: 0;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
 }
 
 .section-actions {
@@ -774,142 +1133,10 @@ onMounted(() => {
   gap: 8px;
 }
 
-.account-table {
-  width: 100%;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 2fr 100px 160px 180px;
-  padding: 12px 20px;
-  background: #fafafa;
-  font-size: 12px;
-  font-weight: 500;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.table-body {
-  padding: 0;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 2fr 100px 160px 180px;
-  padding: 14px 20px;
-  align-items: center;
-  border-bottom: 1px solid #f5f5f5;
-  transition: background 0.15s;
-}
-
-.table-row:last-child {
-  border-bottom: none;
-}
-
-.table-row:hover {
-  background: #fafafa;
-}
-
-.account-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #00b38a, #00d4a0);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.avatar.disabled {
-  background: linear-gradient(135deg, #aaa, #ccc);
-}
-
-.account-info {
-  min-width: 0;
-}
-
-.account-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: #1a1a2e;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.account-id {
-  font-size: 12px;
-  color: #999;
-  margin-top: 2px;
-}
-
-.col-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.status-dot.active {
-  background: #00b38a;
-}
-
-.status-dot.inactive {
-  background: #ccc;
-}
-
-.status-text {
-  font-size: 13px;
-  color: #666;
-}
-
-.col-sign {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sign-time {
-  font-size: 12px;
-  color: #999;
-}
-
-.no-sign {
-  font-size: 13px;
-  color: #ccc;
-}
-
-.col-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: flex-end;
-}
-
-.col-actions .delete-btn:hover {
-  color: #e88080;
-}
-
 /* Modal */
 .modal-container {
   width: 440px;
-  background: white;
+  background: var(--bg-modal);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -919,14 +1146,14 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -945,8 +1172,13 @@ onMounted(() => {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 8px;
+}
+
+.form-item label .required {
+  color: #d03050;
+  margin-left: 2px;
 }
 
 .form-tip {
@@ -954,10 +1186,10 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #999;
+  color: var(--text-tertiary);
   margin-top: 16px;
   padding: 12px;
-  background: #f9f9f9;
+  background: var(--bg-card-hover);
   border-radius: 8px;
 }
 
@@ -966,8 +1198,8 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 8px;
   padding: 16px 20px;
-  border-top: 1px solid #f0f0f0;
-  background: #fafafa;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card-hover);
 }
 
 /* Tokens Modal */
@@ -994,7 +1226,7 @@ onMounted(() => {
 
 .modal-subtitle {
   font-size: 12px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .tokens-body {
@@ -1006,8 +1238,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
+  background: var(--bg-card-hover);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tokens-stats {
@@ -1019,12 +1251,12 @@ onMounted(() => {
 .tokens-stats .tokens-count {
   font-size: 20px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-primary);
 }
 
 .tokens-stats .tokens-label {
   font-size: 13px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .tokens-list {
@@ -1037,16 +1269,16 @@ onMounted(() => {
 }
 
 .token-card {
-  background: #f8f9fa;
-  border: 1px solid #eee;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 10px 12px;
   transition: all 0.2s;
 }
 
 .token-card:hover {
-  border-color: #ddd;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
 .token-header {
@@ -1059,7 +1291,7 @@ onMounted(() => {
 .token-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1075,7 +1307,7 @@ onMounted(() => {
 
 .quota-used {
   font-size: 11px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .token-models {
@@ -1092,7 +1324,7 @@ onMounted(() => {
 }
 
 .token-models::-webkit-scrollbar-thumb {
-  background: #ddd;
+  background: var(--border-color);
   border-radius: 2px;
 }
 
@@ -1109,8 +1341,8 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  background: white;
-  border: 1px solid #e8e8e8;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 4px 4px 4px 8px;
 }
@@ -1118,7 +1350,7 @@ onMounted(() => {
 .token-key {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 11px;
-  color: #666;
+  color: var(--text-secondary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1131,30 +1363,25 @@ onMounted(() => {
 }
 
 .empty-icon {
-  color: #ddd;
+  color: var(--text-tertiary);
   margin-bottom: 12px;
 }
 
 .empty-text {
   font-size: 15px;
   font-weight: 500;
-  color: #999;
+  color: var(--text-tertiary);
   margin-bottom: 4px;
 }
 
 .empty-hint {
   font-size: 13px;
-  color: #bbb;
+  color: var(--text-tertiary);
 }
 
 @media (max-width: 900px) {
   .stats-row {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr 80px 120px 140px;
   }
 }
 </style>
