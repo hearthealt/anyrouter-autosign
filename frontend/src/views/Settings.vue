@@ -36,6 +36,26 @@
               </div>
             </div>
 
+            <n-divider title-placement="left">健康检查</n-divider>
+
+            <div class="setting-section">
+              <div class="setting-item">
+                <div class="setting-info">
+                  <div class="setting-label">定时健康检查</div>
+                  <div class="setting-desc">定期检查账号凭证是否有效，并更新额度缓存</div>
+                </div>
+                <n-switch v-model:value="settings.health_check_enabled" />
+              </div>
+
+              <div class="setting-item" v-if="settings.health_check_enabled">
+                <div class="setting-info">
+                  <div class="setting-label">检查间隔（小时）</div>
+                  <div class="setting-desc">每隔多少小时执行一次健康检查</div>
+                </div>
+                <n-input-number v-model:value="settings.health_check_interval" :min="1" :max="24" style="width: 100px;" />
+              </div>
+            </div>
+
             <n-divider title-placement="left">失败重试</n-divider>
 
             <div class="setting-section">
@@ -502,6 +522,8 @@ const savingSettings = ref(false)
 const settings = ref({
   auto_sign_enabled: false,
   auto_sign_time: '08:00',
+  health_check_enabled: true,
+  health_check_interval: 6,
   sign_retry_enabled: true,
   sign_max_retries: 3,
   sign_retry_interval: 30

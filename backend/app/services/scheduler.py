@@ -376,6 +376,15 @@ def health_check_job():
                         account.username = user_info.get("username")
                     if user_info.get("display_name"):
                         account.display_name = user_info.get("display_name")
+                    # 更新 quota 缓存字段
+                    account.cached_quota = user_info.get("quota", 0)
+                    account.cached_used_quota = user_info.get("used_quota", 0)
+                    account.cached_request_count = user_info.get("request_count", 0)
+                    account.cached_user_group = user_info.get("group", "default")
+                    account.cached_aff_code = user_info.get("aff_code")
+                    account.cached_aff_count = user_info.get("aff_count", 0)
+                    account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
+                    account.quota_updated_at = now
                     healthy_count += 1
                 else:
                     account.health_status = "unhealthy"

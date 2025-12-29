@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Setting
 from app.schemas import ApiResponse, SettingsResponse, SettingsUpdate
-from app.services.scheduler import update_sign_schedule
+from app.services.scheduler import update_sign_schedule, update_health_check_schedule
 
 router = APIRouter(prefix="/settings", tags=["系统设置"])
 
@@ -17,8 +17,11 @@ router = APIRouter(prefix="/settings", tags=["系统设置"])
 DEFAULT_SETTINGS = {
     "auto_sign_enabled": False,
     "auto_sign_time": "08:00",
-    "sign_retry_times": 3,
-    "sign_retry_interval": 5
+    "health_check_enabled": True,
+    "health_check_interval": 6,
+    "sign_retry_enabled": True,
+    "sign_max_retries": 3,
+    "sign_retry_interval": 30
 }
 
 
@@ -72,9 +75,13 @@ def update_settings(data: SettingsUpdate, db: Session = Depends(get_db)):
 
     db.commit()
 
-    # 更新定时任务
+    # 更新签到定时任务
     if "auto_sign_enabled" in update_data or "auto_sign_time" in update_data:
         update_sign_schedule()
+
+    # 更新健康检查定时任务
+    if "health_check_enabled" in update_data or "health_check_interval" in update_data:
+        update_health_check_schedule()
 
     return ApiResponse(success=True, message="设置保存成功")
 

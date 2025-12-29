@@ -16,15 +16,21 @@ class SettingsResponse(BaseModel):
     """系统设置响应"""
     auto_sign_enabled: bool = False
     auto_sign_time: str = "08:00"
-    sign_retry_times: int = 3
-    sign_retry_interval: int = 5
+    health_check_enabled: bool = True
+    health_check_interval: int = 6
+    sign_retry_enabled: bool = True
+    sign_max_retries: int = 3
+    sign_retry_interval: int = 30
 
 
 class SettingsUpdate(BaseModel):
     """更新系统设置"""
     auto_sign_enabled: Optional[bool] = None
     auto_sign_time: Optional[str] = None
-    sign_retry_times: Optional[int] = None
+    health_check_enabled: Optional[bool] = None
+    health_check_interval: Optional[int] = None
+    sign_retry_enabled: Optional[bool] = None
+    sign_max_retries: Optional[int] = None
     sign_retry_interval: Optional[int] = None
 
 
