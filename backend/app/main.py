@@ -7,6 +7,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.core.logging import setup_logging
 from app.api import (
     accounts_router,
     sign_router,
@@ -17,18 +18,16 @@ from app.api import (
     auth_router,
     backup_router,
     statistics_router,
-    groups_router
+    groups_router,
+    audit_router,
+    logs_router
 )
 from app.api.deps import get_current_user
 from app.database import init_db
 from app.services.scheduler import init_scheduler, shutdown_scheduler
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+# 初始化日志系统
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +84,8 @@ app.include_router(api_endpoints_router, prefix="/api/v1", dependencies=[Depends
 app.include_router(backup_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(statistics_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(groups_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(audit_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(logs_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 
 
 @app.get("/")

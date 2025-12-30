@@ -3,17 +3,19 @@
 """
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import NotifyChannel, AccountNotify
+from app.models import NotifyChannel, AccountNotify, User, AuditAction
 from app.schemas import (
     NotifyChannelCreate, NotifyChannelUpdate, NotifyChannelResponse,
     AccountNotifyResponse, AccountNotifyUpdate,
     ApiResponse
 )
 from app.services import NotifyFactory
+from app.services.audit import log_action
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/notify", tags=["推送管理"])
 
@@ -48,7 +50,12 @@ def get_channels(db: Session = Depends(get_db)):
 
 
 @router.post("/channels", response_model=ApiResponse)
-def create_channel(data: NotifyChannelCreate, db: Session = Depends(get_db)):
+def create_channel(
+    data: NotifyChannelCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """添加推送渠道"""
     # 验证渠道类型
     supported_types = NotifyFactory.get_supported_types()
@@ -68,6 +75,19 @@ def create_channel(data: NotifyChannelCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(channel)
 
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.CHANNEL_CREATE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="channel",
+        target_id=channel.id,
+        target_name=channel.name,
+        detail={"type": data.type},
+        request=request
+    )
+
     return ApiResponse(
         success=True,
         message="推送渠道添加成功",
@@ -76,14 +96,24 @@ def create_channel(data: NotifyChannelCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/channels/{channel_id}", response_model=ApiResponse)
-def update_channel(channel_id: int, data: NotifyChannelUpdate, db: Session = Depends(get_db)):
+def update_channel(
+    channel_id: int,
+    data: NotifyChannelUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """更新推送渠道"""
     channel = db.query(NotifyChannel).filter(NotifyChannel.id == channel_id).first()
 
     if not channel:
         raise HTTPException(status_code=404, detail="渠道不存在")
 
+    changes = {}
+
     if data.name is not None:
+        if channel.name != data.name:
+            changes["name"] = f"{channel.name} -> {data.name}"
         channel.name = data.name
 
     if data.config is not None:
@@ -97,29 +127,66 @@ def update_channel(channel_id: int, data: NotifyChannelUpdate, db: Session = Dep
                 new_config[key] = old_config.get(key, "")
 
         channel.config = json.dumps(new_config)
+        changes["config"] = "已更新"
 
     if data.is_enabled is not None:
+        if channel.is_enabled != data.is_enabled:
+            changes["is_enabled"] = f"{channel.is_enabled} -> {data.is_enabled}"
         channel.is_enabled = data.is_enabled
 
     channel.updated_at = datetime.now()
     db.commit()
 
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.CHANNEL_UPDATE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="channel",
+        target_id=channel.id,
+        target_name=channel.name,
+        detail=changes if changes else None,
+        request=request
+    )
+
     return ApiResponse(success=True, message="渠道更新成功")
 
 
 @router.delete("/channels/{channel_id}", response_model=ApiResponse)
-def delete_channel(channel_id: int, db: Session = Depends(get_db)):
+def delete_channel(
+    channel_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """删除推送渠道"""
     channel = db.query(NotifyChannel).filter(NotifyChannel.id == channel_id).first()
 
     if not channel:
         raise HTTPException(status_code=404, detail="渠道不存在")
 
+    channel_name = channel.name
+    channel_type = channel.type
+
     # 删除关联配置
     db.query(AccountNotify).filter(AccountNotify.channel_id == channel_id).delete()
 
     db.delete(channel)
     db.commit()
+
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.CHANNEL_DELETE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="channel",
+        target_id=channel_id,
+        target_name=channel_name,
+        detail={"type": channel_type},
+        request=request
+    )
 
     return ApiResponse(success=True, message="渠道删除成功")
 

@@ -144,7 +144,12 @@ export const backupApi = {
 // 统计 API
 export const statisticsApi = {
   getOverview: () => api.get('/statistics/overview'),
-  getDaily: (days = 30) => api.get('/statistics/daily', { params: { days } }),
+  getDaily: (days = 30, startDate?: string, endDate?: string) => {
+    const params: any = { days }
+    if (startDate) params.start_date = startDate
+    if (endDate) params.end_date = endDate
+    return api.get('/statistics/daily', { params })
+  },
   getMonthly: (months = 12) => api.get('/statistics/monthly', { params: { months } }),
   getAccounts: () => api.get('/statistics/accounts'),
   export: (params?: { start_date?: string; end_date?: string; format?: string }) =>
@@ -159,4 +164,47 @@ export const groupsApi = {
   delete: (id: number) => api.delete(`/groups/${id}`),
   addAccounts: (id: number, accountIds: number[]) => api.post(`/groups/${id}/accounts`, accountIds),
   removeAccounts: (id: number, accountIds: number[]) => api.delete(`/groups/${id}/accounts`, { data: accountIds })
+}
+
+// 审计日志 API
+export const auditApi = {
+  getLogs: (params?: {
+    page?: number
+    size?: number
+    action?: string
+    user_id?: number
+    start_date?: string
+    end_date?: string
+    keyword?: string
+  }) => api.get('/audit/logs', { params }),
+  getActions: () => api.get('/audit/actions'),
+  export: (params?: {
+    action?: string
+    start_date?: string
+    end_date?: string
+    format?: 'json' | 'csv'
+  }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.action) queryParams.append('action', params.action)
+    if (params?.start_date) queryParams.append('start_date', params.start_date)
+    if (params?.end_date) queryParams.append('end_date', params.end_date)
+    if (params?.format) queryParams.append('format', params.format)
+    return `/api/v1/audit/export?${queryParams.toString()}`
+  }
+}
+
+// 系统日志 API
+export const logsApi = {
+  getFiles: () => api.get('/logs/files'),
+  getLogs: (params?: {
+    file?: string
+    level?: string
+    keyword?: string
+    lines?: number
+    offset?: number
+  }) => api.get('/logs', { params }),
+  download: (filename: string) => {
+    return `/api/v1/logs/download/${filename}`
+  },
+  clear: (filename: string) => api.delete(`/logs/${filename}`)
 }

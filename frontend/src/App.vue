@@ -9,8 +9,11 @@
 
         <!-- 主布局 -->
         <div v-else class="layout">
+          <!-- 移动端遮罩 -->
+          <div class="mobile-overlay" :class="{ show: mobileMenuOpen }" @click="mobileMenuOpen = false"></div>
+
           <!-- 侧边栏 -->
-          <aside class="sidebar" :class="{ collapsed }">
+          <aside class="sidebar" :class="{ collapsed, 'mobile-open': mobileMenuOpen }">
             <!-- Logo -->
             <div class="sidebar-brand" @click="$router.push('/')">
               <div class="brand-icon">
@@ -66,6 +69,10 @@
           <!-- 主区域 -->
           <div class="main" :class="{ expanded: collapsed }">
             <header class="header">
+              <!-- 移动端菜单按钮 -->
+              <n-button class="mobile-menu-btn" quaternary @click="mobileMenuOpen = true">
+                <template #icon><n-icon :size="22"><MenuOutline /></n-icon></template>
+              </n-button>
               <h1 class="page-title">{{ pageTitle }}</h1>
               <div class="header-actions">
                 <n-button quaternary circle size="small" @click="refreshData">
@@ -83,6 +90,20 @@
               <router-view />
             </main>
           </div>
+
+          <!-- 移动端底部导航 -->
+          <nav class="mobile-tabbar">
+            <div
+              v-for="item in menuItems"
+              :key="item.path"
+              class="tabbar-item"
+              :class="{ active: isActive(item.path) }"
+              @click="$router.push(item.path)"
+            >
+              <n-icon :size="22"><component :is="item.icon" /></n-icon>
+              <span>{{ item.label }}</span>
+            </div>
+          </nav>
         </div>
 
         <!-- 修改密码弹窗 -->
@@ -153,7 +174,8 @@ import {
   LogOutOutline,
   SunnyOutline,
   MoonOutline,
-  CloseOutline
+  CloseOutline,
+  MenuOutline
 } from '@vicons/ionicons5'
 import { authApi } from './api'
 import { removeToken, isLoggedIn } from './utils/auth'
@@ -164,6 +186,7 @@ const { message } = createDiscreteApi(['message'])
 const route = useRoute()
 const router = useRouter()
 const collapsed = ref(false)
+const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
 const currentTheme = ref<'light' | 'dark'>(getActiveTheme())
 
@@ -592,5 +615,136 @@ const themeOverrides: GlobalThemeOverrides = {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card-hover);
+}
+
+/* 移动端遮罩 */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.mobile-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 移动端菜单按钮 */
+.mobile-menu-btn {
+  display: none;
+  margin-right: 8px;
+}
+
+/* 移动端底部导航 */
+.mobile-tabbar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tabbar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.tabbar-item.active {
+  color: var(--primary-color);
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .mobile-overlay {
+    display: block;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .mobile-tabbar {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -220px;
+    width: 220px;
+    transition: left 0.3s ease;
+    z-index: 101;
+  }
+
+  .sidebar.mobile-open {
+    left: 0;
+  }
+
+  .sidebar.collapsed {
+    width: 220px;
+    left: -220px;
+  }
+
+  .sidebar.collapsed.mobile-open {
+    left: 0;
+  }
+
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .nav-label {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-footer .collapse-btn {
+    display: none;
+  }
+
+  .main {
+    margin-left: 0;
+    padding-bottom: 70px;
+  }
+
+  .main.expanded {
+    margin-left: 0;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-actions .n-button:not(.mobile-menu-btn) {
+    display: none;
+  }
+
+  .header-actions .n-dropdown {
+    display: block;
+  }
 }
 </style>

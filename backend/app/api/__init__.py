@@ -11,6 +11,8 @@ from .auth import router as auth_router
 from .backup import router as backup_router
 from .statistics import router as statistics_router
 from .groups import router as groups_router
+from .audit import router as audit_router
+from .logs import router as logs_router
 
 __all__ = [
     "accounts_router",
@@ -22,5 +24,7 @@ __all__ = [
     "auth_router",
     "backup_router",
     "statistics_router",
-    "groups_router"
+    "groups_router",
+    "audit_router",
+    "logs_router"
 ]

@@ -3,13 +3,15 @@
 """
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Setting
+from app.models import Setting, User, AuditAction
 from app.schemas import ApiResponse, SettingsResponse, SettingsUpdate
 from app.services.scheduler import update_sign_schedule, update_health_check_schedule
+from app.services.audit import log_action
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/settings", tags=["系统设置"])
 
@@ -65,7 +67,12 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 @router.put("", response_model=ApiResponse)
-def update_settings(data: SettingsUpdate, db: Session = Depends(get_db)):
+def update_settings(
+    data: SettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """更新系统设置"""
     update_data = data.model_dump(exclude_unset=True)
 
@@ -82,6 +89,17 @@ def update_settings(data: SettingsUpdate, db: Session = Depends(get_db)):
     # 更新健康检查定时任务
     if "health_check_enabled" in update_data or "health_check_interval" in update_data:
         update_health_check_schedule()
+
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.SETTING_UPDATE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="setting",
+        detail=update_data,
+        request=request
+    )
 
     return ApiResponse(success=True, message="设置保存成功")
 

@@ -99,5 +99,5 @@ def decode_token(token: str) -> Optional[dict]:
         )
         return payload
     except JWTError as e:
-        logger.error(f"Token 解析失败: {e}")
+        logger.debug(f"Token 解析失败: {e}")
         return None

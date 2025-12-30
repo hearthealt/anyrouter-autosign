@@ -404,9 +404,14 @@ def health_check_job():
         db.commit()
         logger.info(f"健康检查完成: 健康 {healthy_count}, 异常 {unhealthy_count}")
 
-        # 如果有异常账号，发送通知
-        if unhealthy_count > 0:
-            send_health_alert(db, unhealthy_count)
+        # 如果有异常账号，发送通知（按账号配置的推送渠道发送）
+        unhealthy_accounts = db.query(Account).filter(
+            Account.is_active == True,
+            Account.health_status == "unhealthy"
+        ).all()
+
+        for account in unhealthy_accounts:
+            send_health_alert_for_account(db, account)
 
     except Exception as e:
         logger.error(f"健康检查任务异常: {e}")
@@ -414,23 +419,42 @@ def health_check_job():
         db.close()
 
 
-def send_health_alert(db, unhealthy_count: int):
-    """发送健康检查告警通知"""
+def send_health_alert_for_account(db, account):
+    """发送单个账号的健康检查告警通知（按账号配置的推送渠道）"""
+    from app.models import AccountNotify
+
     try:
-        # 获取启用的推送渠道
-        channels = db.query(NotifyChannel).filter(NotifyChannel.is_enabled == True).all()
+        # 获取账号的推送配置
+        account_notifies = db.query(AccountNotify).filter(
+            AccountNotify.account_id == account.id,
+            AccountNotify.is_enabled == True
+        ).all()
+
+        if not account_notifies:
+            return
+
+        # 获取渠道配置
+        channel_ids = [n.channel_id for n in account_notifies]
+        channels = db.query(NotifyChannel).filter(
+            NotifyChannel.id.in_(channel_ids),
+            NotifyChannel.is_enabled == True
+        ).all()
 
         if not channels:
             return
 
-        title = f"账号健康告警: {unhealthy_count} 个账号异常"
-        content = f"检测到 {unhealthy_count} 个账号凭证异常，请及时更新 Session Cookie。"
+        title = f"账号健康告警 - {account.username}"
+        content = f"账号 {account.username} 凭证异常: {account.health_message or '未知错误'}\n请及时更新 Session Cookie。"
 
         for channel in channels:
             try:
                 config = json.loads(channel.config)
                 notifier = NotifyFactory.create(channel.type, config)
-                notifier.send(title, content, config)
+                result = notifier.send(title, content, config)
+                if result:
+                    logger.info(f"健康告警发送成功: {channel.name} -> {account.username}")
+                else:
+                    logger.error(f"健康告警发送失败: {channel.name} -> {account.username}")
             except Exception as e:
                 logger.error(f"发送健康告警失败 {channel.name}: {e}")
     except Exception as e:

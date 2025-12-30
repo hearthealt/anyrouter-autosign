@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     # 数据库配置
     database_url: str = "sqlite:///./data/anyrouter.db"
 
+    # 日志配置
+    log_level: str = "INFO"           # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    log_format: str = "json"          # text（开发）或 json（生产）
+    log_dir: str = "/home/auto_task/backend/logs"           # 日志目录
+    log_max_size: int = 10            # 单文件最大大小（MB）
+    log_backup_count: int = 30        # 保留文件数量
+
     # AnyRouter API
     anyrouter_base_url: str = "https://anyrouter.top"
     anyrouter_user_api: str = "/api/user/self"

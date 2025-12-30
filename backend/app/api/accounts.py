@@ -3,18 +3,20 @@
 """
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken
+from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken, User, AuditAction
 from app.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountInfo,
     LastSign, ApiResponse
 )
 from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest
 from app.services import anyrouter_service
+from app.services.audit import log_action
 from app.utils import format_quota, format_quota_percent
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/accounts", tags=["账号管理"])
 
@@ -89,7 +91,12 @@ def get_accounts(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ApiResponse)
-def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+def create_account(
+    data: AccountCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """添加账号"""
     # 验证 session_cookie 和 user_id
     success, user_info = anyrouter_service.get_user_info(data.session_cookie, data.user_id)
@@ -131,6 +138,18 @@ def create_account(data: AccountCreate, db: Session = Depends(get_db)):
 
     # 同步 API Tokens
     sync_account_tokens(db, account)
+
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.ACCOUNT_CREATE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="account",
+        target_id=account.id,
+        target_name=account.username,
+        request=request
+    )
 
     return ApiResponse(
         success=True,
@@ -180,12 +199,20 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{account_id}", response_model=ApiResponse)
-def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(get_db)):
+def update_account(
+    account_id: int,
+    data: AccountUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """更新账号"""
     account = db.query(Account).filter(Account.id == account_id).first()
 
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
+
+    changes = {}
 
     if data.session_cookie is not None or data.user_id is not None:
         # 使用新的 user_id 或现有的
@@ -210,26 +237,51 @@ def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(g
         account.cached_aff_count = user_info.get("aff_count", 0)
         account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
         account.quota_updated_at = datetime.now()
+        changes["credentials"] = "已更新"
 
     if data.is_active is not None:
+        if account.is_active != data.is_active:
+            changes["is_active"] = f"{account.is_active} -> {data.is_active}"
         account.is_active = data.is_active
 
     if data.group_id is not None:
+        if account.group_id != (data.group_id if data.group_id > 0 else None):
+            changes["group_id"] = f"{account.group_id} -> {data.group_id if data.group_id > 0 else None}"
         account.group_id = data.group_id if data.group_id > 0 else None
 
     account.updated_at = datetime.now()
     db.commit()
 
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.ACCOUNT_UPDATE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="account",
+        target_id=account.id,
+        target_name=account.username,
+        detail=changes if changes else None,
+        request=request
+    )
+
     return ApiResponse(success=True, message="账号更新成功")
 
 
 @router.delete("/{account_id}", response_model=ApiResponse)
-def delete_account(account_id: int, db: Session = Depends(get_db)):
+def delete_account(
+    account_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """删除账号"""
     account = db.query(Account).filter(Account.id == account_id).first()
 
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
+
+    account_name = account.username
 
     # 删除关联的推送配置
     db.query(AccountNotify).filter(AccountNotify.account_id == account_id).delete()
@@ -240,6 +292,18 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     # 删除账号
     db.delete(account)
     db.commit()
+
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.ACCOUNT_DELETE,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="account",
+        target_id=account_id,
+        target_name=account_name,
+        request=request
+    )
 
     return ApiResponse(success=True, message="账号删除成功")
 

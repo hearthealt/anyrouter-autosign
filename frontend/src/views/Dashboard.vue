@@ -1,7 +1,18 @@
 <template>
   <div>
+    <!-- 统计卡片骨架屏 -->
+    <div class="stats-row" v-if="loading && !dashboard">
+      <div class="stat-card skeleton-card" v-for="i in 4" :key="i">
+        <n-skeleton circle :width="48" :height="48" />
+        <div class="stat-content">
+          <n-skeleton text :width="80" :height="28" style="margin-bottom: 8px;" />
+          <n-skeleton text :width="60" :height="16" />
+        </div>
+      </div>
+    </div>
+
     <!-- 统计卡片 -->
-    <div class="stats-row">
+    <div class="stats-row" v-else>
       <div class="stat-card">
         <div class="stat-icon" style="background: rgba(0,179,138,0.1); color: #00b38a;">
           <n-icon :size="20"><PeopleOutline /></n-icon>
@@ -55,24 +66,7 @@
           <span class="legend-item"><span class="dot fail"></span>失败</span>
         </div>
       </div>
-      <div class="trend-chart">
-        <div v-for="item in dashboard.daily_trend" :key="item.date" class="trend-bar-group">
-          <div class="trend-bars">
-            <n-tooltip>
-              <template #trigger>
-                <div class="trend-bar-wrapper">
-                  <div class="trend-bar success" :style="{ height: getTrendBarHeight(item.success) + 'px' }"></div>
-                  <div class="trend-bar fail" :style="{ height: getTrendBarHeight(item.fail) + 'px' }"></div>
-                </div>
-              </template>
-              <div>{{ item.date }}</div>
-              <div>成功: {{ item.success }}</div>
-              <div>失败: {{ item.fail }}</div>
-            </n-tooltip>
-          </div>
-          <div class="trend-label">{{ item.date }}</div>
-        </div>
-      </div>
+      <div ref="trendChartRef" class="trend-chart-container"></div>
     </div>
 
     <!-- API 节点 -->
@@ -130,7 +124,21 @@
         </div>
       </div>
 
-      <n-spin :show="loading">
+      <!-- 账号列表骨架屏 -->
+      <template v-if="loading && accounts.length === 0">
+        <div class="skeleton-table">
+          <div class="skeleton-row" v-for="i in 5" :key="i">
+            <n-skeleton text :width="100" />
+            <n-skeleton text :width="80" />
+            <n-skeleton text :width="60" />
+            <n-skeleton text :width="120" />
+            <n-skeleton text :width="100" />
+          </div>
+        </div>
+      </template>
+
+      <!-- 账号表格 -->
+      <template v-else>
         <n-data-table
           v-if="filteredAccounts.length > 0"
           :columns="accountColumns"
@@ -143,7 +151,7 @@
             <n-button size="small" @click="showAddModalVisible = true">添加账号</n-button>
           </template>
         </n-empty>
-      </n-spin>
+      </template>
     </div>
 
     <!-- 添加账号弹窗 -->
@@ -420,7 +428,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch, h } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, h, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, NTag, NButton, NIcon, NPopconfirm, NSpace, NTooltip, NDrawer, NDrawerContent, NInputNumber } from 'naive-ui'
 import {
@@ -431,6 +439,7 @@ import {
 } from '@vicons/ionicons5'
 import { accountApi, signApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi } from '../api'
 import { formatQuota, copyToClipboard } from '../utils'
+import * as echarts from 'echarts'
 
 const router = useRouter()
 const message = useMessage()
@@ -440,6 +449,41 @@ const accounts = ref<any[]>([])
 const dashboard = ref<any>(null)
 const signingId = ref<number | null>(null)
 const batchSigning = ref(false)
+
+// ECharts 实例
+const trendChartRef = ref<HTMLElement | null>(null)
+let trendChart: echarts.ECharts | null = null
+
+// 检测深色模式
+const isDarkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const handleThemeChange = (e: MediaQueryListEvent) => {
+  isDarkMode.value = e.matches
+  updateTrendChart()
+}
+
+// 获取图表主题配置
+const getChartTheme = () => {
+  return isDarkMode.value ? {
+    backgroundColor: 'transparent',
+    textColor: 'rgba(255, 255, 255, 0.85)',
+    axisLineColor: 'rgba(255, 255, 255, 0.15)',
+    splitLineColor: 'rgba(255, 255, 255, 0.08)',
+    tooltipBg: 'rgba(30, 30, 46, 0.95)',
+    tooltipBorder: 'rgba(255, 255, 255, 0.1)',
+    successColor: '#00d4a0',
+    failColor: '#ff6b6b'
+  } : {
+    backgroundColor: 'transparent',
+    textColor: 'rgba(0, 0, 0, 0.65)',
+    axisLineColor: 'rgba(0, 0, 0, 0.15)',
+    splitLineColor: 'rgba(0, 0, 0, 0.06)',
+    tooltipBg: 'rgba(255, 255, 255, 0.98)',
+    tooltipBorder: 'rgba(0, 0, 0, 0.08)',
+    successColor: '#00b38a',
+    failColor: '#ee5a5a'
+  }
+}
 
 // 推送渠道
 const loadingChannels = ref(false)
@@ -667,13 +711,140 @@ const accountColumns = [
   }
 ]
 
-const getTrendBarHeight = (value: number) => {
-  if (!dashboard.value?.daily_trend) return 0
-  const max = Math.max(
-    ...dashboard.value.daily_trend.map((d: any) => d.success + d.fail),
-    1
-  )
-  return Math.max(2, (value / max) * 50)
+// 初始化签到趋势图表
+const initTrendChart = () => {
+  if (!trendChartRef.value) return
+
+  trendChart = echarts.init(trendChartRef.value)
+  updateTrendChart()
+
+  window.addEventListener('resize', handleResize)
+}
+
+// 更新签到趋势图表
+const updateTrendChart = () => {
+  if (!trendChart || !dashboard.value?.daily_trend) return
+
+  const theme = getChartTheme()
+  const data = dashboard.value.daily_trend
+
+  const option: echarts.EChartsOption = {
+    backgroundColor: theme.backgroundColor,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      borderWidth: 1,
+      padding: [10, 14],
+      textStyle: {
+        color: isDarkMode.value ? '#fff' : '#333',
+        fontSize: 12
+      },
+      formatter: (params: any) => {
+        const date = params[0]?.axisValue || ''
+        let html = `<div style="font-weight: 600; margin-bottom: 6px;">${date}</div>`
+
+        params.forEach((item: any) => {
+          const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
+          html += `<div style="display: flex; align-items: center; gap: 8px; margin: 3px 0;">
+            <span style="width: 8px; height: 8px; border-radius: 2px; background: ${color};"></span>
+            <span>${item.seriesName}: <b>${item.value}</b></span>
+          </div>`
+        })
+
+        return html
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '3%',
+      bottom: '12%',
+      top: '8%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map((d: any) => d.date),
+      axisLine: {
+        lineStyle: {
+          color: theme.axisLineColor
+        }
+      },
+      axisTick: {
+        show: false
+      },
+      axisLabel: {
+        color: theme.textColor,
+        fontSize: 10,
+        formatter: (value: string) => {
+          const parts = value.split('-')
+          return parts.length >= 3 ? `${parts[1]}/${parts[2]}` : value
+        }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLine: {
+        show: false
+      },
+      axisTick: {
+        show: false
+      },
+      axisLabel: {
+        color: theme.textColor,
+        fontSize: 10
+      },
+      splitLine: {
+        lineStyle: {
+          color: theme.splitLineColor,
+          type: 'dashed'
+        }
+      }
+    },
+    series: [
+      {
+        name: '成功',
+        type: 'bar',
+        stack: 'total',
+        barWidth: '50%',
+        barMaxWidth: 24,
+        data: data.map((d: any) => d.success),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#00d4a0' },
+            { offset: 1, color: theme.successColor }
+          ]),
+          borderRadius: [0, 0, 0, 0]
+        }
+      },
+      {
+        name: '失败',
+        type: 'bar',
+        stack: 'total',
+        barWidth: '50%',
+        barMaxWidth: 24,
+        data: data.map((d: any) => d.fail),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#ff8080' },
+            { offset: 1, color: theme.failColor }
+          ]),
+          borderRadius: [3, 3, 0, 0]
+        }
+      }
+    ]
+  }
+
+  trendChart.setOption(option)
+}
+
+// 处理窗口大小变化
+const handleResize = () => {
+  trendChart?.resize()
 }
 
 const formatTime = (time: string) => {
@@ -1149,11 +1320,36 @@ const getGroupColor = (color: string) => {
   return colors[color] || colors.default
 }
 
+// 监听 dashboard 数据变化，初始化/更新图表
+watch(() => dashboard.value?.daily_trend, (newVal) => {
+  if (newVal && newVal.length > 0) {
+    nextTick(() => {
+      if (!trendChart) {
+        initTrendChart()
+      } else {
+        updateTrendChart()
+      }
+    })
+  }
+}, { deep: true })
+
 onMounted(() => {
+  // 监听主题变化
+  mediaQuery.addEventListener('change', handleThemeChange)
+
   loadData()
   loadChannels()
   loadEndpoints()
   loadGroups()
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  mediaQuery.removeEventListener('change', handleThemeChange)
+  window.removeEventListener('resize', handleResize)
+
+  // 销毁图表实例
+  trendChart?.dispose()
 })
 </script>
 
@@ -1259,49 +1455,11 @@ onMounted(() => {
 .legend-item .dot.success { background: #18a058; }
 .legend-item .dot.fail { background: #d03050; }
 
-.trend-chart {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  height: 80px;
+/* ECharts 图表容器 */
+.trend-chart-container {
+  width: 100%;
+  height: 100px;
   margin-top: 12px;
-  padding: 0 10px;
-}
-
-.trend-bar-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-}
-
-.trend-bars {
-  display: flex;
-  align-items: flex-end;
-  height: 60px;
-}
-
-.trend-bar-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-}
-
-.trend-bar {
-  width: 16px;
-  min-height: 2px;
-  border-radius: 2px 2px 0 0;
-  transition: height 0.3s;
-}
-
-.trend-bar.success { background: #18a058; }
-.trend-bar.fail { background: #d03050; margin-top: 1px; }
-
-.trend-label {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
 }
 
 /* API 节点 */
@@ -1434,6 +1592,32 @@ onMounted(() => {
 
 .modal-body {
   padding: 20px;
+}
+
+/* 骨架屏样式 */
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.skeleton-table {
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.skeleton-row:last-child {
+  border-bottom: none;
 }
 
 .form-item {
@@ -1684,9 +1868,93 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* 响应式设计 */
 @media (max-width: 900px) {
   .stats-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .endpoints-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tokens-list {
+    grid-template-columns: 1fr;
+  }
+
+  .tokens-modal {
+    width: 95vw;
+    max-width: 680px;
+  }
+}
+
+@media (max-width: 600px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .section-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .section-title-row .n-select {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  .section-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .section-actions .n-button {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .modal-container {
+    width: 95vw;
+    max-width: 440px;
+  }
+
+  .trend-section {
+    display: none;
+  }
+
+  .api-endpoints-section {
+    margin-bottom: 16px;
+  }
+
+  /* 表格在移动端改为卡片布局 */
+  :deep(.n-data-table) {
+    font-size: 13px;
+  }
+
+  :deep(.n-data-table-th),
+  :deep(.n-data-table-td) {
+    padding: 8px 12px !important;
   }
 }
 </style>

@@ -5,21 +5,25 @@ import json
 import io
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, SignLog, Setting, NotifyChannel, AccountNotify, ApiToken
+from app.models import Account, SignLog, Setting, NotifyChannel, AccountNotify, ApiToken, User, AuditAction
 from app.schemas import ApiResponse
+from app.services.audit import log_action
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/backup", tags=["备份恢复"])
 
 
 @router.get("/export", response_class=StreamingResponse)
 def export_backup(
+    request: Request,
     include_logs: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     导出数据备份
@@ -92,6 +96,22 @@ def export_backup(
                 "reward_quota": log.reward_quota,
             })
 
+    # 记录审计日志
+    log_action(
+        db=db,
+        action=AuditAction.BACKUP_EXPORT,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="backup",
+        detail={
+            "include_logs": include_logs,
+            "accounts": len(backup_data["accounts"]),
+            "settings": len(backup_data["settings"]),
+            "channels": len(backup_data["notify_channels"])
+        },
+        request=request
+    )
+
     # 生成 JSON 文件
     json_str = json.dumps(backup_data, ensure_ascii=False, indent=2)
     buffer = io.BytesIO(json_str.encode('utf-8'))
@@ -110,9 +130,11 @@ def export_backup(
 
 @router.post("/import", response_model=ApiResponse)
 async def import_backup(
+    request: Request,
     file: UploadFile = File(...),
     overwrite: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     导入数据备份
@@ -247,6 +269,20 @@ async def import_backup(
                     imported_counts["account_notifies"] += 1
 
         db.commit()
+
+        # 记录审计日志
+        log_action(
+            db=db,
+            action=AuditAction.BACKUP_IMPORT,
+            user_id=current_user.id,
+            username=current_user.username,
+            target_type="backup",
+            detail={
+                "overwrite": overwrite,
+                "imported": imported_counts
+            },
+            request=request
+        )
 
         return ApiResponse(
             success=True,

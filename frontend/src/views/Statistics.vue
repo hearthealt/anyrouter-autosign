@@ -1,7 +1,18 @@
 <template>
   <div>
+    <!-- 统计概览骨架屏 -->
+    <div class="stats-overview" v-if="loadingOverview">
+      <div class="stat-card skeleton-card" v-for="i in 4" :key="i">
+        <n-skeleton circle :width="48" :height="48" />
+        <div class="stat-content">
+          <n-skeleton text :width="80" :height="28" style="margin-bottom: 8px;" />
+          <n-skeleton text :width="60" :height="16" />
+        </div>
+      </div>
+    </div>
+
     <!-- 统计概览 -->
-    <div class="stats-overview">
+    <div class="stats-overview" v-else>
       <div class="stat-card primary">
         <div class="stat-icon">
           <n-icon :size="24"><CalendarOutline /></n-icon>
@@ -64,63 +75,10 @@
           </div>
         </div>
         <div class="chart-body">
-          <div class="trend-chart" v-if="displayDailyData.length > 0">
-            <!-- Y轴刻度 -->
-            <div class="y-axis">
-              <span>{{ maxDailyValue }}</span>
-              <span>{{ Math.round(maxDailyValue / 2) }}</span>
-              <span>0</span>
-            </div>
-            <!-- 图表区域 -->
-            <div class="chart-scroll-area">
-              <div class="chart-bars-container">
-                <div
-                  v-for="(item, index) in displayDailyData"
-                  :key="item.date"
-                  class="bar-column"
-                  @mouseenter="activeBar = index"
-                  @mouseleave="activeBar = -1"
-                >
-                  <!-- 堆叠柱子 -->
-                  <div class="stacked-bar">
-                    <div
-                      class="bar-segment fail"
-                      :style="{ height: getBarHeight(item.fail, maxDailyValue) + 'px' }"
-                    ></div>
-                    <div
-                      class="bar-segment success"
-                      :style="{ height: getBarHeight(item.success, maxDailyValue) + 'px' }"
-                    ></div>
-                  </div>
-                  <!-- 日期标签 -->
-                  <div class="bar-date">{{ formatBarDate(item.date) }}</div>
-                  <!-- 悬浮提示 -->
-                  <Transition name="tooltip-fade">
-                    <div v-if="activeBar === index" class="bar-tooltip">
-                      <div class="tooltip-date">{{ item.date }}</div>
-                      <div class="tooltip-row">
-                        <span class="tooltip-dot success"></span>
-                        <span>成功</span>
-                        <span class="tooltip-value">{{ item.success }}</span>
-                      </div>
-                      <div class="tooltip-row">
-                        <span class="tooltip-dot fail"></span>
-                        <span>失败</span>
-                        <span class="tooltip-value">{{ item.fail }}</span>
-                      </div>
-                      <div class="tooltip-divider"></div>
-                      <div class="tooltip-row reward">
-                        <span>奖励</span>
-                        <span class="tooltip-value">{{ item.reward_display }}</span>
-                      </div>
-                    </div>
-                  </Transition>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- ECharts 图表容器 -->
+          <div ref="trendChartRef" class="echarts-container" v-show="displayDailyData.length > 0"></div>
           <!-- 空状态 -->
-          <div class="chart-empty" v-else>
+          <div class="chart-empty" v-if="displayDailyData.length === 0">
             <span>暂无签到数据</span>
           </div>
         </div>
@@ -148,26 +106,75 @@
           </div>
         </div>
         <div class="chart-body monthly-body">
-          <div class="monthly-list">
-            <div v-for="item in monthlyData" :key="item.month" class="monthly-item">
-              <div class="month-info">
-                <div class="month-name">{{ formatMonth(item.month) }}</div>
-                <div class="month-stats">
-                  <span class="success">{{ item.success }}</span>
-                  <span class="separator">/</span>
-                  <span class="total">{{ item.total }}</span>
+          <!-- ECharts 图表容器 -->
+          <div ref="monthlyChartRef" class="echarts-container" v-show="monthlyData.length > 0"></div>
+          <!-- 空状态 -->
+          <div class="chart-empty" v-if="monthlyData.length === 0">
+            <span>暂无月度数据</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 签到日历 -->
+    <div class="calendar-card">
+      <div class="calendar-header">
+        <div class="calendar-title">
+          <span class="title-icon green"></span>
+          <h3>签到日历</h3>
+        </div>
+        <div class="calendar-controls">
+          <n-button size="small" @click="changeMonth(-1)">
+            <template #icon><n-icon><ChevronBackOutline /></n-icon></template>
+          </n-button>
+          <span class="current-month">{{ currentMonthDisplay }}</span>
+          <n-button size="small" @click="changeMonth(1)" :disabled="isCurrentMonth">
+            <template #icon><n-icon><ChevronForwardOutline /></n-icon></template>
+          </n-button>
+        </div>
+        <div class="calendar-legend">
+          <span class="legend-item">
+            <span class="legend-dot" style="background: var(--bg-card-hover);"></span>
+            无签到
+          </span>
+          <span class="legend-item">
+            <span class="legend-dot" style="background: #00b38a;"></span>
+            全部成功
+          </span>
+          <span class="legend-item">
+            <span class="legend-dot" style="background: #f0a020;"></span>
+            部分成功
+          </span>
+          <span class="legend-item">
+            <span class="legend-dot" style="background: #d03050;"></span>
+            全部失败
+          </span>
+        </div>
+      </div>
+      <div class="calendar-body">
+        <div class="month-calendar">
+          <!-- 星期标题 -->
+          <div class="calendar-weekdays-row">
+            <div v-for="day in ['周日', '周一', '周二', '周三', '周四', '周五', '周六']" :key="day" class="weekday-header">
+              {{ day }}
+            </div>
+          </div>
+          <!-- 日期网格 -->
+          <div class="calendar-days-grid">
+            <div
+              v-for="(day, index) in monthDays"
+              :key="index"
+              class="day-cell"
+              :class="getDayClass(day)"
+              @click="day.date && handleDayClick(day)"
+            >
+              <div class="day-number" v-if="day.date">{{ day.day }}</div>
+              <div class="day-status" v-if="day.date && (day.success > 0 || day.fail > 0)">
+                <div class="status-bar">
+                  <span class="success-count" v-if="day.success > 0">✓{{ day.success }}</span>
+                  <span class="fail-count" v-if="day.fail > 0">✗{{ day.fail }}</span>
                 </div>
               </div>
-              <div class="month-progress">
-                <div class="progress-bar">
-                  <div
-                    class="progress-fill"
-                    :style="{ width: item.success_rate + '%' }"
-                  ></div>
-                </div>
-                <div class="progress-rate">{{ item.success_rate }}%</div>
-              </div>
-              <div class="month-reward">{{ item.reward_display }}</div>
             </div>
           </div>
         </div>
@@ -184,50 +191,14 @@
         </n-button>
       </div>
       <n-spin :show="loadingAccounts">
-        <div class="ranking-table" v-if="accountStats.length > 0">
-          <div class="ranking-header-row">
-            <div class="col-rank">排名</div>
-            <div class="col-account">账号</div>
-            <div class="col-streak">连签</div>
-            <div class="col-success">成功</div>
-            <div class="col-rate">成功率</div>
-            <div class="col-reward">累计奖励</div>
-          </div>
-          <div class="ranking-body">
-            <div v-for="(item, index) in accountStats" :key="item.account_id" class="ranking-row">
-              <div class="col-rank">
-                <span class="rank-badge" :class="getRankClass(index)">{{ index + 1 }}</span>
-              </div>
-              <div class="col-account">
-                <div class="account-info">
-                  <span class="account-name">{{ item.username }}</span>
-                  <n-tag v-if="item.health_status === 'unhealthy'" type="error" size="tiny" :bordered="false">异常</n-tag>
-                </div>
-              </div>
-              <div class="col-streak">
-                <span class="streak-badge" v-if="item.streak_days > 0">
-                  <n-icon><FlameOutline /></n-icon>
-                  {{ item.streak_days }}天
-                </span>
-                <span v-else class="no-streak">-</span>
-              </div>
-              <div class="col-success">{{ item.success_count }}</div>
-              <div class="col-rate">
-                <n-progress
-                  type="line"
-                  :percentage="item.success_rate"
-                  :show-indicator="false"
-                  :height="6"
-                  :border-radius="3"
-                  :color="getProgressColor(item.success_rate)"
-                  style="width: 60px;"
-                />
-                <span class="rate-text">{{ item.success_rate }}%</span>
-              </div>
-              <div class="col-reward">{{ item.total_reward_display }}</div>
-            </div>
-          </div>
-        </div>
+        <n-data-table
+          v-if="accountStats.length > 0"
+          :columns="accountColumns"
+          :data="accountStats"
+          :row-key="(row: any) => row.account_id"
+          :max-height="400"
+          size="small"
+        />
         <n-empty v-else description="暂无数据" />
       </n-spin>
     </div>
@@ -235,17 +206,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useMessage } from 'naive-ui'
+import { ref, computed, onMounted, onUnmounted, watch, h, nextTick } from 'vue'
+import { useMessage, NTag, NIcon, NProgress } from 'naive-ui'
 import {
   CalendarOutline,
   TrophyOutline,
   GiftOutline,
   TrendingUpOutline,
   RefreshOutline,
-  FlameOutline
+  FlameOutline,
+  ChevronBackOutline,
+  ChevronForwardOutline
 } from '@vicons/ionicons5'
 import { statisticsApi } from '../api'
+import * as echarts from 'echarts'
 
 const message = useMessage()
 
@@ -254,68 +228,657 @@ const dailyData = ref<any[]>([])
 const monthlyData = ref<any[]>([])
 const accountStats = ref<any[]>([])
 const loadingAccounts = ref(false)
+const loadingOverview = ref(true)
 
 const dailyDays = ref(7)
-const activeBar = ref(-1)
+const calendarData = ref<any[]>([])
+const currentMonth = ref(new Date())
+
+// ECharts 实例
+const trendChartRef = ref<HTMLElement | null>(null)
+const monthlyChartRef = ref<HTMLElement | null>(null)
+let trendChart: echarts.ECharts | null = null
+let monthlyChart: echarts.ECharts | null = null
+
+// 检测深色模式
+const isDarkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+// 监听系统主题变化
+const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const handleThemeChange = (e: MediaQueryListEvent) => {
+  isDarkMode.value = e.matches
+  updateChartsTheme()
+}
+
+// 获取图表主题配置
+const getChartTheme = () => {
+  return isDarkMode.value ? {
+    backgroundColor: 'transparent',
+    textColor: 'rgba(255, 255, 255, 0.85)',
+    axisLineColor: 'rgba(255, 255, 255, 0.15)',
+    splitLineColor: 'rgba(255, 255, 255, 0.08)',
+    tooltipBg: 'rgba(30, 30, 46, 0.95)',
+    tooltipBorder: 'rgba(255, 255, 255, 0.1)',
+    successColor: '#00d4a0',
+    failColor: '#ff6b6b',
+    rewardColor: '#f0a020'
+  } : {
+    backgroundColor: 'transparent',
+    textColor: 'rgba(0, 0, 0, 0.65)',
+    axisLineColor: 'rgba(0, 0, 0, 0.15)',
+    splitLineColor: 'rgba(0, 0, 0, 0.06)',
+    tooltipBg: 'rgba(255, 255, 255, 0.98)',
+    tooltipBorder: 'rgba(0, 0, 0, 0.08)',
+    successColor: '#00b38a',
+    failColor: '#ee5a5a',
+    rewardColor: '#f0a020'
+  }
+}
+
+// 当前月份显示文本
+const currentMonthDisplay = computed(() => {
+  const year = currentMonth.value.getFullYear()
+  const month = currentMonth.value.getMonth() + 1
+  return `${year}年${month}月`
+})
+
+// 是否是当前月
+const isCurrentMonth = computed(() => {
+  const now = new Date()
+  return currentMonth.value.getFullYear() === now.getFullYear() &&
+         currentMonth.value.getMonth() === now.getMonth()
+})
+
+// 生成月历数据
+const monthDays = computed(() => {
+  const year = currentMonth.value.getFullYear()
+  const month = currentMonth.value.getMonth()
+
+  // 获取当月第一天和最后一天
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+
+  // 获取第一天是星期几（0-6，0是周日）
+  const firstDayOfWeek = firstDay.getDay()
+
+  // 创建日期到数据的映射
+  const dataMap = new Map()
+  for (const item of calendarData.value) {
+    dataMap.set(item.date, item)
+  }
+
+  // 辅助函数：格式化日期为 YYYY-MM-DD（本地时间）
+  const formatLocalDate = (date: Date) => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  const days: any[] = []
+
+  // 填充上月的空白日期
+  for (let i = 0; i < firstDayOfWeek; i++) {
+    days.push({ date: null, day: null, success: 0, fail: 0, total: 0 })
+  }
+
+  // 填充当月日期
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    const date = new Date(year, month, day)
+    const dateStr = formatLocalDate(date)
+    const data = dataMap.get(dateStr)
+
+    days.push({
+      date: dateStr,
+      day: day,
+      success: data?.success || 0,
+      fail: data?.fail || 0,
+      total: data?.total || 0
+    })
+  }
+
+  // 填充下月的空白日期，使总数是7的倍数
+  const remainingDays = 7 - (days.length % 7)
+  if (remainingDays < 7) {
+    for (let i = 0; i < remainingDays; i++) {
+      days.push({ date: null, day: null, success: 0, fail: 0, total: 0 })
+    }
+  }
+
+  return days
+})
+
+// 切换月份
+const changeMonth = (offset: number) => {
+  const newDate = new Date(currentMonth.value)
+  newDate.setMonth(newDate.getMonth() + offset)
+  currentMonth.value = newDate
+  loadCalendarData()
+}
+
+// 点击日期
+const handleDayClick = (day: any) => {
+  if (!day.date) return
+  console.log('Clicked day:', day)
+}
+
+const getDayClass = (day: any) => {
+  if (!day.date) return 'empty'
+
+  const today = new Date().toISOString().split('T')[0]
+  const isToday = day.date === today
+
+  let statusClass = ''
+  if (day.total === 0) {
+    statusClass = 'no-sign'
+  } else if (day.fail > 0 && day.success === 0) {
+    statusClass = 'all-fail'
+  } else if (day.success > 0 && day.fail === 0) {
+    statusClass = 'all-success'
+  } else {
+    statusClass = 'partial-success'
+  }
+
+  return `${statusClass} ${isToday ? 'today' : ''}`
+}
 
 const displayDailyData = computed(() => {
-  // 只显示最近 N 天的数据
-  const days = dailyDays.value
-  return dailyData.value.slice(-days)
+  // 直接返回已加载的数据（已经是对应天数的）
+  return dailyData.value
 })
 
-const maxDailyValue = computed(() => {
-  let max = 1
-  for (const item of displayDailyData.value) {
-    const total = item.success + item.fail
-    if (total > max) max = total
+// 账号排行表格列定义
+const accountColumns = [
+  {
+    title: '排名',
+    key: 'rank',
+    render: (_: any, index: number) => {
+      const colors: Record<string, string> = {
+        gold: 'background: linear-gradient(135deg, #ffd700, #ffb700); color: white;',
+        silver: 'background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: white;',
+        bronze: 'background: linear-gradient(135deg, #cd7f32, #b87333); color: white;'
+      }
+      const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''
+      const style = `display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 600; ${colors[rankClass] || 'background: var(--bg-card-hover); color: var(--text-secondary);'}`
+      return h('span', { style }, index + 1)
+    }
+  },
+  {
+    title: '账号',
+    key: 'username',
+    render: (row: any) => {
+      return h('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+        h('span', { style: 'font-size: 13px; font-weight: 500; color: var(--text-primary);' }, row.username),
+        row.health_status === 'unhealthy' ? h(NTag, { type: 'error', size: 'tiny', bordered: false }, { default: () => '异常' }) : null
+      ])
+    }
+  },
+  {
+    title: '连签',
+    key: 'streak_days',
+    render: (row: any) => {
+      if (row.streak_days > 0) {
+        const isHot = row.streak_days >= 3
+        const color = isHot ? '#d03050' : '#f0a020'
+        const bgColor = isHot ? 'rgba(208,48,80,0.1)' : 'rgba(240,160,32,0.1)'
+        return h('span', {
+          style: `display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: ${color}; background: ${bgColor}; padding: 2px 8px; border-radius: 10px;`
+        }, [
+          h(NIcon, null, { default: () => h(FlameOutline) }),
+          ` ${row.streak_days}天`
+        ])
+      }
+      return h('span', { style: 'color: var(--text-tertiary);' }, '-')
+    }
+  },
+  {
+    title: '成功',
+    key: 'success_count',
+    render: (row: any) => h('span', { style: 'color: #18a058; font-weight: 600;' }, row.success_count)
+  },
+  {
+    title: '成功率',
+    key: 'success_rate',
+    render: (row: any) => {
+      const color = row.success_rate >= 90 ? '#18a058' : row.success_rate >= 70 ? '#f0a020' : '#d03050'
+      return h('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
+        h(NProgress, {
+          type: 'line',
+          percentage: row.success_rate,
+          showIndicator: false,
+          height: 6,
+          borderRadius: 3,
+          color: color,
+          style: 'width: 60px;'
+        }),
+        h('span', { style: 'font-size: 12px; color: var(--text-secondary);' }, `${row.success_rate}%`)
+      ])
+    }
+  },
+  {
+    title: '累计奖励',
+    key: 'total_reward_display',
+    render: (row: any) => h('span', { style: 'color: #f0a020; font-weight: 500;' }, row.total_reward_display)
   }
-  return max
-})
+]
 
-const getBarHeight = (value: number, max: number) => {
-  if (max === 0) return 0
-  return Math.max(2, (value / max) * 100)
+// 初始化签到趋势图表
+const initTrendChart = () => {
+  if (!trendChartRef.value) return
+
+  trendChart = echarts.init(trendChartRef.value)
+  updateTrendChart()
+
+  // 监听窗口大小变化
+  window.addEventListener('resize', handleResize)
 }
 
-const formatBarDate = (date: string) => {
-  const [, month, day] = date.split('-')
-  return `${month}/${day}`
+// 更新签到趋势图表
+const updateTrendChart = () => {
+  if (!trendChart) return
+
+  const theme = getChartTheme()
+  const data = displayDailyData.value
+
+  const option: echarts.EChartsOption = {
+    backgroundColor: theme.backgroundColor,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      borderWidth: 1,
+      padding: [12, 16],
+      textStyle: {
+        color: isDarkMode.value ? '#fff' : '#333',
+        fontSize: 13
+      },
+      formatter: (params: any) => {
+        const date = params[0]?.axisValue || ''
+        let html = `<div style="font-weight: 600; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${theme.tooltipBorder}">${date}</div>`
+
+        params.forEach((item: any) => {
+          const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
+          html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 4px 0;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <span style="width: 10px; height: 10px; border-radius: 2px; background: ${color};"></span>
+              ${item.seriesName}
+            </span>
+            <span style="font-weight: 600;">${item.value}</span>
+          </div>`
+        })
+
+        // 添加奖励信息
+        const dayData = data.find((d: any) => d.date === date)
+        if (dayData?.reward_display) {
+          html += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${theme.tooltipBorder}; color: ${theme.rewardColor};">
+            奖励: <span style="font-weight: 600;">${dayData.reward_display}</span>
+          </div>`
+        }
+
+        return html
+      }
+    },
+    legend: {
+      show: false
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '8%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map((d: any) => d.date),
+      axisLine: {
+        lineStyle: {
+          color: theme.axisLineColor
+        }
+      },
+      axisTick: {
+        show: false
+      },
+      axisLabel: {
+        color: theme.textColor,
+        fontSize: 11,
+        formatter: (value: string) => {
+          const [, month, day] = value.split('-')
+          return `${month}/${day}`
+        }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLine: {
+        show: false
+      },
+      axisTick: {
+        show: false
+      },
+      axisLabel: {
+        color: theme.textColor,
+        fontSize: 11
+      },
+      splitLine: {
+        lineStyle: {
+          color: theme.splitLineColor,
+          type: 'dashed'
+        }
+      }
+    },
+    dataZoom: data.length > 15 ? [
+      {
+        type: 'inside',
+        start: Math.max(0, 100 - (15 / data.length) * 100),
+        end: 100
+      },
+      {
+        type: 'slider',
+        show: true,
+        height: 20,
+        bottom: 0,
+        start: Math.max(0, 100 - (15 / data.length) * 100),
+        end: 100,
+        borderColor: 'transparent',
+        backgroundColor: theme.splitLineColor,
+        fillerColor: isDarkMode.value ? 'rgba(0, 179, 138, 0.2)' : 'rgba(0, 179, 138, 0.15)',
+        handleStyle: {
+          color: theme.successColor,
+          borderColor: theme.successColor
+        },
+        textStyle: {
+          color: theme.textColor
+        }
+      }
+    ] : undefined,
+    series: [
+      {
+        name: '成功',
+        type: 'bar',
+        stack: 'total',
+        barWidth: '60%',
+        barMaxWidth: 30,
+        data: data.map((d: any) => d.success),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#00d4a0' },
+            { offset: 1, color: theme.successColor }
+          ]),
+          borderRadius: [0, 0, 0, 0]
+        },
+        emphasis: {
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#00e8b0' },
+              { offset: 1, color: '#00c090' }
+            ])
+          }
+        }
+      },
+      {
+        name: '失败',
+        type: 'bar',
+        stack: 'total',
+        barWidth: '60%',
+        barMaxWidth: 30,
+        data: data.map((d: any) => d.fail),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#ff8080' },
+            { offset: 1, color: theme.failColor }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        },
+        emphasis: {
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#ff9090' },
+              { offset: 1, color: '#ff6060' }
+            ])
+          }
+        }
+      }
+    ]
+  }
+
+  trendChart.setOption(option)
 }
 
-const formatMonth = (month: string) => {
-  const [, m] = month.split('-')
-  return `${m}月`
+// 初始化月度统计图表
+const initMonthlyChart = () => {
+  if (!monthlyChartRef.value) return
+
+  monthlyChart = echarts.init(monthlyChartRef.value)
+  updateMonthlyChart()
 }
 
-const getRankClass = (index: number) => {
-  if (index === 0) return 'gold'
-  if (index === 1) return 'silver'
-  if (index === 2) return 'bronze'
-  return ''
+// 更新月度统计图表
+const updateMonthlyChart = () => {
+  if (!monthlyChart) return
+
+  const theme = getChartTheme()
+  const data = monthlyData.value
+
+  const option: echarts.EChartsOption = {
+    backgroundColor: theme.backgroundColor,
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      borderWidth: 1,
+      padding: [12, 16],
+      textStyle: {
+        color: isDarkMode.value ? '#fff' : '#333',
+        fontSize: 13
+      },
+      formatter: (params: any) => {
+        const monthData = data.find((d: any) => d.month === params[0]?.axisValue)
+        if (!monthData) return ''
+
+        return `<div style="font-weight: 600; margin-bottom: 8px;">${monthData.month}</div>
+          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0;">
+            <span>成功率</span>
+            <span style="font-weight: 600; color: ${theme.successColor}">${monthData.success_rate}%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0;">
+            <span>签到</span>
+            <span style="font-weight: 600;">${monthData.success}/${monthData.total}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0; color: ${theme.rewardColor}">
+            <span>奖励</span>
+            <span style="font-weight: 600;">${monthData.reward_display}</span>
+          </div>`
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '12%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map((d: any) => d.month),
+      axisLine: {
+        lineStyle: {
+          color: theme.axisLineColor
+        }
+      },
+      axisTick: {
+        show: false
+      },
+      axisLabel: {
+        color: theme.textColor,
+        fontSize: 11,
+        formatter: (value: string) => {
+          const [, m] = value.split('-')
+          return `${parseInt(m)}月`
+        }
+      }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '签到数',
+        position: 'left',
+        axisLine: {
+          show: false
+        },
+        axisTick: {
+          show: false
+        },
+        axisLabel: {
+          color: theme.textColor,
+          fontSize: 11
+        },
+        splitLine: {
+          lineStyle: {
+            color: theme.splitLineColor,
+            type: 'dashed'
+          }
+        }
+      },
+      {
+        type: 'value',
+        name: '成功率',
+        position: 'right',
+        min: 0,
+        max: 100,
+        axisLine: {
+          show: false
+        },
+        axisTick: {
+          show: false
+        },
+        axisLabel: {
+          color: theme.textColor,
+          fontSize: 11,
+          formatter: '{value}%'
+        },
+        splitLine: {
+          show: false
+        }
+      }
+    ],
+    series: [
+      {
+        name: '签到数',
+        type: 'bar',
+        barWidth: '50%',
+        barMaxWidth: 24,
+        data: data.map((d: any) => d.total),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(0, 179, 138, 0.8)' },
+            { offset: 1, color: 'rgba(0, 179, 138, 0.3)' }
+          ]),
+          borderRadius: [4, 4, 0, 0]
+        }
+      },
+      {
+        name: '成功率',
+        type: 'line',
+        yAxisIndex: 1,
+        data: data.map((d: any) => d.success_rate),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 8,
+        lineStyle: {
+          color: theme.rewardColor,
+          width: 3
+        },
+        itemStyle: {
+          color: theme.rewardColor,
+          borderColor: isDarkMode.value ? '#1e1e2e' : '#fff',
+          borderWidth: 2
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(240, 160, 32, 0.3)' },
+            { offset: 1, color: 'rgba(240, 160, 32, 0.05)' }
+          ])
+        }
+      }
+    ]
+  }
+
+  monthlyChart.setOption(option)
 }
 
-const getProgressColor = (rate: number) => {
-  if (rate >= 90) return '#18a058'
-  if (rate >= 70) return '#f0a020'
-  return '#d03050'
+// 更新图表主题
+const updateChartsTheme = () => {
+  updateTrendChart()
+  updateMonthlyChart()
+}
+
+// 处理窗口大小变化
+const handleResize = () => {
+  trendChart?.resize()
+  monthlyChart?.resize()
 }
 
 const loadOverview = async () => {
+  loadingOverview.value = true
   try {
     const res = await statisticsApi.getOverview()
     overview.value = res.data || {}
   } catch (e: any) {
     console.error('Failed to load overview:', e)
+  } finally {
+    loadingOverview.value = false
   }
 }
 
 const loadDailyStats = async () => {
   try {
-    const res = await statisticsApi.getDaily(60)  // 获取60天数据
+    const res = await statisticsApi.getDaily(dailyDays.value)
     dailyData.value = res.data || []
   } catch (e: any) {
     console.error('Failed to load daily stats:', e)
+  }
+}
+
+// 监听天数切换，重新加载数据
+watch(dailyDays, async () => {
+  await loadDailyStats()
+  nextTick(() => {
+    updateTrendChart()
+  })
+})
+
+// 监听数据变化更新图表
+watch(dailyData, () => {
+  nextTick(() => {
+    updateTrendChart()
+  })
+}, { deep: true })
+
+watch(monthlyData, () => {
+  nextTick(() => {
+    updateMonthlyChart()
+  })
+}, { deep: true })
+
+const loadCalendarData = async () => {
+  try {
+    // 获取当前显示月份的第一天和最后一天
+    const year = currentMonth.value.getFullYear()
+    const month = currentMonth.value.getMonth()
+    const lastDay = new Date(year, month + 1, 0)
+
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
+
+    const res = await statisticsApi.getDaily(31, startDate, endDate)
+    calendarData.value = res.data || []
+  } catch (e: any) {
+    console.error('Failed to load calendar data:', e)
   }
 }
 
@@ -340,11 +903,31 @@ const loadAccountStats = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 监听主题变化
+  mediaQuery.addEventListener('change', handleThemeChange)
+
+  // 加载数据
   loadOverview()
-  loadDailyStats()
-  loadMonthlyStats()
+  await Promise.all([loadDailyStats(), loadMonthlyStats()])
+  loadCalendarData()
   loadAccountStats()
+
+  // 初始化图表
+  nextTick(() => {
+    initTrendChart()
+    initMonthlyChart()
+  })
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  mediaQuery.removeEventListener('change', handleThemeChange)
+  window.removeEventListener('resize', handleResize)
+
+  // 销毁图表实例
+  trendChart?.dispose()
+  monthlyChart?.dispose()
 })
 </script>
 
@@ -357,14 +940,18 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm);
   position: relative;
+}
+
+.stat-card.skeleton-card {
+  min-height: 88px;
 }
 
 .stat-card.primary .stat-icon { background: rgba(0,179,138,0.1); color: #00b38a; }
@@ -386,18 +973,18 @@ onMounted(() => {
 .stat-value {
   font-size: 24px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-primary);
 }
 
 .stat-sub {
   font-size: 14px;
   font-weight: 400;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .stat-label {
   font-size: 13px;
-  color: #999;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
@@ -420,16 +1007,16 @@ onMounted(() => {
 }
 
 .chart-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  box-shadow: var(--shadow-sm);
   min-width: 0;
   overflow: hidden;
 }
 
 /* 签到趋势卡片特殊样式 */
 .trend-card {
-  background: linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%);
+  background: var(--bg-card);
   display: flex;
   flex-direction: column;
 }
@@ -462,14 +1049,14 @@ onMounted(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
 /* 时间段切换按钮 */
 .period-tabs {
   display: flex;
-  background: rgba(0,0,0,0.04);
+  background: var(--bg-card-hover);
   border-radius: 8px;
   padding: 3px;
 }
@@ -478,7 +1065,7 @@ onMounted(() => {
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 500;
-  color: #666;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
   border-radius: 6px;
@@ -487,13 +1074,13 @@ onMounted(() => {
 }
 
 .period-tab:hover {
-  color: #333;
+  color: var(--text-primary);
 }
 
 .period-tab.active {
-  background: white;
+  background: var(--bg-card);
   color: #00b38a;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .chart-body {
@@ -503,8 +1090,19 @@ onMounted(() => {
   flex-direction: column;
 }
 
+/* ECharts 图表容器 */
+.echarts-container {
+  width: 100%;
+  height: 220px;
+  min-height: 180px;
+}
+
 .monthly-body {
   padding: 12px 20px;
+}
+
+.monthly-body .echarts-container {
+  height: 200px;
 }
 
 /* 空状态 */
@@ -513,7 +1111,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
@@ -526,232 +1124,9 @@ onMounted(() => {
 .chart-legend {
   display: flex;
   justify-content: center;
-  gap: 20px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(0,0,0,0.05);
-}
-
-/* 趋势图表 */
-.trend-chart {
-  display: flex;
-  gap: 10px;
-  flex: 1;
-}
-
-.y-axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 4px 0 24px;
-  font-size: 10px;
-  color: #999;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.chart-scroll-area {
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 自定义滚动条 */
-.chart-scroll-area::-webkit-scrollbar {
-  height: 4px;
-}
-
-.chart-scroll-area::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chart-scroll-area::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.15);
-  border-radius: 4px;
-}
-
-.chart-scroll-area::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.25);
-}
-
-.chart-bars-container {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-  min-height: 100px;
-}
-
-.bar-column {
-  /* 每个柱子占容器 1/7 宽度 */
-  flex: 0 0 calc((100% - 36px) / 7);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  cursor: pointer;
-  padding-bottom: 20px;
-}
-
-.stacked-bar {
-  flex: 1;
-  width: 100%;
-  max-width: 28px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  position: relative;
-}
-
-.bar-segment {
-  width: 70%;
-  border-radius: 4px 4px 0 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-}
-
-.bar-segment.success {
-  background: linear-gradient(180deg, #00d4a0 0%, #00b38a 100%);
-  border-radius: 4px 4px 0 0;
-}
-
-.bar-segment.fail {
-  background: linear-gradient(180deg, #ff6b6b 0%, #ee5a5a 100%);
-  border-radius: 4px 4px 0 0;
-  margin-bottom: -1px;
-}
-
-.bar-segment.fail + .bar-segment.success {
-  border-radius: 0;
-}
-
-.bar-column:hover .bar-segment {
-  width: 85%;
-  filter: brightness(1.1);
-}
-
-.bar-column:hover .bar-segment.success {
-  box-shadow: 0 0 12px rgba(0, 179, 138, 0.4);
-}
-
-.bar-date {
-  position: absolute;
-  bottom: 0;
-  font-size: 10px;
-  color: #999;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.bar-column:hover .bar-date {
-  color: #00b38a;
-}
-
-/* 悬浮提示 */
-.bar-tooltip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(26, 26, 46, 0.95);
-  backdrop-filter: blur(8px);
-  border-radius: 10px;
-  padding: 12px 14px;
-  min-width: 130px;
-  z-index: 100;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-}
-
-.bar-tooltip::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 6px solid transparent;
-  border-top-color: rgba(26, 26, 46, 0.95);
-}
-
-.tooltip-date {
-  font-size: 12px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-
-.tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: rgba(255,255,255,0.8);
-  margin-bottom: 6px;
-}
-
-.tooltip-row:last-child {
-  margin-bottom: 0;
-}
-
-.tooltip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-
-.tooltip-dot.success {
-  background: #00d4a0;
-}
-
-.tooltip-dot.fail {
-  background: #ff6b6b;
-}
-
-.tooltip-value {
-  margin-left: auto;
-  font-weight: 600;
-  color: white;
-  font-variant-numeric: tabular-nums;
-}
-
-.tooltip-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.1);
-  margin: 8px 0;
-}
-
-.tooltip-row.reward {
-  color: #f0a020;
-}
-
-.tooltip-row.reward .tooltip-value {
-  color: #ffc107;
-}
-
-/* 提示框动画 */
-.tooltip-fade-enter-active,
-.tooltip-fade-leave-active {
-  transition: all 0.2s ease;
-}
-
-.tooltip-fade-enter-from,
-.tooltip-fade-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(4px);
-}
-
-/* 图例 */
-.chart-legend {
-  display: flex;
-  justify-content: center;
   gap: 24px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(0,0,0,0.05);
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .legend-item {
@@ -759,7 +1134,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -777,79 +1152,11 @@ onMounted(() => {
   background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
 }
 
-/* 月度列表 */
-.monthly-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.monthly-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.month-info {
-  width: 80px;
-}
-
-.month-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a1a2e;
-}
-
-.month-stats {
-  font-size: 11px;
-  color: #999;
-}
-
-.month-stats .success { color: #18a058; }
-.month-stats .separator { margin: 0 2px; }
-
-.month-progress {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: #f0f0f0;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #00b38a, #18a058);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.progress-rate {
-  width: 40px;
-  font-size: 12px;
-  color: #666;
-  text-align: right;
-}
-
-.month-reward {
-  width: 70px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #f0a020;
-  text-align: right;
-}
-
 /* 账号排行 */
 .ranking-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .ranking-header {
@@ -857,113 +1164,208 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .ranking-header h3 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-primary);
 }
 
-.ranking-table {
+/* 签到日历 */
+.calendar-card {
+  background: var(--bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.calendar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.title-icon.green {
+  background: linear-gradient(180deg, #00b38a 0%, #18a058 100%);
+}
+
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.current-month {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 100px;
+  text-align: center;
+}
+
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.calendar-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.calendar-legend .legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.calendar-body {
   padding: 0 20px 20px;
 }
 
-.ranking-header-row {
+.month-calendar {
+  width: 100%;
+}
+
+.calendar-weekdays-row {
   display: grid;
-  grid-template-columns: 60px 2fr 80px 80px 120px 100px;
-  padding: 12px 0;
-  font-size: 12px;
-  font-weight: 500;
-  color: #999;
-  text-transform: uppercase;
-  border-bottom: 1px solid #f0f0f0;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.ranking-body {
-  max-height: 400px;
-  overflow-y: auto;
+.weekday-header {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 8px;
 }
 
-.ranking-row {
+.calendar-days-grid {
   display: grid;
-  grid-template-columns: 60px 2fr 80px 80px 120px 100px;
-  padding: 12px 0;
-  align-items: center;
-  border-bottom: 1px solid #f5f5f5;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
 }
 
-.ranking-row:last-child {
-  border-bottom: none;
+.day-cell {
+  height: 50px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
 }
 
-.rank-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+.day-cell:hover:not(.empty) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-color);
+}
+
+.day-cell.empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.day-cell.empty:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.day-cell.no-sign {
+  background: var(--bg-card-hover);
+}
+
+.day-cell.all-success {
+  background: rgba(0, 179, 138, 0.1);
+  border-color: #00b38a;
+}
+
+.day-cell.all-fail {
+  background: rgba(208, 48, 80, 0.1);
+  border-color: #d03050;
+}
+
+.day-cell.partial-success {
+  background: rgba(240, 160, 32, 0.1);
+  border-color: #f0a020;
+}
+
+.day-cell.today {
+  box-shadow: 0 0 0 2px var(--primary-color);
+}
+
+.day-number {
   font-size: 12px;
   font-weight: 600;
-  background: #f0f0f0;
-  color: #666;
+  color: var(--text-primary);
+  margin-bottom: 2px;
 }
 
-.rank-badge.gold { background: linear-gradient(135deg, #ffd700, #ffb700); color: white; }
-.rank-badge.silver { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: white; }
-.rank-badge.bronze { background: linear-gradient(135deg, #cd7f32, #b87333); color: white; }
-
-.account-info {
+.day-status {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
 }
 
-.account-name {
-  font-size: 13px;
+.status-bar {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.success-count {
+  font-size: 9px;
   font-weight: 500;
-  color: #1a1a2e;
+  color: #00b38a;
+  background: rgba(0, 179, 138, 0.15);
+  padding: 1px 3px;
+  border-radius: 3px;
 }
 
-.streak-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #f0a020;
-  background: rgba(240,160,32,0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
+.fail-count {
+  font-size: 9px;
+  font-weight: 500;
+  color: #d03050;
+  background: rgba(208, 48, 80, 0.15);
+  padding: 1px 3px;
+  border-radius: 3px;
 }
 
 .no-streak {
-  color: #ccc;
-}
-
-.col-success {
-  font-size: 14px;
-  font-weight: 600;
-  color: #18a058;
-}
-
-.col-rate {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.rate-text {
-  font-size: 12px;
-  color: #666;
-}
-
-.col-reward {
-  font-size: 13px;
-  font-weight: 500;
-  color: #f0a020;
+  color: var(--text-tertiary);
 }
 
 @media (max-width: 900px) {
@@ -974,10 +1376,77 @@ onMounted(() => {
   .charts-row {
     grid-template-columns: 1fr;
   }
+}
 
-  .ranking-header-row,
-  .ranking-row {
-    grid-template-columns: 40px 1fr 60px 60px 80px 70px;
+@media (max-width: 600px) {
+  .stats-overview {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .period-tabs {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ranking-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .ranking-header .n-button {
+    width: 100%;
+  }
+
+  /* 日历响应式 */
+  .calendar-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .calendar-legend {
+    width: 100%;
+  }
+
+  .calendar-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .day-cell {
+    height: 45px;
+    padding: 3px 4px;
+  }
+
+  .day-number {
+    font-size: 10px;
+  }
+
+  .success-count,
+  .fail-count {
+    font-size: 8px;
+    padding: 1px 2px;
   }
 }
 </style>

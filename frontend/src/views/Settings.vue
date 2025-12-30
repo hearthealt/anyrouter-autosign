@@ -3,96 +3,102 @@
     <n-tabs type="line">
       <!-- 基础设置 -->
       <n-tab-pane name="basic" tab="自动签到">
-        <n-card>
-          <n-spin :show="loadingSettings">
-            <div class="setting-section">
-              <div class="setting-item">
-                <div class="setting-info">
-                  <div class="setting-label">自动签到</div>
-                  <div class="setting-desc">开启后将在指定时间自动为所有账号签到</div>
+        <n-spin :show="loadingSettings">
+          <div class="settings-grid">
+            <!-- 自动签到卡片 -->
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div class="setting-card-icon auto-sign">
+                  <n-icon :size="20"><TimeOutline /></n-icon>
                 </div>
-                <n-switch v-model:value="settings.auto_sign_enabled" />
-              </div>
-
-              <div class="setting-item" v-if="settings.auto_sign_enabled">
-                <div class="setting-info">
-                  <div class="setting-label">签到时间</div>
-                  <div class="setting-desc">每天在此时间执行自动签到</div>
+                <div class="setting-card-title">
+                  <span>自动签到</span>
+                  <n-switch v-model:value="settings.auto_sign_enabled" size="small" />
                 </div>
-                <n-time-picker v-model:value="signTimeValue" format="HH:mm" style="width: 120px;" />
               </div>
-
-              <div class="setting-item" v-if="settings.auto_sign_enabled && schedulerStatus.next_run">
-                <div class="setting-info">
-                  <div class="setting-label">下次签到</div>
-                  <div class="setting-desc">系统将在此时间自动执行签到</div>
+              <div class="setting-card-body" v-if="settings.auto_sign_enabled">
+                <div class="setting-row">
+                  <span class="setting-row-label">签到时间</span>
+                  <n-time-picker v-model:value="signTimeValue" format="HH:mm" size="small" style="width: 100px;" />
                 </div>
-                <n-tag type="info">{{ schedulerStatus.next_run }}</n-tag>
+                <div class="setting-row" v-if="schedulerStatus.next_run">
+                  <span class="setting-row-label">下次执行</span>
+                  <n-tag size="small" type="info">{{ schedulerStatus.next_run }}</n-tag>
+                </div>
               </div>
-
-              <div class="setting-tip" v-if="settings.auto_sign_enabled">
-                <n-icon><InformationCircleOutline /></n-icon>
-                签到推送渠道请在「控制台」编辑账号时配置
+              <div class="setting-card-footer" v-else>
+                <span class="setting-disabled-text">开启后将在指定时间自动签到</span>
               </div>
             </div>
 
-            <n-divider title-placement="left">健康检查</n-divider>
-
-            <div class="setting-section">
-              <div class="setting-item">
-                <div class="setting-info">
-                  <div class="setting-label">定时健康检查</div>
-                  <div class="setting-desc">定期检查账号凭证是否有效，并更新额度缓存</div>
+            <!-- 健康检查卡片 -->
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div class="setting-card-icon health">
+                  <n-icon :size="20"><PulseOutline /></n-icon>
                 </div>
-                <n-switch v-model:value="settings.health_check_enabled" />
+                <div class="setting-card-title">
+                  <span>健康检查</span>
+                  <n-switch v-model:value="settings.health_check_enabled" size="small" />
+                </div>
               </div>
-
-              <div class="setting-item" v-if="settings.health_check_enabled">
-                <div class="setting-info">
-                  <div class="setting-label">检查间隔（小时）</div>
-                  <div class="setting-desc">每隔多少小时执行一次健康检查</div>
+              <div class="setting-card-body" v-if="settings.health_check_enabled">
+                <div class="setting-row">
+                  <span class="setting-row-label">检查间隔</span>
+                  <div class="setting-row-control">
+                    <n-input-number v-model:value="settings.health_check_interval" :min="1" :max="24" size="small" style="width: 70px;" />
+                    <span class="setting-row-unit">小时</span>
+                  </div>
                 </div>
-                <n-input-number v-model:value="settings.health_check_interval" :min="1" :max="24" style="width: 100px;" />
               </div>
-            </div>
-
-            <n-divider title-placement="left">失败重试</n-divider>
-
-            <div class="setting-section">
-              <div class="setting-item">
-                <div class="setting-info">
-                  <div class="setting-label">自动重试</div>
-                  <div class="setting-desc">签到失败后自动重试</div>
-                </div>
-                <n-switch v-model:value="settings.sign_retry_enabled" />
-              </div>
-
-              <div class="setting-item" v-if="settings.sign_retry_enabled">
-                <div class="setting-info">
-                  <div class="setting-label">最大重试次数</div>
-                  <div class="setting-desc">签到失败后最多重试的次数</div>
-                </div>
-                <n-input-number v-model:value="settings.sign_max_retries" :min="1" :max="10" style="width: 100px;" />
-              </div>
-
-              <div class="setting-item" v-if="settings.sign_retry_enabled">
-                <div class="setting-info">
-                  <div class="setting-label">重试间隔（分钟）</div>
-                  <div class="setting-desc">每次重试之间的等待时间</div>
-                </div>
-                <n-input-number v-model:value="settings.sign_retry_interval" :min="5" :max="120" style="width: 100px;" />
+              <div class="setting-card-footer" v-else>
+                <span class="setting-disabled-text">定期检查凭证有效性</span>
               </div>
             </div>
 
-            <n-divider />
-
-            <div class="setting-actions">
-              <n-button type="primary" @click="saveSettings" :loading="savingSettings">
-                保存设置
-              </n-button>
+            <!-- 失败重试卡片 -->
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div class="setting-card-icon retry">
+                  <n-icon :size="20"><RefreshOutline /></n-icon>
+                </div>
+                <div class="setting-card-title">
+                  <span>失败重试</span>
+                  <n-switch v-model:value="settings.sign_retry_enabled" size="small" />
+                </div>
+              </div>
+              <div class="setting-card-body" v-if="settings.sign_retry_enabled">
+                <div class="setting-row">
+                  <span class="setting-row-label">最大次数</span>
+                  <div class="setting-row-control">
+                    <n-input-number v-model:value="settings.sign_max_retries" :min="1" :max="10" size="small" style="width: 70px;" />
+                    <span class="setting-row-unit">次</span>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <span class="setting-row-label">重试间隔</span>
+                  <div class="setting-row-control">
+                    <n-input-number v-model:value="settings.sign_retry_interval" :min="5" :max="120" size="small" style="width: 70px;" />
+                    <span class="setting-row-unit">分钟</span>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-card-footer" v-else>
+                <span class="setting-disabled-text">签到失败后自动重试</span>
+              </div>
             </div>
-          </n-spin>
-        </n-card>
+          </div>
+
+          <div class="settings-footer">
+            <div class="settings-tip">
+              <n-icon><InformationCircleOutline /></n-icon>
+              签到推送渠道请在「控制台」编辑账号时配置
+            </div>
+            <n-button type="primary" @click="saveSettings" :loading="savingSettings">
+              保存设置
+            </n-button>
+          </div>
+        </n-spin>
       </n-tab-pane>
 
       <!-- 推送渠道 -->
@@ -317,6 +323,186 @@
           </n-spin>
         </n-card>
       </n-tab-pane>
+
+      <!-- 审计日志 -->
+      <n-tab-pane name="audit" tab="审计日志">
+        <n-card>
+          <n-spin :show="loadingAuditLogs">
+            <!-- 头部区域 -->
+            <div class="channel-header">
+              <div class="channel-header-info">
+                <div class="channel-header-title">审计日志</div>
+                <div class="channel-header-desc">记录系统中的所有敏感操作，包括登录、账号变更等</div>
+              </div>
+              <n-button @click="exportAuditLogs">
+                <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                导出日志
+              </n-button>
+            </div>
+
+            <n-divider style="margin: 16px 0;" />
+
+            <!-- 筛选器 -->
+            <div class="audit-filters">
+              <n-select
+                v-model:value="auditFilters.action"
+                :options="auditActionOptions"
+                placeholder="操作类型"
+                clearable
+                style="width: 160px;"
+                size="small"
+              />
+              <n-date-picker
+                v-model:value="auditFilters.dateRange"
+                type="daterange"
+                clearable
+                size="small"
+                style="width: 240px;"
+              />
+              <n-input
+                v-model:value="auditFilters.keyword"
+                placeholder="搜索关键词"
+                clearable
+                size="small"
+                style="width: 160px;"
+              />
+              <n-button size="small" type="primary" @click="loadAuditLogs">
+                <template #icon><n-icon><SearchOutline /></n-icon></template>
+                查询
+              </n-button>
+            </div>
+
+            <n-divider style="margin: 16px 0;" />
+
+            <!-- 日志列表 -->
+            <n-data-table
+              :columns="auditColumns"
+              :data="auditLogs"
+              :pagination="auditPagination"
+              :bordered="false"
+              size="small"
+              remote
+              @update:page="handleAuditPageChange"
+              @update:page-size="handleAuditPageSizeChange"
+            />
+          </n-spin>
+        </n-card>
+      </n-tab-pane>
+
+      <!-- 系统日志 -->
+      <n-tab-pane name="syslogs" tab="系统日志">
+        <n-card>
+          <n-spin :show="loadingSysLogs">
+            <!-- 头部区域 -->
+            <div class="channel-header">
+              <div class="channel-header-info">
+                <div class="channel-header-title">系统日志</div>
+                <div class="channel-header-desc">查看应用运行日志，支持按级别筛选和关键词搜索</div>
+              </div>
+              <div class="log-header-actions">
+                <n-checkbox v-model:checked="autoRefreshLogs" size="small">
+                  自动刷新
+                </n-checkbox>
+                <n-button size="small" @click="loadSysLogs">
+                  <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                  刷新
+                </n-button>
+              </div>
+            </div>
+
+            <n-divider style="margin: 16px 0;" />
+
+            <!-- 筛选器 -->
+            <div class="audit-filters">
+              <n-select
+                v-model:value="sysLogFilters.file"
+                :options="logFileOptions"
+                placeholder="选择日志文件"
+                style="width: 180px;"
+                size="small"
+              />
+              <n-select
+                v-model:value="sysLogFilters.level"
+                :options="logLevelOptions"
+                placeholder="日志级别"
+                clearable
+                style="width: 120px;"
+                size="small"
+              />
+              <n-input
+                v-model:value="sysLogFilters.keyword"
+                placeholder="搜索关键词"
+                clearable
+                size="small"
+                style="width: 160px;"
+                @keyup.enter="loadSysLogs"
+              />
+              <n-button size="small" type="primary" @click="loadSysLogs">
+                <template #icon><n-icon><SearchOutline /></n-icon></template>
+                查询
+              </n-button>
+              <n-button size="small" @click="downloadLogFile">
+                <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                下载
+              </n-button>
+              <n-popconfirm @positive-click="clearLogFile">
+                <template #trigger>
+                  <n-button size="small" type="error" ghost>
+                    <template #icon><n-icon><TrashOutline /></n-icon></template>
+                    清空
+                  </n-button>
+                </template>
+                确定清空此日志文件？
+              </n-popconfirm>
+            </div>
+
+            <n-divider style="margin: 16px 0;" />
+
+            <!-- 日志内容 -->
+            <div class="log-container">
+              <div v-if="sysLogs.length === 0" class="log-empty">
+                暂无日志
+              </div>
+              <div v-else class="log-list">
+                <div
+                  v-for="(log, index) in sysLogs"
+                  :key="index"
+                  class="log-item"
+                  :class="'log-level-' + (log.level || 'info').toLowerCase()"
+                >
+                  <span class="log-time">{{ log.timestamp }}</span>
+                  <span class="log-level-tag">{{ log.level }}</span>
+                  <span class="log-logger">{{ log.logger }}</span>
+                  <span class="log-message">{{ log.message }}</span>
+                  <span v-if="log.extra && Object.keys(log.extra).length > 0" class="log-extra">
+                    {{ JSON.stringify(log.extra) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 加载更多 -->
+            <div v-if="sysLogsHasMore" class="log-load-more">
+              <n-button size="small" @click="loadMoreSysLogs" :loading="loadingMoreLogs">
+                加载更多
+              </n-button>
+            </div>
+
+            <!-- 日志文件统计 -->
+            <div class="log-files-info" v-if="logFiles.length > 0">
+              <n-divider style="margin: 16px 0;" />
+              <div class="log-files-title">日志文件</div>
+              <div class="log-files-grid">
+                <div v-for="file in logFiles" :key="file.name" class="log-file-item">
+                  <span class="log-file-name">{{ file.name }}</span>
+                  <span class="log-file-size">{{ file.size_display }}</span>
+                  <span class="log-file-time">{{ file.modified }}</span>
+                </div>
+              </div>
+            </div>
+          </n-spin>
+        </n-card>
+      </n-tab-pane>
     </n-tabs>
 
     <!-- 添加/编辑渠道弹窗 -->
@@ -477,7 +663,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import type { Component } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
@@ -495,9 +681,13 @@ import {
   DownloadOutline,
   CloudUploadOutline,
   FolderOpenOutline,
-  CheckmarkOutline
+  CheckmarkOutline,
+  TimeOutline,
+  PulseOutline,
+  RefreshOutline,
+  SearchOutline
 } from '@vicons/ionicons5'
-import { settingsApi, notifyApi, backupApi, groupsApi } from '../api'
+import { settingsApi, notifyApi, backupApi, groupsApi, auditApi, logsApi } from '../api'
 import { getToken } from '../utils/auth'
 import { channelTypes, getChannelTypeName } from '../utils'
 
@@ -863,15 +1053,446 @@ const deleteGroup = async (id: number) => {
   }
 }
 
+// 审计日志
+const loadingAuditLogs = ref(false)
+const auditLogs = ref<any[]>([])
+const auditFilters = ref({
+  action: null as string | null,
+  dateRange: null as [number, number] | null,
+  keyword: ''
+})
+const auditPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  showSizePicker: true,
+  pageSizes: [10, 20, 50, 100]
+})
+const auditActionOptions = ref<{ label: string; value: string }[]>([])
+
+// 审计日志表格列
+const auditColumns = [
+  {
+    title: '时间',
+    key: 'created_at',
+    width: 160,
+    render: (row: any) => row.created_at?.replace('T', ' ').substring(0, 19) || '-'
+  },
+  {
+    title: '操作类型',
+    key: 'action_name',
+    width: 120
+  },
+  {
+    title: '操作用户',
+    key: 'username',
+    width: 100,
+    render: (row: any) => row.username || '-'
+  },
+  {
+    title: '目标',
+    key: 'target',
+    width: 150,
+    render: (row: any) => {
+      if (row.target_name) {
+        return `${row.target_type || ''}: ${row.target_name}`
+      }
+      return row.target_type || '-'
+    }
+  },
+  {
+    title: '详情',
+    key: 'detail',
+    ellipsis: { tooltip: true },
+    render: (row: any) => {
+      if (!row.detail) return '-'
+      try {
+        const detail = typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail
+        return JSON.stringify(detail)
+      } catch {
+        return row.detail
+      }
+    }
+  },
+  {
+    title: 'IP 地址',
+    key: 'ip_address',
+    width: 130,
+    render: (row: any) => row.ip_address || '-'
+  }
+]
+
+const loadAuditLogs = async () => {
+  loadingAuditLogs.value = true
+  try {
+    const params: any = {
+      page: auditPagination.value.page,
+      size: auditPagination.value.pageSize
+    }
+
+    if (auditFilters.value.action) {
+      params.action = auditFilters.value.action
+    }
+    if (auditFilters.value.dateRange) {
+      params.start_date = new Date(auditFilters.value.dateRange[0]).toISOString().split('T')[0]
+      params.end_date = new Date(auditFilters.value.dateRange[1]).toISOString().split('T')[0]
+    }
+    if (auditFilters.value.keyword) {
+      params.keyword = auditFilters.value.keyword
+    }
+
+    const res = await auditApi.getLogs(params)
+    auditLogs.value = res.data?.items || []
+    auditPagination.value.itemCount = res.data?.total || 0
+  } catch (e: any) {
+    message.error(e.message)
+  } finally {
+    loadingAuditLogs.value = false
+  }
+}
+
+const loadAuditActions = async () => {
+  try {
+    const res = await auditApi.getActions()
+    const actions = res.data || {}
+    auditActionOptions.value = Object.entries(actions).map(([value, label]) => ({
+      value,
+      label: label as string
+    }))
+  } catch (e: any) {
+    console.error('Failed to load audit actions:', e)
+  }
+}
+
+const handleAuditPageChange = (page: number) => {
+  auditPagination.value.page = page
+  loadAuditLogs()
+}
+
+const handleAuditPageSizeChange = (pageSize: number) => {
+  auditPagination.value.pageSize = pageSize
+  auditPagination.value.page = 1
+  loadAuditLogs()
+}
+
+const exportAuditLogs = () => {
+  const params: any = { format: 'csv' }
+  if (auditFilters.value.action) {
+    params.action = auditFilters.value.action
+  }
+  if (auditFilters.value.dateRange) {
+    params.start_date = new Date(auditFilters.value.dateRange[0]).toISOString().split('T')[0]
+    params.end_date = new Date(auditFilters.value.dateRange[1]).toISOString().split('T')[0]
+  }
+
+  const url = auditApi.export(params)
+  const token = getToken()
+
+  // 使用 fetch 下载
+  fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.blob())
+    .then(blob => {
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+      message.success('导出成功')
+    })
+    .catch(() => {
+      message.error('导出失败')
+    })
+}
+
+// 系统日志
+const loadingSysLogs = ref(false)
+const loadingMoreLogs = ref(false)
+const sysLogs = ref<any[]>([])
+const sysLogsHasMore = ref(false)
+const logFiles = ref<any[]>([])
+const autoRefreshLogs = ref(false)
+let autoRefreshTimer: any = null
+
+const sysLogFilters = ref({
+  file: 'app.log',
+  level: null as string | null,
+  keyword: ''
+})
+const sysLogOffset = ref(0)
+
+const logFileOptions = ref<{ label: string; value: string }[]>([
+  { label: 'app.log', value: 'app.log' }
+])
+
+const logLevelOptions = [
+  { label: 'DEBUG', value: 'DEBUG' },
+  { label: 'INFO', value: 'INFO' },
+  { label: 'WARNING', value: 'WARNING' },
+  { label: 'ERROR', value: 'ERROR' },
+  { label: 'CRITICAL', value: 'CRITICAL' }
+]
+
+const loadLogFiles = async () => {
+  try {
+    const res = await logsApi.getFiles()
+    logFiles.value = res.data || []
+    // 更新文件选项
+    if (logFiles.value.length > 0) {
+      logFileOptions.value = logFiles.value.map((f: any) => ({
+        label: `${f.name} (${f.size_display})`,
+        value: f.name
+      }))
+    }
+  } catch (e: any) {
+    console.error('Failed to load log files:', e)
+  }
+}
+
+const loadSysLogs = async () => {
+  loadingSysLogs.value = true
+  sysLogOffset.value = 0
+  try {
+    const params: any = {
+      file: sysLogFilters.value.file,
+      lines: 100,
+      offset: 0
+    }
+    if (sysLogFilters.value.level) {
+      params.level = sysLogFilters.value.level
+    }
+    if (sysLogFilters.value.keyword) {
+      params.keyword = sysLogFilters.value.keyword
+    }
+
+    const res = await logsApi.getLogs(params)
+    sysLogs.value = res.data?.logs || []
+    sysLogsHasMore.value = res.data?.has_more || false
+    sysLogOffset.value = sysLogs.value.length
+  } catch (e: any) {
+    message.error(e.message || '加载日志失败')
+  } finally {
+    loadingSysLogs.value = false
+  }
+}
+
+const loadMoreSysLogs = async () => {
+  loadingMoreLogs.value = true
+  try {
+    const params: any = {
+      file: sysLogFilters.value.file,
+      lines: 100,
+      offset: sysLogOffset.value
+    }
+    if (sysLogFilters.value.level) {
+      params.level = sysLogFilters.value.level
+    }
+    if (sysLogFilters.value.keyword) {
+      params.keyword = sysLogFilters.value.keyword
+    }
+
+    const res = await logsApi.getLogs(params)
+    const newLogs = res.data?.logs || []
+    sysLogs.value = [...sysLogs.value, ...newLogs]
+    sysLogsHasMore.value = res.data?.has_more || false
+    sysLogOffset.value += newLogs.length
+  } catch (e: any) {
+    message.error(e.message || '加载更多失败')
+  } finally {
+    loadingMoreLogs.value = false
+  }
+}
+
+const downloadLogFile = () => {
+  const url = logsApi.download(sysLogFilters.value.file)
+  const token = getToken()
+
+  fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.blob())
+    .then(blob => {
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = sysLogFilters.value.file
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+      message.success('下载成功')
+    })
+    .catch(() => {
+      message.error('下载失败')
+    })
+}
+
+const clearLogFile = async () => {
+  try {
+    await logsApi.clear(sysLogFilters.value.file)
+    message.success('日志已清空')
+    loadSysLogs()
+    loadLogFiles()
+  } catch (e: any) {
+    message.error(e.message || '清空失败')
+  }
+}
+
+// 自动刷新
+watch(autoRefreshLogs, (val) => {
+  if (val) {
+    autoRefreshTimer = setInterval(() => {
+      loadSysLogs()
+    }, 5000)
+  } else {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer)
+      autoRefreshTimer = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+  }
+})
+
 onMounted(() => {
   loadSettings()
   loadChannels()
   loadBackupInfo()
   loadGroups()
+  loadAuditLogs()
+  loadAuditActions()
+  loadLogFiles()
+  loadSysLogs()  // 默认加载日志
 })
 </script>
 
 <style scoped>
+/* 自动签到设置 - 卡片网格布局 */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.setting-card {
+  background: linear-gradient(135deg, #fafbfc 0%, #f5f7fa 100%);
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s ease;
+}
+
+.setting-card:hover {
+  border-color: #00b38a;
+  box-shadow: 0 4px 12px rgba(0, 179, 138, 0.1);
+}
+
+.setting-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.setting-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.setting-card-icon.auto-sign {
+  background: linear-gradient(135deg, #00b38a 0%, #00a080 100%);
+}
+
+.setting-card-icon.health {
+  background: linear-gradient(135deg, #2080f0 0%, #096dd9 100%);
+}
+
+.setting-card-icon.retry {
+  background: linear-gradient(135deg, #f0a020 0%, #e09000 100%);
+}
+
+.setting-card-title {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-card-title span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.setting-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-card-footer {
+  padding-top: 8px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-row-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.setting-row-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setting-row-unit {
+  font-size: 12px;
+  color: #999;
+}
+
+.setting-disabled-text {
+  font-size: 12px;
+  color: #999;
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #eef0f3;
+}
+
+.settings-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #999;
+}
+
+/* 旧样式保留兼容 */
 .setting-section {
   display: flex;
   flex-direction: column;
@@ -1288,5 +1909,245 @@ onMounted(() => {
 .color-option.active {
   border-color: #fff;
   box-shadow: 0 0 0 2px currentColor;
+}
+
+/* 审计日志筛选器 */
+.audit-filters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 系统日志 */
+.log-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-container {
+  background: #1a1a2e;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+}
+
+.log-empty {
+  color: #666;
+  text-align: center;
+  padding: 40px;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1.5;
+  color: #e0e0e0;
+}
+
+.log-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.log-time {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.log-level-tag {
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.log-level-debug .log-level-tag {
+  background: #36cfc9;
+  color: #000;
+}
+
+.log-level-info .log-level-tag {
+  background: #52c41a;
+  color: #000;
+}
+
+.log-level-warning .log-level-tag {
+  background: #faad14;
+  color: #000;
+}
+
+.log-level-error .log-level-tag {
+  background: #ff4d4f;
+  color: #fff;
+}
+
+.log-level-critical .log-level-tag {
+  background: #ff00ff;
+  color: #fff;
+}
+
+.log-logger {
+  color: #69c0ff;
+  flex-shrink: 0;
+}
+
+.log-message {
+  color: #fff;
+  flex: 1;
+  word-break: break-all;
+}
+
+.log-extra {
+  color: #888;
+  font-size: 11px;
+  width: 100%;
+  padding-left: 20px;
+}
+
+.log-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.log-files-info {
+  margin-top: 16px;
+}
+
+.log-files-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.log-files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.log-file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.log-file-name {
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.log-file-size {
+  color: #666;
+}
+
+.log-file-time {
+  color: #999;
+  font-size: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 900px) {
+  .settings-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .channel-header,
+  .backup-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .channel-header .n-button,
+  .backup-header .n-button {
+    width: 100%;
+  }
+
+  .channel-grid,
+  .group-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .backup-action-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .action-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .action-controls .n-button {
+    width: 100%;
+  }
+
+  .modal-container {
+    width: 95vw;
+    max-width: 480px;
+  }
+
+  .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .setting-item .n-switch,
+  .setting-item .n-time-picker,
+  .setting-item .n-input-number,
+  .setting-item .n-tag {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .settings-footer .n-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .backup-stats {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

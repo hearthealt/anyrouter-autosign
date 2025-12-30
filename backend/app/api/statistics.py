@@ -73,23 +73,35 @@ def get_overview(db: Session = Depends(get_db)):
 @router.get("/daily", response_model=ApiResponse)
 def get_daily_stats(
     days: int = Query(30, ge=7, le=90),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """获取每日签到统计（最近N天）"""
-    end_date = datetime.now().replace(hour=23, minute=59, second=59)
-    start_date = (end_date - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0)
+    """获取每日签到统计（支持按日期范围或最近N天）"""
+    # 如果提供了日期范围，优先使用
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d").replace(hour=0, minute=0, second=0)
+            end = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        except ValueError:
+            return ApiResponse(success=False, message="日期格式错误，应为 YYYY-MM-DD")
+    else:
+        end = datetime.now().replace(hour=23, minute=59, second=59)
+        start = (end - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0)
 
     # 查询每日签到数据
     logs = db.query(SignLog).filter(
-        SignLog.sign_time >= start_date,
-        SignLog.sign_time <= end_date
+        SignLog.sign_time >= start,
+        SignLog.sign_time <= end
     ).all()
 
     # 按日期分组统计
     daily_data = {}
-    for i in range(days):
-        date = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
+    current = start
+    while current <= end:
+        date = current.strftime("%Y-%m-%d")
         daily_data[date] = {"success": 0, "fail": 0, "reward": 0}
+        current += timedelta(days=1)
 
     for log in logs:
         date = log.sign_time.strftime("%Y-%m-%d")
