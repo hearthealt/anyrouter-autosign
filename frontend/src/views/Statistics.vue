@@ -359,7 +359,6 @@ const changeMonth = (offset: number) => {
 // 点击日期
 const handleDayClick = (day: any) => {
   if (!day.date) return
-  console.log('Clicked day:', day)
 }
 
 const getDayClass = (day: any) => {

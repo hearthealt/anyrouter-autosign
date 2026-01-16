@@ -59,12 +59,21 @@ def send_sign_notification(db, account, success: bool, sign_message: str):
     title = f"签到{'成功' if success else '失败'} - {account.username}"
     content = sign_message
 
+    # 构建账号配置映射
+    account_notify_map = {n.channel_id: n for n in account_notifies}
+
     # 发送通知
     for channel in channels:
         try:
             config = json.loads(channel.config)
+            # 获取账号专属配置
+            account_notify = account_notify_map.get(channel.id)
+            account_config = json.loads(account_notify.notify_config) if account_notify and account_notify.notify_config else {}
+            # 合并配置：账号配置优先，渠道配置作为后备
+            merged_config = {**config, **account_config}
+
             notifier = NotifyFactory.create(channel.type, config)
-            result = notifier.send(title, content, config)
+            result = notifier.send(title, content, merged_config)
             if result:
                 logger.info(f"通知发送成功: {channel.name} -> {account.username}")
             else:
@@ -446,11 +455,20 @@ def send_health_alert_for_account(db, account):
         title = f"账号健康告警 - {account.username}"
         content = f"账号 {account.username} 凭证异常: {account.health_message or '未知错误'}\n请及时更新 Session Cookie。"
 
+        # 构建账号配置映射
+        account_notify_map = {n.channel_id: n for n in account_notifies}
+
         for channel in channels:
             try:
                 config = json.loads(channel.config)
+                # 获取账号专属配置
+                account_notify = account_notify_map.get(channel.id)
+                account_config = json.loads(account_notify.notify_config) if account_notify and account_notify.notify_config else {}
+                # 合并配置：账号配置优先，渠道配置作为后备
+                merged_config = {**config, **account_config}
+
                 notifier = NotifyFactory.create(channel.type, config)
-                result = notifier.send(title, content, config)
+                result = notifier.send(title, content, merged_config)
                 if result:
                     logger.info(f"健康告警发送成功: {channel.name} -> {account.username}")
                 else:

@@ -79,9 +79,28 @@ class AnyRouterService:
     }
 
     def __init__(self):
-        self.session = requests.Session()
         self.anti_crawler = AntiCrawlerSolver()
         self.base_url = settings.anyrouter_base_url
+
+    def _get_session(self) -> requests.Session:
+        """
+        获取新的 Session 实例
+        避免在多线程环境下复用 Session 导致的 SSL 连接问题
+        """
+        session = requests.Session()
+        # 配置重试适配器，增强连接稳定性
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
 
     def _get_headers(self, user_id: str) -> Dict[str, str]:
         """获取请求头，包含 new-api-user"""
@@ -93,13 +112,15 @@ class AnyRouterService:
         """检查是否为反爬虫挑战"""
         return "acw_sc__v2" in text and "var arg1=" in text
 
-    def _get_cookies_with_challenge(self, session_cookie: str, user_id: str) -> Dict[str, str]:
+    def _get_cookies_with_challenge(self, session_cookie: str, user_id: str, session: requests.Session = None) -> Dict[str, str]:
         """获取 Cookies 并处理反爬虫挑战"""
         cookies = {"session": session_cookie}
         headers = self._get_headers(user_id)
+        if session is None:
+            session = self._get_session()
 
         try:
-            response = self.session.get(
+            response = session.get(
                 f"{self.base_url}{settings.anyrouter_console_url}",
                 headers=headers,
                 cookies=cookies,
@@ -133,12 +154,13 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, 用户信息或错误消息)
         """
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
 
         try:
             url = f"{self.base_url}{settings.anyrouter_user_api}"
-            response = self.session.get(
+            response = session.get(
                 url,
                 headers=headers,
                 cookies=cookies,
@@ -151,7 +173,7 @@ class AnyRouterService:
                 if result:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
-                    response = self.session.get(
+                    response = session.get(
                         url,
                         headers=headers,
                         cookies=cookies,
@@ -186,11 +208,12 @@ class AnyRouterService:
             if attempt > 0:
                 time.sleep(settings.retry_interval)
 
-            cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+            session = self._get_session()
+            cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
             headers = self._get_headers(user_id)
 
             try:
-                response = self.session.post(
+                response = session.post(
                     f"{self.base_url}{settings.anyrouter_sign_api}",
                     headers=headers,
                     cookies=cookies,
@@ -203,7 +226,7 @@ class AnyRouterService:
                     if result:
                         cookies["acw_sc__v2"] = result
                         time.sleep(2)
-                        response = self.session.post(
+                        response = session.post(
                             f"{self.base_url}{settings.anyrouter_sign_api}",
                             headers=headers,
                             cookies=cookies,
@@ -243,12 +266,13 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, Token 列表或错误消息)
         """
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
 
         try:
             url = f"{self.base_url}{settings.anyrouter_token_api}?p={page}&size={size}"
-            response = self.session.get(
+            response = session.get(
                 url,
                 headers=headers,
                 cookies=cookies,
@@ -261,7 +285,7 @@ class AnyRouterService:
                 if result:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
-                    response = self.session.get(
+                    response = session.get(
                         url,
                         headers=headers,
                         cookies=cookies,
@@ -292,12 +316,13 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, 模型列表或错误消息)
         """
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
 
         try:
             url = f"{self.base_url}{settings.anyrouter_models_api}"
-            response = self.session.get(
+            response = session.get(
                 url,
                 headers=headers,
                 cookies=cookies,
@@ -310,7 +335,7 @@ class AnyRouterService:
                 if result:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
-                    response = self.session.get(
+                    response = session.get(
                         url,
                         headers=headers,
                         cookies=cookies,
@@ -341,12 +366,13 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, 分组列表或错误消息)
         """
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
 
         try:
             url = f"{self.base_url}{settings.anyrouter_groups_api}"
-            response = self.session.get(
+            response = session.get(
                 url,
                 headers=headers,
                 cookies=cookies,
@@ -359,7 +385,7 @@ class AnyRouterService:
                 if result:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
-                    response = self.session.get(
+                    response = session.get(
                         url,
                         headers=headers,
                         cookies=cookies,
@@ -389,13 +415,14 @@ class AnyRouterService:
         fail_msg: str = "操作失败"
     ) -> Tuple[bool, Dict[str, Any]]:
         """令牌相关请求的通用方法"""
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
         headers["content-type"] = "application/json"
 
         try:
             url = f"{self.base_url}{settings.anyrouter_token_api}"
-            request_fn = self.session.post if method == "post" else self.session.put
+            request_fn = session.post if method == "post" else session.put
             response = request_fn(
                 url,
                 headers=headers,
@@ -484,12 +511,13 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, 结果或错误消息)
         """
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id)
+        session = self._get_session()
+        cookies = self._get_cookies_with_challenge(session_cookie, user_id, session)
         headers = self._get_headers(user_id)
 
         try:
             url = f"{self.base_url}{settings.anyrouter_token_api}/{token_id}"
-            response = self.session.delete(
+            response = session.delete(
                 url,
                 headers=headers,
                 cookies=cookies,
@@ -502,7 +530,7 @@ class AnyRouterService:
                 if result:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
-                    response = self.session.delete(
+                    response = session.delete(
                         url,
                         headers=headers,
                         cookies=cookies,
@@ -529,9 +557,10 @@ class AnyRouterService:
         Returns:
             Tuple[bool, Dict]: (是否成功, API 状态信息或错误消息)
         """
+        session = self._get_session()
         try:
             url = f"{self.base_url}{settings.anyrouter_status_api}"
-            response = self.session.get(
+            response = session.get(
                 url,
                 headers=self.BASE_HEADERS,
                 timeout=settings.request_timeout
@@ -543,7 +572,7 @@ class AnyRouterService:
                 if result:
                     cookies = {"acw_sc__v2": result}
                     time.sleep(2)
-                    response = self.session.get(
+                    response = session.get(
                         url,
                         headers=self.BASE_HEADERS,
                         cookies=cookies,

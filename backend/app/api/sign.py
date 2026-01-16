@@ -34,9 +34,11 @@ def send_notifications(db: Session, account: Account, title: str, content: str):
         try:
             config = json.loads(channel.config)
             account_config = json.loads(account_notify.notify_config) if account_notify.notify_config else {}
+            # 合并配置：账号配置优先，渠道配置作为后备
+            merged_config = {**config, **account_config}
 
             notifier = NotifyFactory.create(channel.type, config)
-            notifier.send(title, content, account_config)
+            notifier.send(title, content, merged_config)
         except Exception as e:
             pass  # 静默失败，不影响主流程
 

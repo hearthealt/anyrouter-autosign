@@ -1,0 +1,15 @@
+[Unit]
+Description=AnyRouter AutoSign Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/anyrouter/backend
+Environment="PATH=/root/anaconda3/envs/anyrouter/bin"
+ExecStart=/root/anaconda3/envs/anyrouter/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

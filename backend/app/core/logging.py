@@ -7,13 +7,11 @@
 - 日志轮转（按大小 + 按时间）
 - 支持接入日志分析平台（ELK/Loki）
 """
-import os
 import sys
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
-from typing import Optional
 from pathlib import Path
 
 from app.config import settings
@@ -24,7 +22,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
