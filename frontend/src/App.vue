@@ -33,7 +33,7 @@
                 :key="item.path"
                 class="nav-item"
                 :class="{ active: isActive(item.path) }"
-                @click="$router.push(item.path)"
+                @click="navigateTo(item.path)"
               >
                 <div class="nav-indicator"></div>
                 <div class="nav-icon">
@@ -68,27 +68,130 @@
 
           <!-- 主区域 -->
           <div class="main" :class="{ expanded: collapsed }">
+            <!-- 顶部导航栏 -->
             <header class="header">
               <!-- 移动端菜单按钮 -->
               <n-button class="mobile-menu-btn" quaternary @click="mobileMenuOpen = true">
                 <template #icon><n-icon :size="22"><MenuOutline /></n-icon></template>
               </n-button>
-              <h1 class="page-title">{{ pageTitle }}</h1>
-              <div class="header-actions">
+
+              <!-- 面包屑导航 -->
+              <div class="header-left">
+                <n-breadcrumb>
+                  <n-breadcrumb-item @click="$router.push('/')">
+                    <n-icon><HomeOutline /></n-icon>
+                  </n-breadcrumb-item>
+                  <n-breadcrumb-item v-for="crumb in breadcrumbs" :key="crumb.path">
+                    {{ crumb.label }}
+                  </n-breadcrumb-item>
+                </n-breadcrumb>
+              </div>
+
+              <!-- 全局搜索 -->
+              <div class="header-center">
+                <n-input
+                  v-model:value="searchKeyword"
+                  placeholder="搜索账号、日志..."
+                  clearable
+                  round
+                  size="small"
+                  class="global-search"
+                  @keyup.enter="handleGlobalSearch"
+                >
+                  <template #prefix>
+                    <n-icon><SearchOutline /></n-icon>
+                  </template>
+                </n-input>
+              </div>
+
+              <!-- 右侧操作 -->
+              <div class="header-right">
+                <!-- 通知中心 -->
+                <n-popover trigger="click" placement="bottom-end" :width="320">
+                  <template #trigger>
+                    <n-badge :value="notifications.length" :max="99" :show="notifications.length > 0">
+                      <n-button quaternary circle size="small">
+                        <template #icon><n-icon :size="18"><NotificationsOutline /></n-icon></template>
+                      </n-button>
+                    </n-badge>
+                  </template>
+                  <div class="notification-panel">
+                    <div class="notification-header">
+                      <span>通知中心</span>
+                      <n-button text size="tiny" @click="clearNotifications">清空</n-button>
+                    </div>
+                    <div class="notification-list" v-if="notifications.length > 0">
+                      <div v-for="(notif, index) in notifications" :key="index" class="notification-item">
+                        <div class="notif-icon" :class="notif.type">
+                          <n-icon :size="14">
+                            <CheckmarkCircleOutline v-if="notif.type === 'success'" />
+                            <AlertCircleOutline v-else-if="notif.type === 'warning'" />
+                            <CloseCircleOutline v-else-if="notif.type === 'error'" />
+                            <InformationCircleOutline v-else />
+                          </n-icon>
+                        </div>
+                        <div class="notif-content">
+                          <div class="notif-title">{{ notif.title }}</div>
+                          <div class="notif-time">{{ notif.time }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="notification-empty" v-else>
+                      <n-icon :size="32" color="var(--text-tertiary)"><NotificationsOffOutline /></n-icon>
+                      <span>暂无通知</span>
+                    </div>
+                  </div>
+                </n-popover>
+
+                <!-- 刷新按钮 -->
                 <n-button quaternary circle size="small" @click="refreshData">
                   <template #icon><n-icon :size="18"><RefreshOutline /></n-icon></template>
                 </n-button>
+
+                <!-- 用户菜单 -->
                 <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect">
-                  <n-button quaternary size="small">
-                    <template #icon><n-icon :size="18"><PersonCircleOutline /></n-icon></template>
-                    {{ currentUser?.username || 'admin' }}
+                  <n-button quaternary size="small" class="user-btn">
+                    <div class="user-avatar">{{ (currentUser?.username || 'A')[0].toUpperCase() }}</div>
+                    <span class="user-name">{{ currentUser?.username || 'admin' }}</span>
+                    <n-icon :size="14"><ChevronDownOutline /></n-icon>
                   </n-button>
                 </n-dropdown>
               </div>
             </header>
+
+            <!-- 页面操作栏 -->
+            <div class="page-toolbar" v-if="showToolbar">
+              <h1 class="page-title">{{ pageTitle }}</h1>
+              <div class="toolbar-actions">
+                <slot name="toolbar-actions"></slot>
+              </div>
+            </div>
+
+            <!-- 内容区 -->
             <main class="content">
               <router-view />
             </main>
+
+            <!-- 底部状态栏 -->
+            <footer class="footer">
+              <div class="footer-left">
+                <span class="footer-item">
+                  <n-icon :size="14"><CodeOutline /></n-icon>
+                  v1.0.0
+                </span>
+                <span class="footer-divider">|</span>
+                <span class="footer-item" :class="connectionStatus">
+                  <span class="status-dot"></span>
+                  {{ connectionStatus === 'connected' ? '已连接' : '未连接' }}
+                </span>
+              </div>
+              <div class="footer-right">
+                <span class="footer-item">
+                  <n-icon :size="14"><TimeOutline /></n-icon>
+                  最后同步: {{ lastSyncTime || '暂无' }}
+                </span>
+              </div>
+            </footer>
           </div>
 
           <!-- 移动端底部导航 -->
@@ -98,7 +201,7 @@
               :key="item.path"
               class="tabbar-item"
               :class="{ active: isActive(item.path) }"
-              @click="$router.push(item.path)"
+              @click="navigateTo(item.path)"
             >
               <n-icon :size="22"><component :is="item.icon" /></n-icon>
               <span>{{ item.label }}</span>
@@ -168,14 +271,23 @@ import {
   StatsChartOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
+  ChevronDownOutline,
   RefreshOutline,
-  PersonCircleOutline,
   LockClosedOutline,
   LogOutOutline,
   SunnyOutline,
   MoonOutline,
   CloseOutline,
-  MenuOutline
+  MenuOutline,
+  HomeOutline,
+  SearchOutline,
+  NotificationsOutline,
+  NotificationsOffOutline,
+  CheckmarkCircleOutline,
+  AlertCircleOutline,
+  CloseCircleOutline,
+  InformationCircleOutline,
+  CodeOutline
 } from '@vicons/ionicons5'
 import { authApi } from './api'
 import { removeToken, isLoggedIn } from './utils/auth'
@@ -189,6 +301,16 @@ const collapsed = ref(false)
 const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
 const currentTheme = ref<'light' | 'dark'>(getActiveTheme())
+
+// 全局搜索
+const searchKeyword = ref('')
+
+// 通知中心
+const notifications = ref<Array<{ type: string; title: string; time: string }>>([])
+
+// 连接状态
+const connectionStatus = ref<'connected' | 'disconnected'>('connected')
+const lastSyncTime = ref<string>('')
 
 // 修改密码
 const showPasswordModal = ref(false)
@@ -226,7 +348,7 @@ const naiveTheme = computed(() => currentTheme.value === 'dark' ? darkTheme : nu
 const isLoginPage = computed(() => route.path === '/login')
 
 const menuItems = [
-  { path: '/', label: '控制台', icon: GridOutline },
+  { path: '/', label: '仪表盘', icon: GridOutline },
   { path: '/logs', label: '签到日志', icon: TimeOutline },
   { path: '/statistics', label: '统计报表', icon: StatsChartOutline },
   { path: '/settings', label: '系统设置', icon: SettingsOutline },
@@ -249,23 +371,53 @@ const userMenuOptions = [
   }
 ]
 
+// 面包屑
+const breadcrumbs = computed(() => {
+  const crumbs: Array<{ path: string; label: string }> = []
+  const titles: Record<string, string> = {
+    '/': '仪表盘',
+    '/logs': '签到日志',
+    '/statistics': '统计报表',
+    '/settings': '系统设置'
+  }
+
+  if (route.path === '/') {
+    crumbs.push({ path: '/', label: '仪表盘' })
+  } else if (route.path.startsWith('/account/')) {
+    crumbs.push({ path: '/', label: '仪表盘' })
+    crumbs.push({ path: route.path, label: '账号详情' })
+  } else if (titles[route.path]) {
+    crumbs.push({ path: route.path, label: titles[route.path] })
+  }
+
+  return crumbs
+})
+
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
-    '/': '控制台',
+    '/': '仪表盘',
     '/logs': '签到日志',
     '/statistics': '统计报表',
     '/settings': '系统设置'
   }
   if (route.path.startsWith('/account/')) return '账号详情'
-  return titles[route.path] || '控制台'
+  return titles[route.path] || '仪表盘'
 })
+
+const showToolbar = computed(() => false) // 可根据需要显示
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/'
   return route.path.startsWith(path)
 }
 
+const navigateTo = (path: string) => {
+  router.push(path)
+  mobileMenuOpen.value = false
+}
+
 const refreshData = () => {
+  lastSyncTime.value = new Date().toLocaleTimeString()
   window.location.reload()
 }
 
@@ -273,6 +425,17 @@ const toggleTheme = () => {
   const newTheme: ThemeMode = currentTheme.value === 'light' ? 'dark' : 'light'
   setThemeMode(newTheme)
   currentTheme.value = newTheme
+}
+
+const handleGlobalSearch = () => {
+  if (searchKeyword.value.trim()) {
+    message.info(`搜索: ${searchKeyword.value}`)
+    // TODO: 实现全局搜索功能
+  }
+}
+
+const clearNotifications = () => {
+  notifications.value = []
 }
 
 const handleUserMenuSelect = (key: string) => {
@@ -301,7 +464,6 @@ const handleChangePassword = async () => {
     })
     message.success('密码修改成功，请重新登录')
     showPasswordModal.value = false
-    // 清除登录状态，跳转到登录页
     removeToken()
     router.push('/login')
   } catch (e: any) {
@@ -323,9 +485,14 @@ const loadCurrentUser = async () => {
   }
 }
 
-// 监听系统主题变化
+// 更新最后同步时间
+const updateSyncTime = () => {
+  lastSyncTime.value = new Date().toLocaleTimeString()
+}
+
 onMounted(() => {
   loadCurrentUser()
+  updateSyncTime()
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
     const stored = localStorage.getItem('anyrouter-theme')
@@ -337,9 +504,9 @@ onMounted(() => {
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#00b38a',
-    primaryColorHover: '#00c99b',
-    primaryColorPressed: '#009e7a',
+    primaryColor: '#10b981',
+    primaryColorHover: '#059669',
+    primaryColorPressed: '#047857',
     borderRadius: '8px'
   }
 }
@@ -354,8 +521,8 @@ const themeOverrides: GlobalThemeOverrides = {
 
 /* 侧边栏 */
 .sidebar {
-  width: 220px;
-  background: var(--bg-color);
+  width: var(--sidebar-width);
+  background: var(--bg-card);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -369,47 +536,49 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .sidebar.collapsed {
-  width: 64px;
+  width: var(--sidebar-collapsed-width);
 }
 
 /* Logo 区域 */
 .sidebar-brand {
-  height: 60px;
+  height: var(--header-height);
   display: flex;
   align-items: center;
-  padding: 0 18px;
-  gap: 12px;
+  padding: 0 var(--spacing-5);
+  gap: var(--spacing-3);
   cursor: pointer;
   transition: padding 0.3s ease;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .sidebar.collapsed .sidebar-brand {
-  padding: 0 14px;
+  padding: 0 var(--spacing-4);
+  justify-content: center;
 }
 
 .brand-icon {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  background: linear-gradient(135deg, #00b38a 0%, #00d4a4 100%);
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: var(--primary-gradient);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  box-shadow: 0 2px 8px rgba(0, 179, 138, 0.3);
+  box-shadow: var(--shadow-md);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .sidebar-brand:hover .brand-icon {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 179, 138, 0.4);
+  box-shadow: var(--shadow-lg);
 }
 
 .brand-text {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
   letter-spacing: -0.3px;
   white-space: nowrap;
@@ -420,37 +589,39 @@ const themeOverrides: GlobalThemeOverrides = {
 .sidebar.collapsed .brand-text {
   opacity: 0;
   pointer-events: none;
+  width: 0;
 }
 
 /* 导航区域 */
 .sidebar-nav {
   flex: 1;
-  padding: 8px 12px;
+  padding: var(--spacing-4) var(--spacing-3);
   overflow-y: auto;
   overflow-x: hidden;
   transition: padding 0.3s ease;
 }
 
 .sidebar.collapsed .sidebar-nav {
-  padding: 8px;
+  padding: var(--spacing-4) var(--spacing-2);
 }
 
 .nav-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px;
+  gap: var(--spacing-3);
+  padding: 0 var(--spacing-4);
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: var(--spacing-1);
   color: var(--text-secondary);
   transition: background 0.2s ease, color 0.2s ease, padding 0.3s ease;
 }
 
 .sidebar.collapsed .nav-item {
-  padding: 0 10px;
+  padding: 0;
+  justify-content: center;
 }
 
 .nav-item:hover {
@@ -459,8 +630,8 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .nav-item.active {
-  background: rgba(0, 179, 138, 0.1);
-  color: #00b38a;
+  background: var(--primary-color-light);
+  color: var(--primary-color);
 }
 
 /* 左侧指示器 */
@@ -471,8 +642,8 @@ const themeOverrides: GlobalThemeOverrides = {
   transform: translateY(-50%);
   width: 3px;
   height: 0;
-  background: linear-gradient(180deg, #00b38a 0%, #00d4a4 100%);
-  border-radius: 0 2px 2px 0;
+  background: var(--primary-gradient);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   transition: height 0.2s ease;
 }
 
@@ -481,7 +652,7 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .sidebar.collapsed .nav-indicator {
-  opacity: 0;
+  display: none;
 }
 
 .nav-icon {
@@ -494,8 +665,8 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .nav-label {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
   white-space: nowrap;
   opacity: 1;
   transition: opacity 0.2s ease;
@@ -504,22 +675,23 @@ const themeOverrides: GlobalThemeOverrides = {
 .sidebar.collapsed .nav-label {
   opacity: 0;
   pointer-events: none;
+  width: 0;
 }
 
 /* 底部区域 */
 .sidebar-footer {
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
+  padding: var(--spacing-3);
+  border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
   transition: padding 0.3s ease;
 }
 
 .sidebar.collapsed .sidebar-footer {
-  padding: 8px;
+  padding: var(--spacing-2);
 }
 
 .sidebar-footer .nav-item {
-  margin-bottom: 4px;
+  margin-bottom: var(--spacing-1);
 }
 
 .sidebar-footer .nav-item:last-child {
@@ -537,7 +709,7 @@ const themeOverrides: GlobalThemeOverrides = {
 /* 主区域 */
 .main {
   flex: 1;
-  margin-left: 220px;
+  margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -545,47 +717,247 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .main.expanded {
-  margin-left: 64px;
+  margin-left: var(--sidebar-collapsed-width);
 }
 
 /* 顶部栏 */
 .header {
-  height: 60px;
-  background: var(--bg-color);
+  height: var(--header-height);
+  background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 var(--spacing-6);
   position: sticky;
   top: 0;
   z-index: 50;
+  gap: var(--spacing-4);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+}
+
+.header-center {
+  flex: 1;
+  max-width: 400px;
+  margin: 0 var(--spacing-4);
+}
+
+.global-search {
+  width: 100%;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+/* 用户按钮 */
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1) var(--spacing-3) !important;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--primary-gradient);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+}
+
+.user-name {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+/* 通知面板 */
+.notification-panel {
+  padding: 0;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.notification-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.notification-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notif-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notif-icon.success {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.notif-icon.warning {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.notif-icon.error {
+  background: var(--error-color-light);
+  color: var(--error-color);
+}
+
+.notif-icon.info {
+  background: var(--info-color-light);
+  color: var(--info-color);
+}
+
+.notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-title {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.notif-time {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.notification-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-8);
+  gap: var(--spacing-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* 页面工具栏 */
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-4) var(--spacing-6);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .page-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
   color: var(--text-primary);
   margin: 0;
 }
 
-.header-actions {
+.toolbar-actions {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
 }
 
 /* 内容区 */
 .content {
   flex: 1;
-  padding: 24px;
+  padding: var(--spacing-6);
+  background: var(--bg-color);
+}
+
+/* 底部状态栏 */
+.footer {
+  height: 36px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-6);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.footer-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.footer-item.connected .status-dot {
+  background: var(--success-color);
+}
+
+.footer-item.disconnected .status-dot {
+  background: var(--error-color);
+}
+
+.footer-divider {
+  color: var(--border-color);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--success-color);
 }
 
 /* 修改密码弹窗 */
 .password-modal {
   width: 400px;
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -593,26 +965,26 @@ const themeOverrides: GlobalThemeOverrides = {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: var(--spacing-4) var(--spacing-5);
   border-bottom: 1px solid var(--border-color);
 }
 
 .password-modal .modal-header h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .password-modal .modal-body {
-  padding: 20px;
+  padding: var(--spacing-5);
 }
 
 .password-modal .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
   border-top: 1px solid var(--border-color);
   background: var(--bg-card-hover);
 }
@@ -637,7 +1009,7 @@ const themeOverrides: GlobalThemeOverrides = {
 /* 移动端菜单按钮 */
 .mobile-menu-btn {
   display: none;
-  margin-right: 8px;
+  margin-right: var(--spacing-2);
 }
 
 /* 移动端底部导航 */
@@ -647,7 +1019,7 @@ const themeOverrides: GlobalThemeOverrides = {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: var(--tabbar-height);
   background: var(--bg-card);
   border-top: 1px solid var(--border-color);
   z-index: 100;
@@ -662,7 +1034,7 @@ const themeOverrides: GlobalThemeOverrides = {
   justify-content: center;
   gap: 4px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--text-xs);
   cursor: pointer;
   transition: color 0.2s;
 }
@@ -687,8 +1059,8 @@ const themeOverrides: GlobalThemeOverrides = {
 
   .sidebar {
     position: fixed;
-    left: -220px;
-    width: 220px;
+    left: calc(-1 * var(--sidebar-width));
+    width: var(--sidebar-width);
     transition: left 0.3s ease;
     z-index: 101;
   }
@@ -698,8 +1070,8 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 
   .sidebar.collapsed {
-    width: 220px;
-    left: -220px;
+    width: var(--sidebar-width);
+    left: calc(-1 * var(--sidebar-width));
   }
 
   .sidebar.collapsed.mobile-open {
@@ -710,6 +1082,7 @@ const themeOverrides: GlobalThemeOverrides = {
   .sidebar.collapsed .nav-label {
     opacity: 1;
     pointer-events: auto;
+    width: auto;
   }
 
   .sidebar-footer .collapse-btn {
@@ -718,7 +1091,7 @@ const themeOverrides: GlobalThemeOverrides = {
 
   .main {
     margin-left: 0;
-    padding-bottom: 70px;
+    padding-bottom: calc(var(--tabbar-height) + 10px);
   }
 
   .main.expanded {
@@ -726,25 +1099,29 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 
   .header {
-    padding: 0 16px;
+    padding: 0 var(--spacing-4);
   }
 
-  .page-title {
-    font-size: 16px;
+  .header-center {
+    display: none;
+  }
+
+  .user-name {
+    display: none;
   }
 
   .content {
-    padding: 16px;
+    padding: var(--spacing-4);
+  }
+
+  .footer {
+    display: none;
   }
 }
 
 @media (max-width: 480px) {
-  .header-actions .n-button:not(.mobile-menu-btn) {
+  .header-left {
     display: none;
-  }
-
-  .header-actions .n-dropdown {
-    display: block;
   }
 }
 </style>

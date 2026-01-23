@@ -1,5 +1,16 @@
 <template>
-  <div>
+  <div class="statistics-page">
+    <!-- 页面标题 -->
+    <div class="page-header">
+      <div class="page-title">
+        <div class="title-icon"></div>
+        <div class="title-text">
+          <h1>数据统计</h1>
+          <p>签到数据分析与趋势</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 统计概览骨架屏 -->
     <div class="stats-overview" v-if="loadingOverview">
       <div class="stat-card skeleton-card" v-for="i in 4" :key="i">
@@ -570,31 +581,13 @@ const updateTrendChart = () => {
         }
       }
     },
-    dataZoom: data.length > 15 ? [
+    dataZoom: [
       {
         type: 'inside',
-        start: Math.max(0, 100 - (15 / data.length) * 100),
+        start: 0,
         end: 100
-      },
-      {
-        type: 'slider',
-        show: true,
-        height: 20,
-        bottom: 0,
-        start: Math.max(0, 100 - (15 / data.length) * 100),
-        end: 100,
-        borderColor: 'transparent',
-        backgroundColor: theme.splitLineColor,
-        fillerColor: isDarkMode.value ? 'rgba(0, 179, 138, 0.2)' : 'rgba(0, 179, 138, 0.15)',
-        handleStyle: {
-          color: theme.successColor,
-          borderColor: theme.successColor
-        },
-        textStyle: {
-          color: theme.textColor
-        }
       }
-    ] : undefined,
+    ],
     series: [
       {
         name: '成功',
@@ -931,6 +924,39 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.statistics-page {
+  margin: 0 auto;
+  padding: var(--spacing-6);
+}
+
+/* 页面标题 */
+.page-header {
+  margin-bottom: var(--spacing-6);
+}
+
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+}
+
+.title-icon {
+  font-size: 36px;
+}
+
+.title-text h1 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-1) 0;
+}
+
+.title-text p {
+  font-size: var(--text-md);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
 .stats-overview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

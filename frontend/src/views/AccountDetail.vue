@@ -1,159 +1,336 @@
 <template>
-  <div>
-    <!-- 顶部操作栏 -->
-    <n-space justify="space-between" align="center" style="margin-bottom: 20px;">
-      <n-space align="center">
-        <n-button text @click="router.push('/')">
-          <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-        </n-button>
-        <span style="font-weight: 600; font-size: 16px;">{{ account?.username || '账号详情' }}</span>
-        <n-tag v-if="account" :type="account.is_active ? 'success' : 'default'" size="small">
-          {{ account.is_active ? '启用' : '禁用' }}
-        </n-tag>
-      </n-space>
-      <n-space>
-        <n-button @click="handleRefreshInfo" :loading="refreshing">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
-          刷新信息
-        </n-button>
-        <n-button type="primary" @click="handleSign" :loading="signing">
-          <template #icon><n-icon><FlashOutline /></n-icon></template>
-          立即签到
-        </n-button>
-      </n-space>
-    </n-space>
+  <div class="account-detail-page">
+    <!-- 顶部导航 -->
+    <div class="page-nav">
+      <n-button text @click="router.push('/')">
+        <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
+        返回控制台
+      </n-button>
+    </div>
+
+    <!-- 账号头部卡片 -->
+    <div class="hero-card">
+      <div class="hero-bg"></div>
+      <div class="hero-content">
+        <div class="hero-left">
+          <div class="account-avatar" :class="{ inactive: !account?.is_active }">
+            {{ (account?.username || 'U')[0].toUpperCase() }}
+          </div>
+          <div class="account-info">
+            <div class="account-name">
+              <h1>{{ account?.username || '账号详情' }}</h1>
+              <n-tag :type="account?.is_active ? 'success' : 'default'" size="small" :bordered="false">
+                {{ account?.is_active ? '已启用' : '已禁用' }}
+              </n-tag>
+              <n-tag v-if="account?.group" size="small" :bordered="false" :style="{ background: getGroupColor(account.group.color), color: '#fff' }">
+                {{ account.group.name }}
+              </n-tag>
+            </div>
+            <div class="account-meta">
+              <span><n-icon><PersonOutline /></n-icon> ID: {{ account?.anyrouter_user_id || '-' }}</span>
+              <span><n-icon><TimeOutline /></n-icon> 创建于 {{ account ? formatDateTime(account.created_at) : '-' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <n-button @click="openEditModal" secondary>
+            <template #icon><n-icon><CreateOutline /></n-icon></template>
+            编辑
+          </n-button>
+          <n-button @click="handleRefreshInfo" :loading="refreshing" secondary>
+            <template #icon><n-icon><RefreshOutline /></n-icon></template>
+            刷新
+          </n-button>
+          <n-button type="primary" @click="handleSign" :loading="signing">
+            <template #icon><n-icon><FlashOutline /></n-icon></template>
+            立即签到
+          </n-button>
+        </div>
+      </div>
+    </div>
 
     <n-spin :show="loading">
-      <!-- 账号信息卡片 -->
-      <n-grid :cols="2" :x-gap="16" :y-gap="16">
-        <n-gi>
-          <n-card title="账号信息">
-            <template #header-extra>
-              <n-button text size="small" @click="showEditModal = true">
-                <template #icon><n-icon><CreateOutline /></n-icon></template>
-                编辑
-              </n-button>
-            </template>
-            <n-descriptions :column="1" label-placement="left">
-              <n-descriptions-item label="用户名">
-                {{ accountInfo?.username || account?.username || '-' }}
-              </n-descriptions-item>
-              <n-descriptions-item label="显示名">
-                {{ accountInfo?.display_name || account?.display_name || '-' }}
-              </n-descriptions-item>
-              <n-descriptions-item label="用户ID">
-                {{ accountInfo?.id || account?.anyrouter_user_id || '-' }}
-              </n-descriptions-item>
-              <n-descriptions-item label="用户组">
-                {{ accountInfo?.group || '-' }}
-              </n-descriptions-item>
-              <n-descriptions-item label="所属分组">
-                <n-tag v-if="accountInfo?.local_group || account?.group" size="small" :bordered="false" :style="{ background: getGroupColor((accountInfo?.local_group || account?.group)?.color), color: '#fff' }">
-                  {{ (accountInfo?.local_group || account?.group)?.name }}
-                </n-tag>
-                <span v-else>未分组</span>
-              </n-descriptions-item>
-              <n-descriptions-item label="创建时间">
-                {{ account ? formatDateTime(account.created_at) : '-' }}
-              </n-descriptions-item>
-              <n-descriptions-item label="最后更新">
-                {{ account ? formatDateTime(account.updated_at) : '-' }}
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-card>
-        </n-gi>
-        <n-gi>
-          <n-card title="额度信息">
-            <template #header-extra>
-              <n-button text size="small" @click="handleRefreshInfo" :loading="refreshing">
-                <template #icon><n-icon><RefreshOutline /></n-icon></template>
-              </n-button>
-            </template>
-            <n-descriptions :column="1" label-placement="left">
-              <n-descriptions-item label="剩余额度">
-                <n-text type="success" strong>{{ accountInfo?.quota_display || formatQuota(accountInfo?.quota || 0) }}</n-text>
-              </n-descriptions-item>
-              <n-descriptions-item label="已用额度">
-                {{ accountInfo?.used_quota_display || formatQuota(accountInfo?.used_quota || 0) }}
-              </n-descriptions-item>
-              <n-descriptions-item label="剩余比例">
-                <n-text type="info">{{ accountInfo?.quota_percent || '0.00%' }}</n-text>
-              </n-descriptions-item>
-              <n-descriptions-item label="总请求数">
-                {{ (accountInfo?.request_count || 0).toLocaleString() }}
-              </n-descriptions-item>
-              <n-descriptions-item label="推广链接">
-                <n-space v-if="accountInfo?.aff_code" align="center">
-                  <n-text code style="font-size: 12px;">https://anyrouter.top/register?aff={{ accountInfo.aff_code }}</n-text>
-                  <n-button text size="tiny" @click="copyAffLink">
-                    <template #icon><n-icon><CopyOutline /></n-icon></template>
-                  </n-button>
-                </n-space>
-                <span v-else>-</span>
-              </n-descriptions-item>
-              <n-descriptions-item label="推广人数">
-                {{ accountInfo?.aff_count || 0 }}
-              </n-descriptions-item>
-              <n-descriptions-item label="推广所得">
-                <n-text type="warning">{{ accountInfo?.aff_history_quota_display || formatQuota(accountInfo?.aff_history_quota || 0) }}</n-text>
-              </n-descriptions-item>
-            </n-descriptions>
-          </n-card>
-        </n-gi>
-      </n-grid>
+      <!-- 数据概览 -->
+      <div class="stats-row">
+        <div class="stat-card quota-card">
+          <div class="stat-icon">
+            <n-icon :size="28"><WalletOutline /></n-icon>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value primary">{{ accountInfo?.quota_display || formatQuota(accountInfo?.quota || 0) }}</div>
+            <div class="stat-label">剩余额度</div>
+          </div>
+          <div class="stat-extra">
+            <n-progress
+              type="circle"
+              :percentage="parseFloat(accountInfo?.quota_percent || '0')"
+              :stroke-width="10"
+              :show-indicator="true"
+              :color="'var(--primary-color)'"
+              style="width: 56px; height: 56px;"
+            />
+          </div>
+        </div>
 
-      <!-- 签到记录 -->
-      <n-card title="签到记录" style="margin-top: 16px;">
-        <n-data-table
-          :columns="columns"
-          :data="signLogs"
-          :pagination="pagination"
-          :loading="loadingLogs"
-          remote
-          @update:page="handlePageChange"
-          @update:page-size="handlePageSizeChange"
-        />
-      </n-card>
+        <div class="stat-card">
+          <div class="stat-icon used">
+            <n-icon :size="28"><TrendingDownOutline /></n-icon>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ accountInfo?.used_quota_display || formatQuota(accountInfo?.used_quota || 0) }}</div>
+            <div class="stat-label">已用额度</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon request">
+            <n-icon :size="28"><PulseOutline /></n-icon>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ (accountInfo?.request_count || 0).toLocaleString() }}</div>
+            <div class="stat-label">总请求数</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon aff">
+            <n-icon :size="28"><PeopleOutline /></n-icon>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value warning">{{ accountInfo?.aff_history_quota_display || formatQuota(accountInfo?.aff_history_quota || 0) }}</div>
+            <div class="stat-label">推广所得 ({{ accountInfo?.aff_count || 0 }}人)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 双栏布局 -->
+      <div class="content-grid">
+        <!-- 左侧：账号详情 -->
+        <div class="content-left">
+          <!-- 基本信息 -->
+          <div class="detail-card card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <n-icon><InformationCircleOutline /></n-icon>
+                基本信息
+              </h3>
+            </div>
+            <div class="detail-list">
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><PersonOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">用户名</span>
+                  <span class="detail-value">{{ accountInfo?.username || account?.username || '-' }}</span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><TextOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">显示名</span>
+                  <span class="detail-value">{{ accountInfo?.display_name || account?.display_name || '-' }}</span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><KeyOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">用户ID</span>
+                  <span class="detail-value mono">{{ accountInfo?.id || account?.anyrouter_user_id || '-' }}</span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><ShieldCheckmarkOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">用户组</span>
+                  <span class="detail-value">{{ accountInfo?.group || '-' }}</span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><FolderOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">所属分组</span>
+                  <span class="detail-value">
+                    <n-tag v-if="accountInfo?.local_group || account?.group" size="small" :bordered="false" :style="{ background: getGroupColor((accountInfo?.local_group || account?.group)?.color), color: '#fff' }">
+                      {{ (accountInfo?.local_group || account?.group)?.name }}
+                    </n-tag>
+                    <span v-else class="text-muted">未分组</span>
+                  </span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><CalendarOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">最后更新</span>
+                  <span class="detail-value">{{ account ? formatDateTime(account.updated_at) : '-' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 推广信息 -->
+          <div class="detail-card card" v-if="accountInfo?.aff_code">
+            <div class="card-header">
+              <h3 class="card-title">
+                <n-icon><ShareSocialOutline /></n-icon>
+                推广信息
+              </h3>
+            </div>
+            <div class="aff-section">
+              <div class="aff-stats">
+                <div class="aff-stat">
+                  <span class="aff-stat-value">{{ accountInfo?.aff_count || 0 }}</span>
+                  <span class="aff-stat-label">推广人数</span>
+                </div>
+                <div class="aff-stat">
+                  <span class="aff-stat-value warning">{{ accountInfo?.aff_history_quota_display || '$0.00' }}</span>
+                  <span class="aff-stat-label">累计收益</span>
+                </div>
+              </div>
+              <div class="aff-link-box">
+                <span class="aff-link-label">推广链接</span>
+                <div class="aff-link-row">
+                  <code class="aff-link-code">https://anyrouter.top/register?aff={{ accountInfo.aff_code }}</code>
+                  <n-button size="small" type="primary" @click="copyAffLink">
+                    <template #icon><n-icon><CopyOutline /></n-icon></template>
+                    复制
+                  </n-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧：签到记录 -->
+        <div class="content-right">
+          <div class="logs-card card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <n-icon><DocumentTextOutline /></n-icon>
+                签到记录
+              </h3>
+              <span class="logs-count">共 {{ pagination.itemCount }} 条</span>
+            </div>
+
+            <div class="logs-timeline" v-if="!loadingLogs && signLogs.length > 0">
+              <div v-for="log in signLogs" :key="log.id" class="timeline-item" :class="{ success: log.success, fail: !log.success }">
+                <div class="timeline-dot">
+                  <n-icon :size="12">
+                    <CheckmarkOutline v-if="log.success" />
+                    <CloseOutline v-else />
+                  </n-icon>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-header">
+                    <span class="timeline-status" :class="log.success ? 'success' : 'fail'">
+                      {{ log.success ? '签到成功' : '签到失败' }}
+                    </span>
+                    <span class="timeline-reward" v-if="log.reward_quota">+{{ formatQuota(log.reward_quota) }}</span>
+                  </div>
+                  <div class="timeline-time">{{ formatDateTime(log.sign_time) }}</div>
+                  <div class="timeline-message" v-if="log.message">{{ log.message }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="logs-loading" v-if="loadingLogs">
+              <n-spin size="medium" />
+            </div>
+
+            <div class="logs-empty" v-if="!loadingLogs && signLogs.length === 0">
+              <div class="empty-icon">📭</div>
+              <div class="empty-text">暂无签到记录</div>
+              <n-button size="small" type="primary" @click="handleSign" :loading="signing">立即签到</n-button>
+            </div>
+
+            <div class="logs-pagination" v-if="pagination.itemCount > pagination.pageSize">
+              <n-pagination
+                v-model:page="pagination.page"
+                v-model:page-size="pagination.pageSize"
+                :item-count="pagination.itemCount"
+                :page-sizes="pagination.pageSizes"
+                size="small"
+                @update:page="handlePageChange"
+                @update:page-size="handlePageSizeChange"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </n-spin>
 
     <!-- 编辑账号弹窗 -->
-    <n-modal v-model:show="showEditModal" preset="dialog" title="更新账号信息" style="width: 500px;">
-      <n-form :model="editForm">
-        <n-form-item label="User ID (new-api-user)">
-          <n-input v-model:value="editForm.user_id" placeholder="留空则不修改" />
-        </n-form-item>
-        <n-form-item label="Session Cookie">
-          <n-input v-model:value="editForm.session_cookie" type="textarea" :rows="4" placeholder="留空则不修改" />
-        </n-form-item>
-        <n-form-item label="状态">
-          <n-switch v-model:value="editForm.is_active">
-            <template #checked>启用</template>
-            <template #unchecked>禁用</template>
-          </n-switch>
-        </n-form-item>
-        <n-form-item label="所属分组">
-          <n-select
-            v-model:value="editForm.group_id"
-            :options="groups.map(g => ({ label: g.name, value: g.id }))"
-            placeholder="选择分组"
-            clearable
-          />
-        </n-form-item>
-      </n-form>
-      <template #action>
-        <n-button @click="showEditModal = false">取消</n-button>
-        <n-button type="primary" @click="handleUpdate" :loading="updating">保存</n-button>
-      </template>
+    <n-modal v-model:show="showEditModal" :mask-closable="false">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>编辑账号</h3>
+          <n-button text @click="showEditModal = false">
+            <n-icon :size="20"><CloseOutline /></n-icon>
+          </n-button>
+        </div>
+        <div class="modal-body">
+          <div class="form-item">
+            <label>User ID (new-api-user)</label>
+            <n-input v-model:value="editForm.user_id" placeholder="留空则不修改" />
+          </div>
+          <div class="form-item">
+            <label>Session Cookie</label>
+            <n-input v-model:value="editForm.session_cookie" type="textarea" :rows="4" placeholder="留空则不修改" />
+          </div>
+          <div class="form-row">
+            <div class="form-item flex-1">
+              <label>状态</label>
+              <n-switch v-model:value="editForm.is_active" size="large">
+                <template #checked>启用</template>
+                <template #unchecked>禁用</template>
+              </n-switch>
+            </div>
+            <div class="form-item flex-2">
+              <label>所属分组</label>
+              <n-select
+                v-model:value="editForm.group_id"
+                :options="groups.map(g => ({ label: g.name, value: g.id }))"
+                placeholder="选择分组"
+                clearable
+              />
+            </div>
+          </div>
+          <n-divider style="margin: 16px 0;" />
+          <div class="form-item">
+            <label>签到推送渠道</label>
+            <n-select
+              v-model:value="editForm.notify_channel_ids"
+              multiple
+              :options="channelOptions"
+              placeholder="选择推送渠道（可多选）"
+              clearable
+              :loading="loadingChannels"
+            />
+            <div class="form-tip">
+              <n-icon><NotificationsOutline /></n-icon>
+              签到成功或失败后会通过选中的渠道发送通知
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <n-button @click="showEditModal = false">取消</n-button>
+          <n-button type="primary" @click="handleUpdate" :loading="updating">保存修改</n-button>
+        </div>
+      </div>
     </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, NTag } from 'naive-ui'
-import { RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline } from '@vicons/ionicons5'
-import { accountApi, signApi, groupsApi } from '../api'
+import { useMessage } from 'naive-ui'
+import {
+  RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline,
+  CheckmarkOutline, CloseOutline, PersonOutline, TimeOutline, WalletOutline,
+  TrendingDownOutline, PulseOutline, PeopleOutline, InformationCircleOutline,
+  TextOutline, KeyOutline, ShieldCheckmarkOutline, FolderOutline, CalendarOutline,
+  ShareSocialOutline, DocumentTextOutline, NotificationsOutline
+} from '@vicons/ionicons5'
+import { accountApi, signApi, groupsApi, notifyApi } from '../api'
 import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
 
 const route = useRoute()
@@ -171,17 +348,18 @@ const account = ref<any>(null)
 const accountInfo = ref<any>(null)
 const signLogs = ref<any[]>([])
 
-// 编辑弹窗
 const showEditModal = ref(false)
 const editForm = ref({
   user_id: '',
   session_cookie: '',
   is_active: true,
-  group_id: null as number | null
+  group_id: null as number | null,
+  notify_channel_ids: [] as number[]
 })
 
-// 分组
 const groups = ref<any[]>([])
+const channelOptions = ref<{ label: string; value: number }[]>([])
+const loadingChannels = ref(false)
 
 const getGroupColor = (color: string) => {
   const colors: Record<string, string> = {
@@ -205,39 +383,11 @@ const pagination = ref({
   pageSizes: [10, 20, 50]
 })
 
-const columns = [
-  {
-    title: '签到时间',
-    key: 'sign_time',
-    render: (row: any) => formatDateTime(row.sign_time)
-  },
-  {
-    title: '状态',
-    key: 'success',
-    width: 100,
-    render: (row: any) => h(NTag, {
-      type: row.success ? 'success' : 'error',
-      size: 'small'
-    }, { default: () => row.success ? '成功' : '失败' })
-  },
-  {
-    title: '签到奖励',
-    key: 'reward_quota',
-    render: (row: any) => row.reward_quota ? formatQuota(row.reward_quota) : '-'
-  },
-  {
-    title: '签到消息',
-    key: 'message',
-    ellipsis: { tooltip: true }
-  }
-]
-
 const loadAccount = async () => {
   loading.value = true
   try {
     const res = await accountApi.get(accountId)
     account.value = res.data
-    // 初始化编辑表单
     editForm.value.is_active = res.data.is_active
     editForm.value.group_id = res.data.group_id || null
   } catch (e: any) {
@@ -249,11 +399,9 @@ const loadAccount = async () => {
 
 const loadAccountInfo = async () => {
   try {
-    // 使用缓存接口快速加载，不请求远程API
     const res = await accountApi.getCachedInfo(accountId)
     accountInfo.value = res.data
   } catch (e: any) {
-    // 静默失败，不影响页面加载
     console.error('获取账号信息失败:', e.message)
   }
 }
@@ -303,7 +451,6 @@ const handleSign = async () => {
     } else {
       message.success('签到成功')
     }
-    // 签到后静默刷新信息（更新缓存）
     accountApi.getInfo(accountId).then(r => {
       accountInfo.value = r.data
     }).catch(() => {})
@@ -321,25 +468,32 @@ const handleUpdate = async () => {
     const data: any = {
       is_active: editForm.value.is_active
     }
-    // 只有填写了才传递
     if (editForm.value.user_id.trim()) {
       data.user_id = editForm.value.user_id.trim()
     }
     if (editForm.value.session_cookie.trim()) {
       data.session_cookie = editForm.value.session_cookie.trim()
     }
-    // 分组 ID (0 表示移除分组)
     if (editForm.value.group_id !== account.value?.group_id) {
       data.group_id = editForm.value.group_id || 0
     }
 
     await accountApi.update(accountId, data)
+
+    // 保存推送配置
+    const notifyData = {
+      channels: editForm.value.notify_channel_ids.map((id: number) => ({
+        channel_id: id,
+        is_enabled: true,
+        notify_config: {}
+      }))
+    }
+    await notifyApi.updateAccountNotify(accountId, notifyData)
+
     message.success('账号信息已更新')
     showEditModal.value = false
-    // 清空表单
     editForm.value.user_id = ''
     editForm.value.session_cookie = ''
-    // 重新加载数据
     loadAccount()
     loadAccountInfo()
   } catch (e: any) {
@@ -369,6 +523,44 @@ const loadGroups = async () => {
   }
 }
 
+// 加载推送渠道列表
+const loadChannels = async () => {
+  loadingChannels.value = true
+  try {
+    const res = await notifyApi.getChannels()
+    channelOptions.value = (res.data || [])
+      .filter((c: any) => c.is_enabled)
+      .map((c: any) => ({ label: c.name, value: c.id }))
+  } catch (e: any) {
+    console.error('Failed to load channels:', e)
+  } finally {
+    loadingChannels.value = false
+  }
+}
+
+// 加载账号推送配置
+const loadAccountNotify = async () => {
+  try {
+    const res = await notifyApi.getAccountNotify(accountId)
+    const enabledChannels = (res.data || []).filter((c: any) => c.is_enabled)
+    editForm.value.notify_channel_ids = enabledChannels.map((c: any) => c.channel_id)
+  } catch (e: any) {
+    console.error('Failed to load account notify:', e)
+  }
+}
+
+// 打开编辑弹窗时加载推送配置
+const openEditModal = async () => {
+  showEditModal.value = true
+  editForm.value.user_id = ''
+  editForm.value.session_cookie = ''
+  editForm.value.is_active = account.value?.is_active ?? true
+  editForm.value.group_id = account.value?.group_id || null
+  editForm.value.notify_channel_ids = []
+
+  await Promise.all([loadChannels(), loadAccountNotify()])
+}
+
 onMounted(() => {
   loadAccount()
   loadAccountInfo()
@@ -376,3 +568,624 @@ onMounted(() => {
   loadGroups()
 })
 </script>
+
+<style scoped>
+.account-detail-page {
+
+  margin: 0 auto;
+  padding: var(--spacing-6);
+}
+
+/* 顶部导航 */
+.page-nav {
+  margin-bottom: var(--spacing-4);
+}
+
+/* Hero 卡片 */
+.hero-card {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  margin-bottom: var(--spacing-6);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.hero-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-hover) 100%);
+}
+
+.hero-content {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: var(--spacing-6);
+  padding-top: 60px;
+  gap: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.hero-left {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-4);
+}
+
+.account-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 32px;
+  font-weight: var(--font-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+
+.account-avatar.inactive {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+}
+
+.account-info {
+  padding-bottom: var(--spacing-2);
+}
+
+.account-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-1);
+}
+
+.account-name h1 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.account-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.account-meta span {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.hero-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+/* 数据概览 */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-6);
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-5);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-card.quota-card {
+  grid-column: span 1;
+}
+
+.stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.2) 100%);
+  color: var(--primary-color);
+}
+
+.stat-icon.used {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.2) 100%);
+  color: var(--error-color);
+}
+
+.stat-icon.request {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.2) 100%);
+  color: var(--success-color);
+}
+
+.stat-icon.aff {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.2) 100%);
+  color: var(--warning-color);
+}
+
+.stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-value {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.stat-value.primary {
+  color: var(--primary-color);
+}
+
+.stat-value.warning {
+  color: var(--warning-color);
+}
+
+.stat-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-top: var(--spacing-1);
+}
+
+.stat-extra {
+  flex-shrink: 0;
+}
+
+/* 双栏布局 */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-6);
+}
+
+.content-left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-5);
+}
+
+/* 详情卡片 */
+.detail-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-4) var(--spacing-5);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.detail-list {
+  padding: var(--spacing-4) var(--spacing-5);
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) 0;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.detail-content {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+}
+
+.detail-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.detail-value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+}
+
+.detail-value.mono {
+  font-family: var(--font-mono);
+}
+
+.text-muted {
+  color: var(--text-tertiary);
+}
+
+/* 推广信息 */
+.aff-section {
+  padding: var(--spacing-5);
+}
+
+.aff-stats {
+  display: flex;
+  gap: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
+}
+
+.aff-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.aff-stat-value {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+}
+
+.aff-stat-value.warning {
+  color: var(--warning-color);
+}
+
+.aff-stat-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.aff-link-box {
+  background: var(--bg-card-hover);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+}
+
+.aff-link-label {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-2);
+  display: block;
+}
+
+.aff-link-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.aff-link-code {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* 签到日志卡片 */
+.logs-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  height: fit-content;
+}
+
+.logs-count {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+/* 时间线 */
+.logs-timeline {
+  padding: var(--spacing-4) var(--spacing-5);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.timeline-item {
+  display: flex;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) 0;
+  position: relative;
+}
+
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 32px;
+  bottom: -12px;
+  width: 2px;
+  background: var(--border-color-light);
+}
+
+.timeline-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.timeline-item.success .timeline-dot {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.timeline-item.fail .timeline-dot {
+  background: var(--error-color-light);
+  color: var(--error-color);
+}
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-1);
+}
+
+.timeline-status {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.timeline-status.success {
+  color: var(--success-color);
+}
+
+.timeline-status.fail {
+  color: var(--error-color);
+}
+
+.timeline-reward {
+  font-size: var(--text-sm);
+  color: var(--warning-color);
+  font-weight: var(--font-medium);
+}
+
+.timeline-time {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.timeline-message {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-1);
+}
+
+/* 加载和空状态 */
+.logs-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-10);
+}
+
+.logs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-10);
+  text-align: center;
+}
+
+.logs-empty .empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-3);
+}
+
+.logs-empty .empty-text {
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-4);
+}
+
+.logs-pagination {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+}
+
+/* 弹窗 */
+.modal-container {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  width: 480px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-5);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.modal-header h3 {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.modal-body {
+  padding: var(--spacing-5);
+}
+
+.form-item {
+  margin-bottom: var(--spacing-4);
+}
+
+.form-item:last-child {
+  margin-bottom: 0;
+}
+
+.form-item label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-2);
+}
+
+.form-row {
+  display: flex;
+  gap: var(--spacing-4);
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.form-tip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+  padding: var(--spacing-5);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-card-hover);
+}
+
+/* 响应式 */
+@media (max-width: 1024px) {
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .account-detail-page {
+    padding: var(--spacing-4);
+  }
+
+  .hero-content {
+    flex-direction: column;
+    align-items: flex-start;
+    padding-top: 70px;
+  }
+
+  .hero-left {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account-avatar {
+    margin-top: -40px;
+  }
+
+  .hero-actions {
+    width: 100%;
+  }
+
+  .hero-actions .n-button {
+    flex: 1;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    padding: var(--spacing-4);
+  }
+
+  .account-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-1);
+  }
+
+  .aff-stats {
+    flex-direction: column;
+    gap: var(--spacing-3);
+  }
+
+  .aff-link-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+}
+</style>
