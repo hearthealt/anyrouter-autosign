@@ -59,9 +59,13 @@ const formatShortDate = (dateStr: string): string => {
 const initChart = () => {
   if (!chartRef.value || !props.data?.length) return
 
-  chart = echarts.init(chartRef.value)
+  chart = echarts.init(chartRef.value, null, {
+    useDirtyRect: true,
+    useCoarsePointer: true,
+    renderer: 'canvas'
+  })
   updateChart()
-  window.addEventListener('resize', handleResize)
+  window.addEventListener('resize', handleResize, { passive: true })
 }
 
 // 更新图表

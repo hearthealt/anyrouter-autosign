@@ -1,8 +1,4 @@
-import { useMessage } from 'naive-ui'
-
 export function useClipboard() {
-  const message = useMessage()
-
   async function copy(text: string, successMsg = '已复制到剪贴板'): Promise<boolean> {
     try {
       if (navigator.clipboard && window.isSecureContext) {
@@ -20,10 +16,10 @@ export function useClipboard() {
         document.execCommand('copy')
         textArea.remove()
       }
-      message.success(successMsg)
+      window.$notify(successMsg, 'success')
       return true
     } catch (e) {
-      message.error('复制失败')
+      window.$notify('复制失败', 'error')
       return false
     }
   }

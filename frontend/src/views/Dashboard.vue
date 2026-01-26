@@ -1,25 +1,5 @@
 <template>
   <div class="dashboard">
-    <!-- 快捷操作栏 -->
-    <div class="quick-actions">
-      <n-button type="primary" size="large" @click="handleBatchSign" :loading="batchSigning">
-        <template #icon><n-icon><FlashOutline /></n-icon></template>
-        一键签到
-      </n-button>
-      <n-button size="large" @click="refreshData" :loading="loading">
-        <template #icon><n-icon><RefreshOutline /></n-icon></template>
-        刷新数据
-      </n-button>
-      <n-button size="large" @click="showAddModal">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        添加账号
-      </n-button>
-      <n-button size="large" @click="handleSyncEndpoints" :loading="syncingEndpoints">
-        <template #icon><n-icon><SyncOutline /></n-icon></template>
-        同步节点
-      </n-button>
-    </div>
-
     <!-- 统计卡片 -->
     <div class="stats-grid">
       <div class="stat-card">
@@ -81,6 +61,39 @@
       </div>
     </div>
 
+    <!-- 快速操作栏 -->
+    <div class="quick-actions">
+      <div class="quick-action-card" @click="handleBatchSign" :class="{ loading: batchSigning }" :disabled="batchSigning">
+        <div class="card-icon" v-if="!batchSigning">⚡</div>
+        <div class="card-icon loading-spinner" v-else>
+          <n-spin :size="20" />
+        </div>
+        <div class="card-title">{{ batchSigning ? '签到中...' : '一键签到' }}</div>
+      </div>
+      <div class="quick-action-card" @click="refreshData" :class="{ loading: refreshing }" :disabled="refreshing">
+        <div class="card-icon" v-if="!refreshing">🔄</div>
+        <div class="card-icon loading-spinner" v-else>
+          <n-spin :size="20" />
+        </div>
+        <div class="card-title">{{ refreshing ? '刷新中...' : '刷新数据' }}</div>
+      </div>
+      <div class="quick-action-card" @click="showAddModal">
+        <div class="card-icon">➕</div>
+        <div class="card-title">添加账号</div>
+      </div>
+      <div class="quick-action-card" @click="handleSyncEndpoints" :class="{ loading: syncingEndpoints }" :disabled="syncingEndpoints">
+        <div class="card-icon" v-if="!syncingEndpoints">🔗</div>
+        <div class="card-icon loading-spinner" v-else>
+          <n-spin :size="20" />
+        </div>
+        <div class="card-title">{{ syncingEndpoints ? '同步中...' : '同步节点' }}</div>
+      </div>
+      <div class="quick-action-card" @click="$router.push('/statistics')">
+        <div class="card-icon">📊</div>
+        <div class="card-title">数据统计</div>
+      </div>
+    </div>
+
     <!-- 图表区域 -->
     <div class="charts-grid">
       <!-- 签到趋势图表 -->
@@ -90,6 +103,7 @@
           <n-radio-group v-model:value="trendDays" size="small">
             <n-radio-button :value="7">7天</n-radio-button>
             <n-radio-button :value="30">30天</n-radio-button>
+            <n-radio-button :value="60">60天</n-radio-button>
           </n-radio-group>
         </div>
         <div class="card-body">
@@ -114,10 +128,6 @@
       <div class="status-card card">
         <div class="card-header">
           <h3 class="card-title">账号状态</h3>
-          <n-button text size="small" @click="$router.push('/settings')">
-            管理
-            <template #icon><n-icon><ChevronForwardOutline /></n-icon></template>
-          </n-button>
         </div>
         <div class="status-list">
           <div class="status-group" :class="{ active: statusFilter === 'healthy' }" @click="filterByStatus('healthy')">
@@ -341,11 +351,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useMessage } from 'naive-ui'
-import { TrendChart, AccountModal, QuotaPieChart } from '../components/dashboard'
-import TokensModal from '../components/dashboard/TokensModal.vue'
-import { accountApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi, signApi } from '../api'
+import { ref, computed, onMounted, watch } from 'vue'
+import { TrendChart, AccountModal, QuotaPieChart, TokensModal } from '../components/dashboard'
+import { accountApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi, signApi, statisticsApi } from '../api'
 import type { Account, AccountGroup, ApiToken, DashboardData, ApiEndpoint, CreateTokenParams } from '../types'
 import {
   PeopleOutline,
@@ -355,8 +363,6 @@ import {
   FlashOutline,
   SyncOutline,
   CopyOutline,
-  AddOutline,
-  RefreshOutline,
   ChevronForwardOutline,
   TimeOutline,
   PulseOutline,
@@ -364,7 +370,6 @@ import {
 } from '@vicons/ionicons5'
 import { useFormat } from '../composables'
 
-const message = useMessage()
 const { formatRelativeTime } = useFormat()
 
 // 主题检测
@@ -433,9 +438,9 @@ const filterByStatus = (status: string) => {
 const copyEndpoint = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url)
-    message.success('已复制到剪贴板')
+    window.$notify('已复制到剪贴板', 'success')
   } catch {
-    message.error('复制失败')
+    window.$notify('复制失败', 'error')
   }
 }
 
@@ -443,6 +448,7 @@ const copyEndpoint = async (url: string) => {
 const signingId = ref<number | null>(null)
 const batchSigning = ref(false)
 const checkingId = ref<number | null>(null)
+const refreshing = ref(false)
 
 // API 节点状态
 const syncingEndpoints = ref(false)
@@ -471,15 +477,26 @@ const loadData = async () => {
     accounts.value = accountsRes.data || []
     dashboard.value = dashboardRes.data
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loading.value = false
   }
 }
 
-const refreshData = () => {
-  loadData()
-  loadEndpoints()
+// 加载趋势数据
+const loadTrendData = async (days: number) => {
+  try {
+    const res = await statisticsApi.getDaily(days)
+    if (dashboard.value && res.data) {
+      // 创建新对象来触发响应式更新
+      dashboard.value = {
+        ...dashboard.value,
+        daily_trend: res.data
+      }
+    }
+  } catch (e: any) {
+    console.error('Failed to load trend data:', e)
+  }
 }
 
 const loadGroups = async () => {
@@ -500,24 +517,51 @@ const loadEndpoints = async () => {
   }
 }
 
+// 一键签到
+const handleBatchSign = async () => {
+  batchSigning.value = true
+  try {
+    const res: any = await signApi.batchSign()
+    window.$notify(res.message || '批量签到完成', 'success')
+    loadData()
+  } catch (e: any) {
+    window.$notify(e.message, 'error')
+  } finally {
+    batchSigning.value = false
+  }
+}
+
+// 刷新数据
+const refreshData = async () => {
+  refreshing.value = true
+  try {
+    await loadData()
+    window.$notify('数据已刷新', 'success')
+  } catch (e: any) {
+    window.$notify(e.message, 'error')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// 显示添加账号弹窗
+const showAddModal = () => {
+  editingAccount.value = null
+  showAccountModal.value = true
+}
+
 // 同步 API 节点
 const handleSyncEndpoints = async () => {
   syncingEndpoints.value = true
   try {
     const res: any = await apiEndpointsApi.sync()
-    message.success(res.message || '同步成功')
+    window.$notify(res.message || '同步成功', 'success')
     loadEndpoints()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     syncingEndpoints.value = false
   }
-}
-
-// 账号操作
-const showAddModal = () => {
-  editingAccount.value = null
-  showAccountModal.value = true
 }
 
 const handleAccountSubmit = async (data: any) => {
@@ -539,7 +583,7 @@ const handleAccountSubmit = async (data: any) => {
         }))
       }
       await notifyApi.updateAccountNotify(editingAccount.value.id, notifyData)
-      message.success('更新成功')
+      window.$notify('更新成功', 'success')
     } else {
       const res = await accountApi.create({
         session_cookie: data.session_cookie,
@@ -557,13 +601,13 @@ const handleAccountSubmit = async (data: any) => {
         }
         await notifyApi.updateAccountNotify(res.data.id, notifyData)
       }
-      message.success('账号添加成功')
+      window.$notify('账号添加成功', 'success')
     }
 
     showAccountModal.value = false
     loadData()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     accountModalRef.value?.setSubmitting(false)
   }
@@ -572,16 +616,16 @@ const handleAccountSubmit = async (data: any) => {
 // 签到操作
 const handleSign = async (account: Account) => {
   if (!account.is_active) {
-    message.warning('该账号已禁用，无法签到')
+    window.$notify('该账号已禁用，无法签到', 'warning')
     return
   }
   signingId.value = account.id
   try {
     const res = await signApi.sign(account.id)
-    message.success(res.data?.message || '签到成功')
+    window.$notify(res.data?.message || '签到成功', 'success')
     loadData()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     signingId.value = null
   }
@@ -592,10 +636,10 @@ const handleHealthCheck = async (account: Account) => {
   checkingId.value = account.id
   try {
     await accountApi.healthCheck(account.id)
-    message.success('健康检查完成')
+    window.$notify('健康检查完成', 'success')
     loadData()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     checkingId.value = null
   }
@@ -610,25 +654,11 @@ const showTokens = async (account: Account) => {
     const res = await accountApi.getTokens(account.id)
     tokens.value = res.data || []
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingTokens.value = false
   }
 }
-
-const handleBatchSign = async () => {
-  batchSigning.value = true
-  try {
-    const res = await signApi.batchSign()
-    message.success(`批量签到完成：成功 ${res.data.success_count}，失败 ${res.data.fail_count}`)
-    loadData()
-  } catch (e: any) {
-    message.error(e.message)
-  } finally {
-    batchSigning.value = false
-  }
-}
-
 // Token 操作
 const handleSyncTokens = async () => {
   if (!tokenAccount.value) return
@@ -637,9 +667,9 @@ const handleSyncTokens = async () => {
     await accountApi.syncTokens(tokenAccount.value.id)
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
-    message.success('刷新成功')
+    window.$notify('刷新成功', 'success')
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     syncingTokens.value = false
   }
@@ -650,11 +680,11 @@ const handleDeleteToken = async (token: ApiToken) => {
   deletingTokenId.value = token.token_id
   try {
     await accountApi.deleteToken(tokenAccount.value.id, token.token_id)
-    message.success('删除成功')
+    window.$notify('删除成功', 'success')
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     deletingTokenId.value = null
   }
@@ -664,12 +694,12 @@ const handleCreateToken = async (data: CreateTokenParams) => {
   if (!tokenAccount.value) return
   try {
     await accountApi.createToken(tokenAccount.value.id, data)
-    message.success('令牌创建成功')
+    window.$notify('令牌创建成功', 'success')
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
     return true
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
     return false
   }
 }
@@ -678,12 +708,12 @@ const handleEditToken = async (tokenId: number, data: CreateTokenParams) => {
   if (!tokenAccount.value) return
   try {
     await accountApi.updateToken(tokenAccount.value.id, tokenId, data)
-    message.success('令牌更新成功')
+    window.$notify('令牌更新成功', 'success')
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
     return true
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
     return false
   }
 }
@@ -692,42 +722,38 @@ onMounted(() => {
   loadData()
   loadGroups()
   loadEndpoints()
+  // 初始加载趋势数据
+  loadTrendData(trendDays.value)
+})
+
+// 监听趋势天数变化
+watch(trendDays, (newDays) => {
+  loadTrendData(newDays)
 })
 </script>
 
 <style scoped>
 .dashboard {
-
   margin: 0 auto;
-}
-
-/* 快捷操作栏 */
-.quick-actions {
-  display: flex;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-6);
-  flex-wrap: wrap;
-}
-
-.quick-actions .n-button {
-  border-radius: var(--radius-lg);
+  max-width: 1600px;
+  padding: 0 var(--spacing-4);
 }
 
 /* 统计卡片网格 */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
 }
 
 .stat-card {
   background: var(--bg-card);
   border-radius: var(--radius-xl);
-  padding: var(--spacing-5);
+  padding: var(--spacing-4);
   display: flex;
   align-items: flex-start;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
   position: relative;
   box-shadow: var(--shadow-card);
   transition: all var(--transition-normal);
@@ -739,8 +765,8 @@ onMounted(() => {
 }
 
 .stat-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
@@ -774,22 +800,22 @@ onMounted(() => {
 }
 
 .stat-value {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: var(--font-bold);
   color: var(--text-primary);
   line-height: 1.2;
 }
 
 .stat-sub {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   font-weight: var(--font-normal);
   color: var(--text-tertiary);
 }
 
 .stat-label {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
-  margin-top: var(--spacing-1);
+  margin-top: 2px;
 }
 
 .stat-trend {
@@ -839,16 +865,149 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+/* 异常账号提醒卡片 */
+.alert-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  box-shadow: var(--shadow-card);
+  border-left: 4px solid var(--error-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alert-card.warning {
+  border-left-color: var(--warning-color);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(245, 158, 11, 0.02) 100%);
+}
+
+.alert-card .card-header {
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.alert-content-scroll {
+  flex: 1;
+  padding: var(--spacing-3) var(--spacing-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.alert-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+}
+
+.alert-item .label {
+  color: var(--text-tertiary);
+}
+
+.alert-item .count {
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  color: var(--warning-color);
+}
+
+.view-all-alert {
+  text-align: center;
+  padding: var(--spacing-2) 0;
+  font-size: var(--text-xs);
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.view-all-alert:hover {
+  background: var(--primary-color-light);
+}
+
+.alert-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.alert-actions .n-button {
+  border-radius: var(--radius-md);
+}
+
+/* 快速操作栏 */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.quick-action-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-card);
+  min-height: 110px;
+}
+
+.quick-action-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.quick-action-card:active {
+  transform: translateY(-2px);
+}
+
+.quick-action-card .card-icon {
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  width: 40px;
+}
+
+.quick-action-card .card-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.quick-action-card:disabled,
+.quick-action-card.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.quick-action-card .loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* 图表区域 */
 .charts-grid {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
-  gap: var(--spacing-6);
-  margin-bottom: var(--spacing-6);
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
 }
 
 .chart-card .card-body {
-  padding: var(--spacing-4);
+  padding: var(--spacing-3);
   min-height: 280px;
 }
 
@@ -856,22 +1015,22 @@ onMounted(() => {
 .bottom-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: var(--spacing-6);
+  gap: var(--spacing-4);
 }
 
 /* 账号状态卡片 */
 .status-list {
   display: flex;
-  gap: var(--spacing-4);
-  padding: var(--spacing-4) var(--spacing-5);
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
   border-bottom: 1px solid var(--border-color-light);
 }
 
 .status-group {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3);
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -920,14 +1079,14 @@ onMounted(() => {
 
 /* 账号快速列表 */
 .account-quick-list {
-  padding: var(--spacing-3);
+  padding: var(--spacing-2);
 }
 
 .account-quick-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -1044,7 +1203,7 @@ onMounted(() => {
 
 .view-all {
   text-align: center;
-  padding: var(--spacing-3);
+  padding: var(--spacing-2);
   font-size: var(--text-sm);
   color: var(--primary-color);
   cursor: pointer;
@@ -1058,15 +1217,15 @@ onMounted(() => {
 
 /* 活动时间线 */
 .activity-timeline {
-  padding: var(--spacing-4) var(--spacing-5);
+  padding: var(--spacing-3) var(--spacing-4);
   max-height: 400px;
   overflow-y: auto;
 }
 
 .timeline-item {
   display: flex;
-  gap: var(--spacing-3);
-  padding: var(--spacing-2) 0;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1) 0;
   position: relative;
 }
 
@@ -1139,14 +1298,14 @@ onMounted(() => {
 
 /* API 节点 */
 .endpoints-list {
-  padding: var(--spacing-4) var(--spacing-5);
+  padding: var(--spacing-3) var(--spacing-4);
 }
 
 .endpoint-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) 0;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) 0;
   border-bottom: 1px solid var(--border-color-light);
 }
 
@@ -1215,8 +1374,8 @@ onMounted(() => {
 .account-list-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -1275,19 +1434,19 @@ onMounted(() => {
   }
 
   .bottom-grid .endpoints-card {
-    grid-column: span 2;
+    grid-column: span 1;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .quick-actions {
-    flex-direction: column;
-  }
-
-  .quick-actions .n-button {
-    width: 100%;
-  }
-
   .stats-grid {
     grid-template-columns: 1fr;
   }
@@ -1318,6 +1477,14 @@ onMounted(() => {
 
   .status-list {
     flex-wrap: wrap;
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .quick-action-card {
+    min-height: 100px;
   }
 }
 </style>

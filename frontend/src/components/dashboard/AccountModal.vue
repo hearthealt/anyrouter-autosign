@@ -73,7 +73,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage } from 'naive-ui'
 import { CloseOutline, InformationCircleOutline } from '@vicons/ionicons5'
 import { notifyApi } from '../../api'
 import type { Account, AccountGroup, NotifyChannel, SelectOption } from '../../types'
@@ -94,8 +93,6 @@ const emit = defineEmits<{
     notify_channel_ids: number[]
   }]
 }>()
-
-const message = useMessage()
 
 const visible = computed({
   get: () => props.show,
@@ -180,11 +177,11 @@ const close = () => {
 const handleSubmit = () => {
   if (!isEdit.value) {
     if (!form.value.user_id.trim()) {
-      message.warning('请输入 User ID')
+      window.$notify('请输入 User ID', 'warning')
       return
     }
     if (!form.value.session_cookie.trim()) {
-      message.warning('请输入 Session Cookie')
+      window.$notify('请输入 Session Cookie', 'warning')
       return
     }
   }

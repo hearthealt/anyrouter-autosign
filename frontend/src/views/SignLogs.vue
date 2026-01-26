@@ -193,7 +193,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useMessage } from 'naive-ui'
 import {
   RefreshOutline,
   CheckmarkOutline,
@@ -209,7 +208,6 @@ import {
 import { signApi, accountApi } from '../api'
 import { useFormat } from '../composables'
 
-const message = useMessage()
 const { formatDateTime } = useFormat()
 
 const loading = ref(false)
@@ -256,7 +254,7 @@ const loadAccounts = async () => {
       value: a.id
     }))
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   }
 }
 
@@ -283,7 +281,7 @@ const loadLogs = async (page = 1) => {
     pagination.value.itemCount = res.data?.total || 0
     pagination.value.page = page
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loading.value = false
   }

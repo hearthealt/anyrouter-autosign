@@ -12,6 +12,7 @@ from app.schemas import (
 from app.utils import verify_password, hash_password, create_access_token
 from app.api.deps import get_current_user
 from app.services.audit import log_action
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -102,7 +103,8 @@ def get_me(current_user: User = Depends(get_current_user)):
             id=current_user.id,
             username=current_user.username,
             is_active=current_user.is_active,
-            created_at=current_user.created_at
+            created_at=current_user.created_at,
+            app_version=settings.app_version
         )
     )
 

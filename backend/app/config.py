@@ -1,7 +1,6 @@
 """
 应用配置
 """
-import os
 from pydantic_settings import BaseSettings
 
 
@@ -10,6 +9,7 @@ class Settings(BaseSettings):
 
     # 应用配置
     app_name: str = "AnyRouter Admin"
+    app_version: str = "1.1.0"
     debug: bool = True
 
     # 数据库配置
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # 日志配置
     log_level: str = "INFO"           # DEBUG, INFO, WARNING, ERROR, CRITICAL
     log_format: str = "json"          # text（开发）或 json（生产）
-    log_dir: str = "/home/auto_task/backend/logs"           # 日志目录
+    log_dir: str = "/www/wwwroot/anyrouter/backend/logs"           # 日志目录
     log_max_size: int = 10            # 单文件最大大小（MB）
     log_backup_count: int = 30        # 保留文件数量
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     ]
 
     # 请求配置
-    request_timeout: int = 30
+    request_timeout: int = 300
     retry_times: int = 3
     retry_interval: int = 3
 
@@ -51,11 +51,11 @@ class Settings(BaseSettings):
     # JWT 配置
     jwt_secret_key: str = "anyrouter-admin-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expire_hours: int = 24
+    jwt_expire_hours: int = 87600
 
     # 默认管理员
     default_admin_username: str = "admin"
-    default_admin_password: str = "admin123"
+    default_admin_password: str = "zaq1,lp-"
 
     class Config:
         env_file = ".env"

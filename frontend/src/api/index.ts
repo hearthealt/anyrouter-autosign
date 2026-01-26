@@ -3,7 +3,7 @@ import { getToken, removeToken } from '../utils/auth'
 
 const api = axios.create({
   baseURL: '/api/v1',
-  timeout: 30000
+  timeout: 300000
 })
 
 // 请求拦截器 - 添加 Token

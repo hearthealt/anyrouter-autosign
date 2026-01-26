@@ -718,7 +718,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import type { Component } from 'vue'
-import { useMessage } from 'naive-ui'
 import {
   AddOutline,
   CloseOutline,
@@ -757,7 +756,6 @@ const getChannelIcon = (type: string): Component => {
   return icons[type] || NotificationsOutline
 }
 
-const message = useMessage()
 
 // Tab 控制
 const activeTab = ref('basic')
@@ -860,7 +858,7 @@ const loadSettings = async () => {
       schedulerStatus.value = schedulerRes.data
     }
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingSettings.value = false
   }
@@ -870,14 +868,14 @@ const saveSettings = async () => {
   savingSettings.value = true
   try {
     await settingsApi.update(settings.value)
-    message.success('设置保存成功')
+    window.$notify('设置保存成功', 'success')
     // 重新加载调度器状态
     const res = await settingsApi.getScheduler()
     if (res.data) {
       schedulerStatus.value = res.data
     }
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     savingSettings.value = false
   }
@@ -889,7 +887,7 @@ const loadChannels = async () => {
     const res = await notifyApi.getChannels()
     channels.value = res.data || []
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingChannels.value = false
   }
@@ -919,7 +917,7 @@ const editChannel = (channel: any) => {
 
 const saveChannel = async () => {
   if (!channelForm.value.name.trim()) {
-    message.warning('请输入渠道名称')
+    window.$notify('请输入渠道名称', 'warning')
     return
   }
   savingChannel.value = true
@@ -934,15 +932,15 @@ const saveChannel = async () => {
 
     if (editingChannel.value) {
       await notifyApi.updateChannel(editingChannel.value.id, payload)
-      message.success('渠道更新成功')
+      window.$notify('渠道更新成功', 'success')
     } else {
       await notifyApi.createChannel(payload)
-      message.success('渠道添加成功')
+      window.$notify('渠道添加成功', 'success')
     }
     showChannelModal.value = false
     loadChannels()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     savingChannel.value = false
   }
@@ -951,10 +949,10 @@ const saveChannel = async () => {
 const deleteChannel = async (id: number) => {
   try {
     await notifyApi.deleteChannel(id)
-    message.success('渠道删除成功')
+    window.$notify('渠道删除成功', 'success')
     loadChannels()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   }
 }
 
@@ -962,9 +960,9 @@ const testChannel = async (channel: any) => {
   testingId.value = channel.id
   try {
     await notifyApi.testChannel(channel.id)
-    message.success('测试消息已发送')
+    window.$notify('测试消息已发送', 'success')
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     testingId.value = null
   }
@@ -1013,9 +1011,9 @@ const handleExport = async () => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(downloadUrl)
 
-    message.success('备份导出成功')
+    window.$notify('备份导出成功', 'success')
   } catch (e: any) {
-    message.error(e.message || '导出失败')
+    window.$notify(e.message || '导出失败', 'error')
   } finally {
     exporting.value = false
   }
@@ -1028,10 +1026,10 @@ const handleImportFile = async ({ file }: { file: { file: File } }) => {
   try {
     const res = await backupApi.import(file.file, importOverwrite.value)
     const data = res.data
-    message.success(`导入成功: ${data.accounts} 个账号, ${data.notify_channels} 个渠道, ${data.settings} 个配置`)
+    window.$notify(`导入成功: ${data.accounts} 个账号, ${data.notify_channels} 个渠道, ${data.settings} 个配置`, 'success')
     loadBackupInfo()
   } catch (e: any) {
-    message.error(e.message || '导入失败')
+    window.$notify(e.message || '导入失败', 'error')
   } finally {
     importing.value = false
   }
@@ -1044,7 +1042,7 @@ const loadGroups = async () => {
     const res = await groupsApi.getList()
     groups.value = res.data || []
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingGroups.value = false
   }
@@ -1072,7 +1070,7 @@ const editGroup = (group: any) => {
 
 const saveGroup = async () => {
   if (!groupForm.value.name.trim()) {
-    message.warning('请输入分组名称')
+    window.$notify('请输入分组名称', 'warning')
     return
   }
   savingGroup.value = true
@@ -1085,15 +1083,15 @@ const saveGroup = async () => {
 
     if (editingGroup.value) {
       await groupsApi.update(editingGroup.value.id, payload)
-      message.success('分组更新成功')
+      window.$notify('分组更新成功', 'success')
     } else {
       await groupsApi.create(payload)
-      message.success('分组创建成功')
+      window.$notify('分组创建成功', 'success')
     }
     showGroupModal.value = false
     loadGroups()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     savingGroup.value = false
   }
@@ -1102,10 +1100,10 @@ const saveGroup = async () => {
 const deleteGroup = async (id: number) => {
   try {
     await groupsApi.delete(id)
-    message.success('分组删除成功')
+    window.$notify('分组删除成功', 'success')
     loadGroups()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   }
 }
 
@@ -1201,7 +1199,7 @@ const loadAuditLogs = async () => {
     auditLogs.value = res.data?.items || []
     auditPagination.value.itemCount = res.data?.total || 0
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingAuditLogs.value = false
   }
@@ -1258,10 +1256,10 @@ const exportAuditLogs = () => {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(downloadUrl)
-      message.success('导出成功')
+      window.$notify('导出成功', 'success')
     })
     .catch(() => {
-      message.error('导出失败')
+      window.$notify('导出失败', 'error')
     })
 }
 
@@ -1330,7 +1328,7 @@ const loadSysLogs = async () => {
     sysLogsHasMore.value = res.data?.has_more || false
     sysLogOffset.value = sysLogs.value.length
   } catch (e: any) {
-    message.error(e.message || '加载日志失败')
+    window.$notify(e.message || '加载日志失败', 'error')
   } finally {
     loadingSysLogs.value = false
   }
@@ -1357,7 +1355,7 @@ const loadMoreSysLogs = async () => {
     sysLogsHasMore.value = res.data?.has_more || false
     sysLogOffset.value += newLogs.length
   } catch (e: any) {
-    message.error(e.message || '加载更多失败')
+    window.$notify(e.message || '加载更多失败', 'error')
   } finally {
     loadingMoreLogs.value = false
   }
@@ -1380,21 +1378,21 @@ const downloadLogFile = () => {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(downloadUrl)
-      message.success('下载成功')
+      window.$notify('下载成功', 'success')
     })
     .catch(() => {
-      message.error('下载失败')
+      window.$notify('下载失败', 'error')
     })
 }
 
 const clearLogFile = async () => {
   try {
     await logsApi.clear(sysLogFilters.value.file)
-    message.success('日志已清空')
+    window.$notify('日志已清空', 'success')
     loadSysLogs()
     loadLogFiles()
   } catch (e: any) {
-    message.error(e.message || '清空失败')
+    window.$notify(e.message || '清空失败', 'error')
   }
 }
 

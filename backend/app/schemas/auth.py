@@ -24,6 +24,7 @@ class UserInfo(BaseModel):
     username: str
     is_active: bool
     created_at: datetime
+    app_version: str
 
 
 class ChangePasswordRequest(BaseModel):

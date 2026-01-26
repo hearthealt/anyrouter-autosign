@@ -167,7 +167,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useMessage } from 'naive-ui'
 import {
   KeyOutline, CloseOutline, AddOutline, RefreshOutline,
   CopyOutline, CreateOutline, TrashOutline
@@ -193,7 +192,6 @@ const emit = defineEmits<{
   edit: [tokenId: number, data: CreateTokenParams]
 }>()
 
-const message = useMessage()
 const { copyToken: copyToClipboard } = useClipboard()
 const { formatQuota } = useFormat()
 
@@ -321,7 +319,7 @@ const openEditDrawer = (token: ApiToken) => {
 // 保存令牌
 const handleSaveToken = async () => {
   if (!tokenForm.value.name.trim()) {
-    message.warning('请输入令牌名称')
+    window.$notify('请输入令牌名称', 'warning')
     return
   }
 

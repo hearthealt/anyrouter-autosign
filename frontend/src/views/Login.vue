@@ -108,13 +108,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
 import { PersonOutline, LockClosedOutline, EyeOutline, EyeOffOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
 import { authApi } from '../api'
 import { setToken } from '../utils/auth'
 
 const router = useRouter()
-const message = useMessage()
 
 const loading = ref(false)
 const showPassword = ref(false)
@@ -125,11 +123,11 @@ const form = ref({
 
 const handleLogin = async () => {
   if (!form.value.username.trim()) {
-    message.warning('请输入用户名')
+    window.$notify('请输入用户名', 'warning')
     return
   }
   if (!form.value.password.trim()) {
-    message.warning('请输入密码')
+    window.$notify('请输入密码', 'warning')
     return
   }
 
@@ -142,13 +140,13 @@ const handleLogin = async () => {
 
     if (res.success && res.data?.access_token) {
       setToken(res.data.access_token)
-      message.success('登录成功')
+      window.$notify('登录成功', 'success')
       router.push('/')
     } else {
-      message.error(res.message || '登录失败')
+      window.$notify(res.message || '登录失败', 'error')
     }
   } catch (e: any) {
-    message.error(e.message || '登录失败')
+    window.$notify(e.message || '登录失败', 'error')
   } finally {
     loading.value = false
   }

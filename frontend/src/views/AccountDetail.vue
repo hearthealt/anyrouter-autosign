@@ -4,7 +4,7 @@
     <div class="page-nav">
       <n-button text @click="router.push('/')">
         <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-        返回控制台
+        返回仪表盘
       </n-button>
     </div>
 
@@ -322,7 +322,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
 import {
   RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline,
   CheckmarkOutline, CloseOutline, PersonOutline, TimeOutline, WalletOutline,
@@ -335,7 +334,6 @@ import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
 
 const route = useRoute()
 const router = useRouter()
-const message = useMessage()
 
 const accountId = Number(route.params.id)
 const loading = ref(false)
@@ -391,7 +389,7 @@ const loadAccount = async () => {
     editForm.value.is_active = res.data.is_active
     editForm.value.group_id = res.data.group_id || null
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loading.value = false
   }
@@ -414,7 +412,7 @@ const loadSignLogs = async (page = 1) => {
     pagination.value.itemCount = res.data?.total || 0
     pagination.value.page = page
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingLogs.value = false
   }
@@ -434,9 +432,9 @@ const handleRefreshInfo = async () => {
   try {
     const res = await accountApi.getInfo(accountId)
     accountInfo.value = res.data
-    message.success('账号信息已刷新')
+    window.$notify('账号信息已刷新', 'success')
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     refreshing.value = false
   }
@@ -447,16 +445,16 @@ const handleSign = async () => {
   try {
     const res = await signApi.sign(accountId)
     if (res.data?.message) {
-      message.success(res.data.message)
+      window.$notify(res.data.message, 'success')
     } else {
-      message.success('签到成功')
+      window.$notify('签到成功', 'success')
     }
     accountApi.getInfo(accountId).then(r => {
       accountInfo.value = r.data
     }).catch(() => {})
     loadSignLogs(1)
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     signing.value = false
   }
@@ -490,14 +488,14 @@ const handleUpdate = async () => {
     }
     await notifyApi.updateAccountNotify(accountId, notifyData)
 
-    message.success('账号信息已更新')
+    window.$notify('账号信息已更新', 'success')
     showEditModal.value = false
     editForm.value.user_id = ''
     editForm.value.session_cookie = ''
     loadAccount()
     loadAccountInfo()
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     updating.value = false
   }
@@ -507,9 +505,9 @@ const copyAffLink = () => {
   if (accountInfo.value?.aff_code) {
     const link = `https://anyrouter.top/register?aff=${accountInfo.value.aff_code}`
     copyToClipboard(link).then(() => {
-      message.success('推广链接已复制')
+      window.$notify('推广链接已复制', 'success')
     }).catch(() => {
-      message.error('复制失败')
+      window.$notify('复制失败', 'error')
     })
   }
 }
@@ -844,11 +842,6 @@ onMounted(() => {
   color: var(--text-primary);
   font-weight: var(--font-medium);
 }
-
-.detail-value.mono {
-  font-family: var(--font-mono);
-}
-
 .text-muted {
   color: var(--text-tertiary);
 }
@@ -907,7 +900,6 @@ onMounted(() => {
 .aff-link-code {
   flex: 1;
   font-size: var(--text-sm);
-  font-family: var(--font-mono);
   color: var(--text-secondary);
   word-break: break-all;
 }

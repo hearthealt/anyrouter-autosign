@@ -1,10 +1,8 @@
 import { ref } from 'vue'
-import { useMessage } from 'naive-ui'
 import { signApi } from '../api'
 import type { SignResult, BatchSignResult } from '../types'
 
 export function useSign() {
-  const message = useMessage()
   const signing = ref(false)
   const signingId = ref<number | null>(null)
   const batchSigning = ref(false)
@@ -14,10 +12,10 @@ export function useSign() {
     signing.value = true
     try {
       const res = await signApi.sign(accountId)
-      message.success(res.data?.message || '签到成功')
+      window.$notify(res.data?.message || '签到成功', 'success')
       return res.data
     } catch (e: any) {
-      message.error(e.message || '签到失败')
+      window.$notify(e.message || '签到失败', 'error')
       return null
     } finally {
       signing.value = false
@@ -30,10 +28,10 @@ export function useSign() {
     try {
       const res = await signApi.batchSign()
       const { success_count, fail_count } = res.data
-      message.success(`批量签到完成：成功 ${success_count}，失败 ${fail_count}`)
+      window.$notify(`批量签到完成：成功 ${success_count}，失败 ${fail_count}`, 'success')
       return res.data
     } catch (e: any) {
-      message.error(e.message || '批量签到失败')
+      window.$notify(e.message || '批量签到失败', 'error')
       return null
     } finally {
       batchSigning.value = false

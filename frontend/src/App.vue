@@ -89,24 +89,52 @@
 
               <!-- 全局搜索 -->
               <div class="header-center">
-                <n-input
-                  v-model:value="searchKeyword"
-                  placeholder="搜索账号、日志..."
-                  clearable
-                  round
-                  size="small"
-                  class="global-search"
-                  @keyup.enter="handleGlobalSearch"
+                <n-popover
+                  trigger="manual"
+                  :show="searchResults.length > 0"
+                  placement="bottom"
+                  :width="350"
+                  @update:show="(show: boolean) => !show && (searchResults = [])"
                 >
-                  <template #prefix>
-                    <n-icon><SearchOutline /></n-icon>
+                  <template #trigger>
+                    <n-input
+                      v-model:value="searchKeyword"
+                      placeholder="搜索账号、日志..."
+                      clearable
+                      round
+                      size="small"
+                      class="global-search"
+                      :loading="searchLoading"
+                      @keyup.enter="handleGlobalSearch"
+                    >
+                      <template #prefix>
+                        <n-icon><SearchOutline /></n-icon>
+                      </template>
+                    </n-input>
                   </template>
-                </n-input>
+                  <div class="search-results">
+                    <div
+                      v-for="(result, index) in searchResults"
+                      :key="index"
+                      class="search-result-item"
+                      @click="handleSearchResultClick(result)"
+                    >
+                      <div class="search-result-badge">
+                        <span v-if="result.type === 'account'" class="badge-account">账号</span>
+                        <span v-else-if="result.type === 'log'" class="badge-log">日志</span>
+                      </div>
+                      <div class="search-result-content">
+                        <div class="search-result-title">{{ result.title }}</div>
+                        <div class="search-result-desc">{{ result.description }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </n-popover>
               </div>
 
               <!-- 右侧操作 -->
               <div class="header-right">
-                <!-- 通知中心 -->
+                <!--  -->
                 <n-popover trigger="click" placement="bottom-end" :width="320">
                   <template #trigger>
                     <n-badge :value="notifications.length" :max="99" :show="notifications.length > 0">
@@ -121,7 +149,7 @@
                       <n-button text size="tiny" @click="clearNotifications">清空</n-button>
                     </div>
                     <div class="notification-list" v-if="notifications.length > 0">
-                      <div v-for="(notif, index) in notifications" :key="index" class="notification-item">
+                      <div v-for="(notif, index) in notifications" :key="notif.id || index" class="notification-item">
                         <div class="notif-icon" :class="notif.type">
                           <n-icon :size="14">
                             <CheckmarkCircleOutline v-if="notif.type === 'success'" />
@@ -134,6 +162,16 @@
                           <div class="notif-title">{{ notif.title }}</div>
                           <div class="notif-time">{{ notif.time }}</div>
                         </div>
+                        <n-button
+                          text
+                          size="small"
+                          @click.stop="notifications.splice(index, 1)"
+                          class="notif-close"
+                        >
+                          <template #icon>
+                            <n-icon :size="14"><CloseOutline /></n-icon>
+                          </template>
+                        </n-button>
                       </div>
                     </div>
                     <div class="notification-empty" v-else>
@@ -171,44 +209,43 @@
             <main class="content">
               <router-view />
             </main>
-
-            <!-- 底部状态栏 -->
-            <footer class="footer">
-              <div class="footer-left">
-                <span class="footer-item">
-                  <n-icon :size="14"><CodeOutline /></n-icon>
-                  v1.0.0
-                </span>
-                <span class="footer-divider">|</span>
-                <span class="footer-item" :class="connectionStatus">
-                  <span class="status-dot"></span>
-                  {{ connectionStatus === 'connected' ? '已连接' : '未连接' }}
-                </span>
-              </div>
-              <div class="footer-right">
-                <span class="footer-item">
-                  <n-icon :size="14"><TimeOutline /></n-icon>
-                  最后同步: {{ lastSyncTime || '暂无' }}
-                </span>
-              </div>
-            </footer>
           </div>
 
-          <!-- 移动端底部导航 -->
-          <nav class="mobile-tabbar">
-            <div
-              v-for="item in menuItems"
-              :key="item.path"
-              class="tabbar-item"
-              :class="{ active: isActive(item.path) }"
-              @click="navigateTo(item.path)"
-            >
-              <n-icon :size="22"><component :is="item.icon" /></n-icon>
-              <span>{{ item.label }}</span>
+          <!-- 底部状态栏 -->
+          <footer class="footer">
+            <div class="footer-left">
+              <span class="footer-item">
+                <n-icon :size="14"><CodeOutline /></n-icon>
+                v{{ appVersion }}
+              </span>
+              <span class="footer-divider">|</span>
+              <span class="footer-item" :class="connectionStatus">
+                <span class="status-dot"></span>
+                {{ connectionStatus === 'connected' ? '已连接' : '未连接' }}
+              </span>
             </div>
-          </nav>
-        </div>
+            <div class="footer-right">
+              <span class="footer-item">
+                <n-icon :size="14"><TimeOutline /></n-icon>
+                最后同步: {{ lastSyncTime || '暂无' }}
+              </span>
+            </div>
+          </footer>
 
+        <!-- 移动端底部导航 -->
+        <nav class="mobile-tabbar">
+          <div
+            v-for="item in menuItems"
+            :key="item.path"
+            class="tabbar-item"
+            :class="{ active: isActive(item.path) }"
+            @click="navigateTo(item.path)"
+          >
+            <n-icon :size="22"><component :is="item.icon" /></n-icon>
+            <span>{{ item.label }}</span>
+          </div>
+        </nav>
+        </div>
         <!-- 修改密码弹窗 -->
         <n-modal v-model:show="showPasswordModal" :mask-closable="false">
           <div class="password-modal">
@@ -262,7 +299,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NIcon, createDiscreteApi, darkTheme } from 'naive-ui'
+import { NIcon, darkTheme } from 'naive-ui'
 import type { GlobalThemeOverrides, FormInst, FormRules } from 'naive-ui'
 import {
   GridOutline,
@@ -289,11 +326,16 @@ import {
   InformationCircleOutline,
   CodeOutline
 } from '@vicons/ionicons5'
-import { authApi } from './api'
+import { authApi, accountApi, signApi } from './api'
 import { removeToken, isLoggedIn } from './utils/auth'
 import { getActiveTheme, setThemeMode, type ThemeMode } from './utils'
 
-const { message } = createDiscreteApi(['message'])
+// 声明全局 $notify 函数类型
+declare global {
+  interface Window {
+    $notify: (title: string, type?: 'success' | 'warning' | 'error' | 'info', duration?: number) => void
+  }
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -304,13 +346,16 @@ const currentTheme = ref<'light' | 'dark'>(getActiveTheme())
 
 // 全局搜索
 const searchKeyword = ref('')
+const searchLoading = ref(false)
+const searchResults = ref<Array<{ type: 'account' | 'log'; title: string; description: string; data: any }>>([])
 
 // 通知中心
-const notifications = ref<Array<{ type: string; title: string; time: string }>>([])
+const notifications = ref<Array<{ type: 'success' | 'warning' | 'error' | 'info'; title: string; time: string; id?: string }>>([])
 
 // 连接状态
 const connectionStatus = ref<'connected' | 'disconnected'>('connected')
 const lastSyncTime = ref<string>('')
+const appVersion = ref<string>('0.0.0')
 
 // 修改密码
 const showPasswordModal = ref(false)
@@ -427,10 +472,84 @@ const toggleTheme = () => {
   currentTheme.value = newTheme
 }
 
-const handleGlobalSearch = () => {
-  if (searchKeyword.value.trim()) {
-    message.info(`搜索: ${searchKeyword.value}`)
-    // TODO: 实现全局搜索功能
+const handleGlobalSearch = async () => {
+  const keyword = searchKeyword.value.trim()
+  if (!keyword) {
+    searchResults.value = []
+    return
+  }
+
+  searchLoading.value = true
+  searchResults.value = []
+
+  try {
+    const keyword_lower = keyword.toLowerCase()
+
+    // 搜索账号
+    try {
+      const accountRes: any = await accountApi.getList()
+      if (accountRes.data) {
+        const accounts = Array.isArray(accountRes.data) ? accountRes.data : []
+        accounts.forEach((account: any) => {
+          if (
+            account.username?.toLowerCase().includes(keyword_lower) ||
+            account.user_id?.toString().includes(keyword)
+          ) {
+            searchResults.value.push({
+              type: 'account',
+              title: account.username || `账号 ${account.user_id}`,
+              description: `用户ID: ${account.user_id}`,
+              data: account
+            })
+          }
+        })
+      }
+    } catch (e) {
+      console.error('Search accounts failed:', e)
+    }
+
+    // 搜索签到日志
+    try {
+      const logsRes: any = await signApi.getAllLogs({ size: 50 })
+      if (logsRes.data?.data) {
+        logsRes.data.data.forEach((log: any) => {
+          if (
+            log.account?.username?.toLowerCase().includes(keyword_lower) ||
+            log.user_id?.toString().includes(keyword) ||
+            log.error_msg?.toLowerCase().includes(keyword_lower)
+          ) {
+            searchResults.value.push({
+              type: 'log',
+              title: `${log.account?.username || '未知账号'} - ${log.success ? '成功' : '失败'}`,
+              description: `时间: ${new Date(log.created_at).toLocaleString()}`,
+              data: log
+            })
+          }
+        })
+      }
+    } catch (e) {
+      console.error('Search logs failed:', e)
+    }
+
+    if (searchResults.value.length === 0) {
+      window.$notify('未找到相关内容', 'info')
+    }
+  } catch (e) {
+    window.$notify('搜索失败', 'error')
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+// 搜索结果导航
+const handleSearchResultClick = (result: any) => {
+  searchKeyword.value = ''
+  searchResults.value = []
+
+  if (result.type === 'account') {
+    router.push(`/account/${result.data.id}`)
+  } else if (result.type === 'log') {
+    router.push('/logs')
   }
 }
 
@@ -438,10 +557,33 @@ const clearNotifications = () => {
   notifications.value = []
 }
 
+// 添加通知的函数
+const addNotification = (title: string, type: 'success' | 'warning' | 'error' | 'info' = 'info', duration = 5000) => {
+  const id = `notif-${Date.now()}-${Math.random()}`
+  const notif = {
+    id,
+    title,
+    type,
+    time: new Date().toLocaleTimeString()
+  }
+
+  notifications.value.push(notif)
+
+  // 自动移除通知
+  if (duration > 0) {
+    setTimeout(() => {
+      notifications.value = notifications.value.filter(n => n.id !== id)
+    }, duration)
+  }
+}
+
+// 全局通知函数 - 提供给其他组件使用
+window.$notify = addNotification as any
+
 const handleUserMenuSelect = (key: string) => {
   if (key === 'logout') {
     removeToken()
-    message.success('已退出登录')
+    window.$notify('已退出登录', 'success')
     router.push('/login')
   } else if (key === 'change-password') {
     passwordForm.value = { old_password: '', new_password: '', confirm_password: '' }
@@ -462,12 +604,12 @@ const handleChangePassword = async () => {
       old_password: passwordForm.value.old_password,
       new_password: passwordForm.value.new_password
     })
-    message.success('密码修改成功，请重新登录')
+    window.$notify('密码修改成功，请重新登录', 'success')
     showPasswordModal.value = false
     removeToken()
     router.push('/login')
   } catch (e: any) {
-    message.error(e.message || '修改失败')
+    window.$notify(e.message || '修改失败', 'error')
   } finally {
     changingPassword.value = false
   }
@@ -490,8 +632,21 @@ const updateSyncTime = () => {
   lastSyncTime.value = new Date().toLocaleTimeString()
 }
 
+// 加载应用版本
+const loadAppVersion = async () => {
+  try {
+    const res: any = await authApi.getMe()
+    if (res.data?.app_version) {
+      appVersion.value = res.data.app_version
+    }
+  } catch (e) {
+    console.error('Failed to load app version:', e)
+  }
+}
+
 onMounted(() => {
   loadCurrentUser()
+  loadAppVersion()
   updateSyncTime()
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
@@ -515,6 +670,7 @@ const themeOverrides: GlobalThemeOverrides = {
 <style scoped>
 .layout {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: var(--bg-color);
 }
@@ -712,7 +868,6 @@ const themeOverrides: GlobalThemeOverrides = {
   margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
   transition: margin-left 0.3s ease;
 }
 
@@ -749,6 +904,79 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .global-search {
   width: 100%;
+}
+
+/* 搜索结果 */
+.search-results {
+  padding: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.search-result-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-badge {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.badge-account {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.badge-log {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--info-color);
+  color: white;
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.search-result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-result-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-desc {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-right {
@@ -820,6 +1048,16 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .notification-item:last-child {
   border-bottom: none;
+}
+
+.notif-close {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.notification-item:hover .notif-close {
+  opacity: 1;
 }
 
 .notif-icon {
@@ -919,6 +1157,8 @@ const themeOverrides: GlobalThemeOverrides = {
   padding: 0 var(--spacing-6);
   font-size: var(--text-xs);
   color: var(--text-tertiary);
+  margin-left: var(--sidebar-width);
+  transition: margin-left 0.3s ease;
 }
 
 .footer-left,
@@ -944,6 +1184,11 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .footer-divider {
   color: var(--border-color);
+}
+
+/* 侧边栏折叠时，footer 的 margin 也随之调整 */
+.layout > .sidebar.collapsed ~ .footer {
+  margin-left: var(--sidebar-collapsed-width);
 }
 
 .status-dot {

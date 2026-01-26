@@ -218,7 +218,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, h, nextTick } from 'vue'
-import { useMessage, NTag, NIcon, NProgress } from 'naive-ui'
+import { NTag, NIcon, NProgress } from 'naive-ui'
 import {
   CalendarOutline,
   TrophyOutline,
@@ -227,12 +227,11 @@ import {
   RefreshOutline,
   FlameOutline,
   ChevronBackOutline,
-  ChevronForwardOutline
+  ChevronForwardOutline,
 } from '@vicons/ionicons5'
 import { statisticsApi } from '../api'
 import * as echarts from 'echarts'
 
-const message = useMessage()
 
 const overview = ref<any>({})
 const dailyData = ref<any[]>([])
@@ -889,7 +888,7 @@ const loadAccountStats = async () => {
     const res = await statisticsApi.getAccounts()
     accountStats.value = res.data || []
   } catch (e: any) {
-    message.error(e.message)
+    window.$notify(e.message, 'error')
   } finally {
     loadingAccounts.value = false
   }
