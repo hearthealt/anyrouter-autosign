@@ -19,22 +19,23 @@ class FeishuNotify(NotifyBase):
     """飞书机器人推送"""
 
     def _get_sign(self, timestamp: str) -> str:
-        """生成签名"""
+        """生成签名
+        飞书签名验证与钉钉、企业微信等不同
+        key = timestamp + "\n" + secret
+        message = ""（空字符串）
+        """
         secret = self.config.get("secret", "")
         if not secret:
             return ""
 
-        string_to_sign = f'{timestamp}\n{secret}'
-        hmac_code = hmac.new(
-            string_to_sign.encode("utf-8"),
-            digestmod=hashlib.sha256
-        ).digest()
+        key = f'{timestamp}\n{secret}'
+        hmac_code = hmac.new(key.encode("utf-8"), "".encode("utf-8"), digestmod=hashlib.sha256).digest()
         sign = base64.b64encode(hmac_code).decode('utf-8')
         return sign
 
     def send(self, title: str, content: str, account_config: Dict[str, Any] = None) -> bool:
         try:
-            webhook = self.config.get("webhook")
+            webhook = self.config.get("webhook_url") or self.config.get("webhook")
             if not webhook:
                 logger.error("飞书 webhook 未配置")
                 return False
