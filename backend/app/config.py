@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).parent.parent  # 指向 backend 目录
 if ENVIRONMENT == 'development':
     ENV_FILE = BASE_DIR / '.env.local'
 else:
-    ENV_FILE = BASE_DIR / f'.env.production'
+    ENV_FILE = BASE_DIR / '.env.production'
 
 
 class Settings(BaseSettings):

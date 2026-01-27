@@ -216,17 +216,43 @@ def get_all_sign_logs(
     size: int = 20,
     account_id: int = None,
     success: bool = None,
+    start_date: str = None,
+    end_date: str = None,
     db: Session = Depends(get_db)
 ):
     """获取所有签到日志"""
-    query = db.query(SignLog, Account).join(Account, Account.id == SignLog.account_id)
 
+    def build_base_query():
+        """构建基础查询条件"""
+        q = db.query(SignLog).join(Account, Account.id == SignLog.account_id)
+        if account_id:
+            q = q.filter(SignLog.account_id == account_id)
+        if start_date:
+            q = q.filter(SignLog.sign_time >= datetime.fromisoformat(start_date))
+        if end_date:
+            q = q.filter(SignLog.sign_time < datetime.fromisoformat(end_date + " 23:59:59"))
+        return q
+
+    # 构建主查询（用于分页和统计）
+    query = db.query(SignLog, Account).join(Account, Account.id == SignLog.account_id)
     if account_id:
         query = query.filter(SignLog.account_id == account_id)
     if success is not None:
         query = query.filter(SignLog.success == success)
+    if start_date:
+        query = query.filter(SignLog.sign_time >= datetime.fromisoformat(start_date))
+    if end_date:
+        query = query.filter(SignLog.sign_time < datetime.fromisoformat(end_date + " 23:59:59"))
+
+    # 计算统计数据（基于过滤条件）
+    stats_query = build_base_query()
+    if success is not None:
+        stats_query = stats_query.filter(SignLog.success == success)
 
     total = query.count()
+    success_count = stats_query.filter(SignLog.success == True).count()
+    fail_count = stats_query.filter(SignLog.success == False).count()
+
     offset = (page - 1) * size
     logs = query.order_by(SignLog.sign_time.desc()).offset(offset).limit(size).all()
 
@@ -247,6 +273,8 @@ def get_all_sign_logs(
     return ApiResponse(success=True, data={
         "items": items,
         "total": total,
+        "success_count": success_count,
+        "fail_count": fail_count,
         "page": page,
         "size": size
     })

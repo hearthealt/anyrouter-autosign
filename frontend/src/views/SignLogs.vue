@@ -192,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   RefreshOutline,
   CheckmarkOutline,
@@ -237,12 +237,10 @@ const statusOptions = [
 ]
 
 // 统计数据
-const stats = computed(() => {
-  const successCount = logs.value.filter(l => l.success).length
-  const failCount = logs.value.filter(l => !l.success).length
-  const total = logs.value.length
-  const successRate = total > 0 ? Math.round((successCount / total) * 100) : 0
-  return { successCount, failCount, successRate }
+const stats = ref({
+  successCount: 0,
+  failCount: 0,
+  successRate: 0
 })
 
 const loadAccounts = async () => {
@@ -280,6 +278,13 @@ const loadLogs = async (page = 1) => {
     logs.value = res.data?.items || []
     pagination.value.itemCount = res.data?.total || 0
     pagination.value.page = page
+
+    // 更新统计数据
+    const successCount = res.data?.success_count || 0
+    const failCount = res.data?.fail_count || 0
+    const total = successCount + failCount
+    const successRate = total > 0 ? Math.round((successCount / total) * 100) : 0
+    stats.value = { successCount, failCount, successRate }
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {

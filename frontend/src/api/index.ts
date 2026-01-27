@@ -90,7 +90,7 @@ export const accountApi = {
 export const signApi = {
   sign: (accountId: number) => api.post(`/accounts/${accountId}/sign`),
   batchSign: () => api.post('/sign/batch'),
-  getAllLogs: (params?: { page?: number; size?: number; account_id?: number; success?: boolean }) =>
+  getAllLogs: (params?: { page?: number; size?: number; account_id?: number; success?: boolean; start_date?: string; end_date?: string }) =>
     api.get('/sign-logs', { params })
 }
 
