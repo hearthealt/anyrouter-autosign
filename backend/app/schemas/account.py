@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AccountCreate(BaseModel):
@@ -103,6 +103,8 @@ class AccountInfo(BaseModel):
 
 class CreateTokenRequest(BaseModel):
     """创建令牌请求"""
+    model_config = ConfigDict(protected_namespaces=())
+
     name: str
     remain_quota: int = 500000
     expired_time: int = -1  # -1 表示永不过期
