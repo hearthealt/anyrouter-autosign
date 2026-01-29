@@ -109,6 +109,8 @@ export interface SignLog {
   success: boolean
   message?: string
   reward_quota?: number
+  reward_display?: string
+  status?: 'success' | 'already_signed' | 'failed'
   retry_count: number
 }
 
@@ -116,11 +118,14 @@ export interface SignResult {
   success: boolean
   message: string
   reward_quota?: number
+  reward_display?: string
+  status?: 'success' | 'already_signed' | 'failed'
 }
 
 export interface BatchSignResult {
   success_count: number
   fail_count: number
+  already_signed_count?: number
   results: SignResult[]
 }
 

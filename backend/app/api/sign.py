@@ -80,14 +80,20 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     # 记录签到日志
     if already_signed:
         log_message = "今日已签到"
+        log_status = "already_signed"
+    elif sign_success:
+        log_message = message
+        log_status = "success"
     else:
         log_message = message
+        log_status = "failed"
 
     log = SignLog(
         account_id=account.id,
         success=sign_success,
         message=log_message,
-        reward_quota=reward_quota
+        reward_quota=reward_quota,
+        status=log_status
     )
     db.add(log)
     db.commit()
@@ -105,10 +111,13 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     # 返回结果
     if already_signed:
         return_message = "今日已签到"
+        status = "already_signed"
     elif sign_success:
         return_message = message or "签到成功"
+        status = "success"
     else:
         return_message = "签到失败"
+        status = "failed"
 
     return ApiResponse(
         success=True,
@@ -117,7 +126,8 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
             reward_quota=reward_quota,
             reward_display=format_quota(reward_quota),
             message=return_message,
-            sign_time=datetime.now()
+            sign_time=datetime.now(),
+            status=status
         )
     )
 
@@ -156,14 +166,20 @@ def batch_sign(db: Session = Depends(get_db)):
         # 记录日志
         if already_signed:
             log_message = "今日已签到"
+            log_status = "already_signed"
+        elif sign_success:
+            log_message = message
+            log_status = "success"
         else:
             log_message = message
+            log_status = "failed"
 
         log = SignLog(
             account_id=account.id,
             success=sign_success,
             message=log_message,
-            reward_quota=reward_quota
+            reward_quota=reward_quota,
+            status=log_status
         )
         db.add(log)
 
@@ -205,6 +221,7 @@ def batch_sign(db: Session = Depends(get_db)):
             total=len(accounts),
             success_count=success_count,
             fail_count=fail_count,
+            already_signed_count=already_signed_count,
             results=results
         )
     )
@@ -265,7 +282,8 @@ def get_all_sign_logs(
             "success": log.success,
             "message": log.message,
             "reward_quota": log.reward_quota,
-            "reward_display": format_quota(log.reward_quota)
+            "reward_display": format_quota(log.reward_quota),
+            "status": log.status
         }
         for log, account in logs
     ]

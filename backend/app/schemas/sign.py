@@ -12,6 +12,7 @@ class SignResult(BaseModel):
     reward_display: str
     message: str
     sign_time: datetime
+    status: str  # "success" 成功有奖励 | "already_signed" 已签到 | "failed" 失败
 
 
 class SignLogResponse(BaseModel):
@@ -23,6 +24,7 @@ class SignLogResponse(BaseModel):
     message: Optional[str] = None
     reward_quota: int
     reward_display: str
+    status: str = "failed"  # success | already_signed | failed
 
     class Config:
         from_attributes = True
@@ -41,4 +43,5 @@ class BatchSignResponse(BaseModel):
     total: int
     success_count: int
     fail_count: int
+    already_signed_count: int
     results: List[BatchSignResult]

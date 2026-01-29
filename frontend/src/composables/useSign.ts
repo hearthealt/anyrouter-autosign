@@ -12,8 +12,24 @@ export function useSign() {
     signing.value = true
     try {
       const res = await signApi.sign(accountId)
-      window.$notify(res.data?.message || '签到成功', 'success')
-      return res.data
+      const data = res.data
+      let notifyType: 'success' | 'info' | 'error' = 'success'
+      let message = data?.message || '签到成功'
+
+      // 根据状态显示不同的提示
+      if (data?.status === 'success') {
+        message = `签到成功，获得 ${data?.reward_display || '0'}`
+        notifyType = 'success'
+      } else if (data?.status === 'already_signed') {
+        message = '今日已签到，无新奖励'
+        notifyType = 'info'
+      } else if (data?.status === 'failed') {
+        message = data?.message || '签到失败'
+        notifyType = 'error'
+      }
+
+      window.$notify(message, notifyType)
+      return data
     } catch (e: any) {
       window.$notify(e.message || '签到失败', 'error')
       return null
@@ -27,8 +43,9 @@ export function useSign() {
     batchSigning.value = true
     try {
       const res = await signApi.batchSign()
-      const { success_count, fail_count } = res.data
-      window.$notify(`批量签到完成：成功 ${success_count}，失败 ${fail_count}`, 'success')
+      const { success_count, fail_count, already_signed_count = 0 } = res.data
+      const message = `签到完成 - 成功 ${success_count}，已签过 ${already_signed_count}，失败 ${fail_count}`
+      window.$notify(message, 'success')
       return res.data
     } catch (e: any) {
       window.$notify(e.message || '批量签到失败', 'error')

@@ -110,15 +110,24 @@
 
       <!-- 列表视图 -->
       <div class="logs-list" v-if="!loading && logs.length > 0 && viewMode === 'list'">
-        <div v-for="log in logs" :key="log.id" class="log-item" :class="{ success: log.success, fail: !log.success }">
+        <div
+          v-for="log in logs"
+          :key="log.id"
+          class="log-item"
+          :class="getStatusClass(log.status)"
+        >
           <div class="log-avatar">
             <span>{{ (log.username || 'U')[0].toUpperCase() }}</span>
           </div>
           <div class="log-content">
             <div class="log-header">
               <span class="log-username">{{ log.username || '未知账号' }}</span>
-              <n-tag :type="log.success ? 'success' : 'error'" size="small" :bordered="false">
-                {{ log.success ? '签到成功' : '签到失败' }}
+              <n-tag
+                :type="getStatusTagType(log.status)"
+                size="small"
+                :bordered="false"
+              >
+                {{ getStatusLabel(log.status) }}
               </n-tag>
               <span class="log-reward" v-if="log.reward_quota">+{{ log.reward_display }}</span>
             </div>
@@ -132,13 +141,18 @@
               </span>
             </div>
           </div>
-          <div class="log-status-indicator" :class="log.success ? 'success' : 'fail'"></div>
+          <div class="log-status-indicator" :class="getStatusClass(log.status)"></div>
         </div>
       </div>
 
       <!-- 时间线视图 -->
       <div class="logs-timeline" v-if="!loading && logs.length > 0 && viewMode === 'timeline'">
-        <div v-for="log in logs" :key="log.id" class="timeline-item" :class="{ success: log.success, fail: !log.success }">
+        <div
+          v-for="log in logs"
+          :key="log.id"
+          class="timeline-item"
+          :class="getStatusClass(log.status)"
+        >
           <div class="timeline-dot">
             <n-icon :size="14">
               <CheckmarkOutline v-if="log.success" />
@@ -148,8 +162,11 @@
           <div class="timeline-content">
             <div class="timeline-header">
               <span class="timeline-username">{{ log.username || '未知账号' }}</span>
-              <span class="timeline-status" :class="log.success ? 'success' : 'fail'">
-                {{ log.success ? '签到成功' : '签到失败' }}
+              <span
+                class="timeline-status"
+                :class="getStatusClass(log.status)"
+              >
+                {{ getStatusLabel(log.status) }}
               </span>
               <span class="timeline-reward" v-if="log.reward_quota">+{{ log.reward_display }}</span>
             </div>
@@ -299,6 +316,48 @@ const handlePageChange = (page: number) => {
 const handlePageSizeChange = (pageSize: number) => {
   pagination.value.pageSize = pageSize
   loadLogs(1)
+}
+
+// 根据status返回标签类型
+const getStatusTagType = (status?: string): 'success' | 'warning' | 'error' => {
+  switch (status) {
+    case 'success':
+      return 'success'
+    case 'already_signed':
+      return 'warning'
+    case 'failed':
+      return 'error'
+    default:
+      return 'error'
+  }
+}
+
+// 根据status返回显示标签
+const getStatusLabel = (status?: string): string => {
+  switch (status) {
+    case 'success':
+      return '签到成功'
+    case 'already_signed':
+      return '今日已签到'
+    case 'failed':
+      return '签到失败'
+    default:
+      return '签到失败'
+  }
+}
+
+// 根据status返回样式类名
+const getStatusClass = (status?: string): string => {
+  switch (status) {
+    case 'success':
+      return 'success'
+    case 'already_signed':
+      return 'already-signed'
+    case 'failed':
+      return 'fail'
+    default:
+      return 'fail'
+  }
 }
 
 onMounted(() => {
@@ -527,6 +586,10 @@ onMounted(() => {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
+.log-item.already-signed .log-avatar {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
 .log-item.fail .log-avatar {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
@@ -595,6 +658,10 @@ onMounted(() => {
   background: var(--success-color);
 }
 
+.log-status-indicator.already-signed {
+  background: var(--warning-color);
+}
+
 .log-status-indicator.fail {
   background: var(--error-color);
 }
@@ -637,6 +704,11 @@ onMounted(() => {
   color: var(--success-color);
 }
 
+.timeline-item.already-signed .timeline-dot {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
 .timeline-item.fail .timeline-dot {
   background: var(--error-color-light);
   color: var(--error-color);
@@ -673,6 +745,11 @@ onMounted(() => {
 .timeline-status.success {
   background: var(--success-color-light);
   color: var(--success-color);
+}
+
+.timeline-status.already-signed {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
 }
 
 .timeline-status.fail {
