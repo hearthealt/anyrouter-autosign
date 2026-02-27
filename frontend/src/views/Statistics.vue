@@ -580,13 +580,7 @@ const updateTrendChart = () => {
         }
       }
     },
-    dataZoom: [
-      {
-        type: 'inside',
-        start: 0,
-        end: 100
-      }
-    ],
+    dataZoom: [],
     series: [
       {
         name: '成功',
