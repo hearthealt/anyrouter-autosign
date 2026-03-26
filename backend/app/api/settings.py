@@ -3,7 +3,8 @@
 """
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request
+from urllib.parse import urlsplit, urlunsplit
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -23,7 +24,9 @@ DEFAULT_SETTINGS = {
     "health_check_interval": 6,
     "sign_retry_enabled": True,
     "sign_max_retries": 3,
-    "sign_retry_interval": 30
+    "sign_retry_interval": 30,
+    "anyrouter_proxy_enabled": False,
+    "anyrouter_proxy_url": ""
 }
 
 
@@ -53,6 +56,34 @@ def set_setting(db: Session, key: str, value):
         db.add(setting)
 
 
+def validate_proxy_url(proxy_url: str):
+    """验证代理地址格式，仅支持 HTTP/HTTPS 代理。"""
+    parsed = urlsplit(proxy_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="代理地址格式无效，请填写 HTTP/HTTPS 代理地址")
+
+
+def mask_proxy_url(proxy_url: str) -> str:
+    """脱敏代理地址中的认证信息，避免写入审计日志。"""
+    parsed = urlsplit(proxy_url)
+    if not parsed.username or parsed.password is None:
+        return proxy_url
+
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+
+    return urlunsplit((
+        parsed.scheme,
+        f"{parsed.username}:***@{host}",
+        parsed.path,
+        parsed.query,
+        parsed.fragment
+    ))
+
+
 @router.get("", response_model=ApiResponse)
 def get_settings(db: Session = Depends(get_db)):
     """获取系统设置"""
@@ -75,6 +106,22 @@ def update_settings(
 ):
     """更新系统设置"""
     update_data = data.model_dump(exclude_unset=True)
+    current_settings = {
+        key: get_setting(db, key, default)
+        for key, default in DEFAULT_SETTINGS.items()
+    }
+
+    if isinstance(update_data.get("anyrouter_proxy_url"), str):
+        update_data["anyrouter_proxy_url"] = update_data["anyrouter_proxy_url"].strip()
+
+    merged_settings = {**current_settings, **update_data}
+    proxy_enabled = merged_settings.get("anyrouter_proxy_enabled", False)
+    proxy_url = merged_settings.get("anyrouter_proxy_url", "")
+
+    if proxy_enabled:
+        if not proxy_url:
+            raise HTTPException(status_code=400, detail="启用代理时必须填写代理地址")
+        validate_proxy_url(proxy_url)
 
     for key, value in update_data.items():
         if value is not None:
@@ -91,13 +138,17 @@ def update_settings(
         update_health_check_schedule()
 
     # 记录审计日志
+    audit_detail = update_data.copy()
+    if isinstance(audit_detail.get("anyrouter_proxy_url"), str) and audit_detail["anyrouter_proxy_url"]:
+        audit_detail["anyrouter_proxy_url"] = mask_proxy_url(audit_detail["anyrouter_proxy_url"])
+
     log_action(
         db=db,
         action=AuditAction.SETTING_UPDATE,
         user_id=current_user.id,
         username=current_user.username,
         target_type="setting",
-        detail=update_data,
+        detail=audit_detail,
         request=request
     )
 

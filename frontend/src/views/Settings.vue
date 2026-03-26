@@ -140,6 +140,36 @@
                 <span class="setting-disabled-text">签到失败后自动重试</span>
               </div>
             </div>
+
+            <!-- AnyRouter 代理卡片 -->
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div class="setting-card-icon proxy">
+                  <n-icon :size="20"><GlobeOutline /></n-icon>
+                </div>
+                <div class="setting-card-title">
+                  <span>AnyRouter 代理</span>
+                  <n-switch v-model:value="settings.anyrouter_proxy_enabled" size="small" />
+                </div>
+              </div>
+              <div class="setting-card-body" v-if="settings.anyrouter_proxy_enabled">
+                <div class="setting-stack">
+                  <span class="setting-row-label">代理地址</span>
+                  <n-input
+                    v-model:value="settings.anyrouter_proxy_url"
+                    size="small"
+                    clearable
+                    placeholder="http://127.0.0.1:7890"
+                  />
+                </div>
+                <div class="setting-note">
+                  仅影响服务端访问 AnyRouter 的请求，推荐填写 HTTP/HTTPS 代理地址
+                </div>
+              </div>
+              <div class="setting-card-footer" v-else>
+                <span class="setting-disabled-text">关闭后将直接连接 AnyRouter</span>
+              </div>
+            </div>
           </div>
 
           <div class="settings-footer">
@@ -737,7 +767,8 @@ import {
   TimeOutline,
   PulseOutline,
   RefreshOutline,
-  SearchOutline
+  SearchOutline,
+  GlobeOutline
 } from '@vicons/ionicons5'
 import { settingsApi, notifyApi, backupApi, groupsApi, auditApi, logsApi } from '../api'
 import { getToken } from '../utils/auth'
@@ -770,7 +801,9 @@ const settings = ref({
   health_check_interval: 6,
   sign_retry_enabled: true,
   sign_max_retries: 3,
-  sign_retry_interval: 30
+  sign_retry_interval: 30,
+  anyrouter_proxy_enabled: false,
+  anyrouter_proxy_url: ''
 })
 const schedulerStatus = ref({
   next_run: null as string | null
@@ -865,6 +898,13 @@ const loadSettings = async () => {
 }
 
 const saveSettings = async () => {
+  const proxyUrl = settings.value.anyrouter_proxy_url.trim()
+  if (settings.value.anyrouter_proxy_enabled && !proxyUrl) {
+    window.$notify('启用代理时请填写代理地址', 'warning')
+    return
+  }
+
+  settings.value.anyrouter_proxy_url = proxyUrl
   savingSettings.value = true
   try {
     await settingsApi.update(settings.value)
@@ -1541,7 +1581,7 @@ onMounted(() => {
 /* 自动签到设置 - 卡片网格布局 */
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--spacing-5);
   margin-bottom: var(--spacing-6);
 }
@@ -1591,6 +1631,10 @@ onMounted(() => {
   background: var(--warning-gradient);
 }
 
+.setting-card-icon.proxy {
+  background: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
+}
+
 .setting-card-title {
   flex: 1;
   display: flex;
@@ -1634,6 +1678,18 @@ onMounted(() => {
 .setting-row-unit {
   font-size: var(--text-sm);
   color: var(--text-tertiary);
+}
+
+.setting-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.setting-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
 }
 
 .setting-disabled-text {

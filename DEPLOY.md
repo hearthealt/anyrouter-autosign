@@ -15,8 +15,8 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/your-repo/anyrouter-autolog.git
-cd anyrouter-autolog
+git clone https://github.com/hearthealt/anyrouter-autosign.git
+cd anyrouter-autosign
 ```
 
 ### 2. 启动后端
@@ -168,9 +168,9 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/anyrouter-autolog/backend
-Environment="PATH=/opt/anyrouter-autolog/backend/venv/bin"
-ExecStart=/opt/anyrouter-autolog/backend/venv/bin/gunicorn app.main:app \
+WorkingDirectory=/opt/anyrouter-autosign/backend
+Environment="PATH=/opt/anyrouter-autosign/backend/venv/bin"
+ExecStart=/opt/anyrouter-autosign/backend/venv/bin/gunicorn app.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 127.0.0.1:8000
@@ -210,7 +210,7 @@ server {
 
     # 前端静态文件
     location / {
-        root /opt/anyrouter-autolog/frontend/dist;
+        root /opt/anyrouter-autosign/frontend/dist;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
@@ -268,6 +268,8 @@ server {
 | `DATABASE_URL` | 数据库连接 | sqlite:///./data/anyrouter.db |
 | `REQUEST_TIMEOUT` | 请求超时(秒) | 30 |
 | `RETRY_TIMES` | 重试次数 | 3 |
+| `ANYROUTER_PROXY_ENABLED` | AnyRouter 出站代理默认开关 | false |
+| `ANYROUTER_PROXY_URL` | AnyRouter 出站代理默认地址 | 空 |
 
 在 `backend/.env` 文件中配置：
 
@@ -275,7 +277,15 @@ server {
 APP_NAME=AnyRouter Admin
 DEBUG=false
 DATABASE_URL=sqlite:///./data/anyrouter.db
+ANYROUTER_PROXY_ENABLED=false
+ANYROUTER_PROXY_URL=
 ```
+
+说明：
+
+- `ANYROUTER_PROXY_ENABLED` 和 `ANYROUTER_PROXY_URL` 是后端启动时的默认值
+- 如果你已经在前端「系统设置」页面保存了代理配置，运行时会优先使用页面保存的配置
+- 代理仅作用于后端访问 AnyRouter 的请求，不影响浏览器访问前端页面
 
 ---
 
@@ -296,18 +306,25 @@ chmod 755 backend/data
 - 检查 user_id 是否正确
 - 查看后端日志排查问题
 
-### 3. 定时任务不执行
+### 3. 无法访问 AnyRouter / 请求超时
+
+- 如果服务器所在网络无法直连 AnyRouter，可在「系统设置」中开启 AnyRouter 代理
+- 代理地址需填写 `http://` 或 `https://` 格式
+- 如果使用带认证代理，确认用户名和密码正确
+- 查看后端日志确认是否为代理连接失败、超时或认证失败
+
+### 4. 定时任务不执行
 
 - 确认已在设置中开启自动签到
 - 检查后端服务是否正常运行
 - 查看日志确认调度器状态
 
-### 4. 前端无法访问后端
+### 5. 前端无法访问后端
 
 - 开发环境：检查 vite.config.ts 中的代理配置
 - 生产环境：检查 Nginx 反向代理配置
 
-### 5. 跨域问题
+### 6. 跨域问题
 
 后端已配置 CORS 允许所有来源，如需限制，修改 `backend/app/main.py`：
 
@@ -343,7 +360,7 @@ BACKUP_DIR="/opt/backups/anyrouter"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 mkdir -p $BACKUP_DIR
-cp /opt/anyrouter-autolog/backend/data/anyrouter.db $BACKUP_DIR/anyrouter_$DATE.db
+cp /opt/anyrouter-autosign/backend/data/anyrouter.db $BACKUP_DIR/anyrouter_$DATE.db
 
 # 保留最近 7 天的备份
 find $BACKUP_DIR -name "anyrouter_*.db" -mtime +7 -delete

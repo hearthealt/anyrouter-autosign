@@ -82,12 +82,62 @@ class AnyRouterService:
         self.anti_crawler = AntiCrawlerSolver()
         self.base_url = settings.anyrouter_base_url
 
+    @staticmethod
+    def _parse_setting_value(raw_value: Any) -> Any:
+        """解析设置表中的值。"""
+        if raw_value is None:
+            return None
+
+        try:
+            return json.loads(raw_value)
+        except (TypeError, json.JSONDecodeError):
+            return raw_value
+
+    def _get_proxy_config(self) -> Dict[str, str]:
+        """读取 AnyRouter 出站代理配置。"""
+        proxy_enabled = settings.anyrouter_proxy_enabled
+        proxy_url = (settings.anyrouter_proxy_url or "").strip()
+        db = None
+
+        try:
+            from app.database import SessionLocal
+            from app.models.setting import Setting
+
+            db = SessionLocal()
+            proxy_settings = db.query(Setting).filter(
+                Setting.key.in_(["anyrouter_proxy_enabled", "anyrouter_proxy_url"])
+            ).all()
+            parsed_settings = {
+                item.key: self._parse_setting_value(item.value)
+                for item in proxy_settings
+            }
+
+            if "anyrouter_proxy_enabled" in parsed_settings:
+                proxy_enabled = bool(parsed_settings["anyrouter_proxy_enabled"])
+            if parsed_settings.get("anyrouter_proxy_url") is not None:
+                proxy_url = str(parsed_settings["anyrouter_proxy_url"]).strip()
+        except Exception as e:
+            logger.debug(f"加载 AnyRouter 代理配置失败，继续使用默认配置: {e}")
+        finally:
+            if db is not None:
+                db.close()
+
+        if not proxy_enabled or not proxy_url:
+            return {}
+
+        return {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+
     def _get_session(self) -> requests.Session:
         """
         获取新的 Session 实例
         避免在多线程环境下复用 Session 导致的 SSL 连接问题
         """
         session = requests.Session()
+        # 关闭 requests 对环境变量代理的自动继承，统一走页面配置。
+        session.trust_env = False
         # 配置重试适配器，增强连接稳定性
         from requests.adapters import HTTPAdapter
         from urllib3.util.retry import Retry
@@ -100,6 +150,9 @@ class AnyRouterService:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
+        proxy_config = self._get_proxy_config()
+        if proxy_config:
+            session.proxies.update(proxy_config)
         return session
 
     def _get_headers(self, user_id: str) -> Dict[str, str]:

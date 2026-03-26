@@ -226,6 +226,8 @@ export interface SystemSettings {
   sign_retry_enabled: boolean
   sign_max_retries: number
   sign_retry_interval: number
+  anyrouter_proxy_enabled: boolean
+  anyrouter_proxy_url: string
 }
 
 // 审计日志相关类型

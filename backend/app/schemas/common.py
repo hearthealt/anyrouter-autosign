@@ -21,6 +21,8 @@ class SettingsResponse(BaseModel):
     sign_retry_enabled: bool = True
     sign_max_retries: int = 3
     sign_retry_interval: int = 30
+    anyrouter_proxy_enabled: bool = False
+    anyrouter_proxy_url: str = ""
 
 
 class SettingsUpdate(BaseModel):
@@ -32,6 +34,8 @@ class SettingsUpdate(BaseModel):
     sign_retry_enabled: Optional[bool] = None
     sign_max_retries: Optional[int] = None
     sign_retry_interval: Optional[int] = None
+    anyrouter_proxy_enabled: Optional[bool] = None
+    anyrouter_proxy_url: Optional[str] = None
 
 
 class RecentSign(BaseModel):

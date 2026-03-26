@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     anyrouter_groups_api: str = "/api/user/self/groups"
     anyrouter_token_api: str = "/api/token/"
     anyrouter_status_api: str = "/api/status"
+    anyrouter_proxy_enabled: bool = False
+    anyrouter_proxy_url: str = ""
 
     # ============ 反爬虫配置 ============
     anti_crawler_mask: str = "3000176000856006061501533003690027800375"
@@ -97,4 +99,3 @@ print(ENVIRONMENT)
 print(f"🌍 应用环境: {settings.environment.upper()}")
 print(f"🔧 调试模式: {settings.debug}")
 print(f"📝 日志级别: {settings.log_level}")
-
