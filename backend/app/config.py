@@ -8,8 +8,12 @@
 - 不变配置：AnyRouter API、JWT、请求配置 等（所有环境相同）
 """
 import os
+from datetime import timezone, timedelta
 from pathlib import Path
 from pydantic_settings import BaseSettings
+
+# 统一使用中国上海时区 (UTC+8)
+SHANGHAI_TZ = timezone(timedelta(hours=8))
 
 
 # 获取当前环境

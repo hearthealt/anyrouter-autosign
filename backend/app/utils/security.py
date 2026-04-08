@@ -6,7 +6,7 @@ from typing import Optional
 
 from jose import jwt, JWTError
 
-from app.config import settings
+from app.config import settings, SHANGHAI_TZ
 
 
 def hash_password(password: str) -> str:
@@ -65,9 +65,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(SHANGHAI_TZ) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+        expire = datetime.now(SHANGHAI_TZ) + timedelta(hours=settings.jwt_expire_hours)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
