@@ -449,30 +449,40 @@ const handleDeleteToken = async (token: ApiToken) => {
   }
 }
 
-const handleCreateToken = async (data: CreateTokenParams) => {
-  if (!tokenAccount.value) return false
+const handleCreateToken = async (data: CreateTokenParams, done?: (success: boolean) => void) => {
+  if (!tokenAccount.value) {
+    done?.(false)
+    return false
+  }
   try {
     await accountApi.createToken(tokenAccount.value.id, data)
     const res: any = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
     window.$notify('令牌创建成功', 'success')
+    done?.(true)
     return true
   } catch (e: any) {
     window.$notify(e.message || '创建失败', 'error')
+    done?.(false)
     return false
   }
 }
 
-const handleEditToken = async (tokenId: number, data: CreateTokenParams) => {
-  if (!tokenAccount.value) return false
+const handleEditToken = async (tokenId: number, data: CreateTokenParams, done?: (success: boolean) => void) => {
+  if (!tokenAccount.value) {
+    done?.(false)
+    return false
+  }
   try {
     await accountApi.updateToken(tokenAccount.value.id, tokenId, data)
     const res: any = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
     window.$notify('令牌更新成功', 'success')
+    done?.(true)
     return true
   } catch (e: any) {
     window.$notify(e.message || '更新失败', 'error')
+    done?.(false)
     return false
   }
 }
@@ -543,15 +553,32 @@ const handleAccountSubmit = async (data: {
 const loadData = async () => {
   loading.value = true
   try {
-    const [accountsRes, groupsRes, platformsRes] = await Promise.all([
+    const [accountsRes, groupsRes, platformsRes] = await Promise.allSettled([
       accountApi.getList(),
       groupsApi.getList(),
       platformApi.getList()
     ])
 
-    accounts.value = accountsRes.data || []
-    groups.value = groupsRes.data || []
-    platforms.value = platformsRes.data || []
+    if (accountsRes.status === 'fulfilled') {
+      accounts.value = accountsRes.value.data || []
+    } else {
+      accounts.value = []
+      window.$notify(accountsRes.reason?.message || '加载账号数据失败', 'error')
+    }
+
+    if (groupsRes.status === 'fulfilled') {
+      groups.value = groupsRes.value.data || []
+    } else {
+      groups.value = []
+      console.error('Failed to load groups:', groupsRes.reason)
+    }
+
+    if (platformsRes.status === 'fulfilled') {
+      platforms.value = platformsRes.value.data || []
+    } else {
+      platforms.value = []
+      console.error('Failed to load platforms:', platformsRes.reason)
+    }
   } catch (e: any) {
     window.$notify(e.message || '加载账号数据失败', 'error')
   } finally {

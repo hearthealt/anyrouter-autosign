@@ -718,30 +718,40 @@ const handleDeleteToken = async (token: ApiToken) => {
   }
 }
 
-const handleCreateToken = async (data: CreateTokenParams) => {
-  if (!tokenAccount.value) return
+const handleCreateToken = async (data: CreateTokenParams, done?: (success: boolean) => void) => {
+  if (!tokenAccount.value) {
+    done?.(false)
+    return false
+  }
   try {
     await accountApi.createToken(tokenAccount.value.id, data)
     window.$notify('令牌创建成功', 'success')
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
+    done?.(true)
     return true
   } catch (e: any) {
     window.$notify(e.message, 'error')
+    done?.(false)
     return false
   }
 }
 
-const handleEditToken = async (tokenId: number, data: CreateTokenParams) => {
-  if (!tokenAccount.value) return
+const handleEditToken = async (tokenId: number, data: CreateTokenParams, done?: (success: boolean) => void) => {
+  if (!tokenAccount.value) {
+    done?.(false)
+    return false
+  }
   try {
     await accountApi.updateToken(tokenAccount.value.id, tokenId, data)
     window.$notify('令牌更新成功', 'success')
     const res = await accountApi.getTokens(tokenAccount.value.id)
     tokens.value = res.data || []
+    done?.(true)
     return true
   } catch (e: any) {
     window.$notify(e.message, 'error')
+    done?.(false)
     return false
   }
 }

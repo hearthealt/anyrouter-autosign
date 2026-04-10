@@ -6,7 +6,10 @@
 - [Docker 部署](#docker-部署)
 - [生产环境部署](#生产环境部署)
 - [Nginx 配置](#nginx-配置)
+- [环境变量与配置文件](#环境变量与配置文件)
+- [数据库迁移说明](#数据库迁移说明)
 - [常见问题](#常见问题)
+- [数据备份](#数据备份)
 
 ---
 
@@ -37,9 +40,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 创建数据目录
-mkdir -p data
+mkdir data
 
-# 启动服务
+# 开发环境会默认读取 backend/.env.local
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -49,11 +52,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 cd frontend
 
 # 安装依赖
-pnpm install
-# 或
 npm install
+# 或
+pnpm install
 
 # 开发模式启动
+npm run dev
+# 或
 pnpm dev
 ```
 
@@ -67,9 +72,9 @@ pnpm dev
 
 ## Docker 部署
 
-### 创建 Dockerfile
+以下内容为示例，需要你自行创建对应文件。
 
-**backend/Dockerfile**
+### backend/Dockerfile
 
 ```dockerfile
 FROM python:3.11-slim
@@ -83,23 +88,25 @@ COPY . .
 
 RUN mkdir -p /app/data
 
+ENV ENVIRONMENT=production
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**frontend/Dockerfile**
+### frontend/Dockerfile
 
 ```dockerfile
-FROM node:18-alpine as builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install
+COPY package.json package-lock.json ./
+RUN npm install
 
 COPY . .
-RUN pnpm build
+RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -108,10 +115,34 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 ```
 
+### frontend/nginx.conf
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
 ### docker-compose.yml
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   backend:
@@ -121,7 +152,8 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/anyrouter.db
+      ENVIRONMENT: production
+      DATABASE_URL: sqlite:///./data/anyrouter.db
     restart: unless-stopped
 
   frontend:
@@ -136,7 +168,7 @@ services:
 ### 启动
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ---
@@ -148,9 +180,10 @@ docker-compose up -d
 #### 使用 Gunicorn
 
 ```bash
+cd backend
 pip install gunicorn
 
-gunicorn app.main:app \
+ENVIRONMENT=production gunicorn app.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000
@@ -170,6 +203,7 @@ Type=simple
 User=www-data
 WorkingDirectory=/opt/anyrouter-autosign/backend
 Environment="PATH=/opt/anyrouter-autosign/backend/venv/bin"
+Environment="ENVIRONMENT=production"
 ExecStart=/opt/anyrouter-autosign/backend/venv/bin/gunicorn app.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
@@ -192,10 +226,13 @@ sudo systemctl start anyrouter-admin
 
 ```bash
 cd frontend
-pnpm build
+npm install
+npm run build
 ```
 
-构建产物在 `dist/` 目录，部署到 Web 服务器即可。
+如果你使用 `pnpm`，可替换为 `pnpm install` 和 `pnpm build`。
+
+构建产物在 `frontend/dist/` 目录，部署到 Web 服务器即可。
 
 ---
 
@@ -208,14 +245,12 @@ server {
     listen 80;
     server_name your-domain.com;
 
-    # 前端静态文件
     location / {
         root /opt/anyrouter-autosign/frontend/dist;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
 
-    # 后端 API 代理
     location /api {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -224,7 +259,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # 后端文档
     location /docs {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
@@ -253,39 +287,81 @@ server {
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    # ... 其他配置同上
+    location / {
+        root /opt/anyrouter-autosign/frontend/dist;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
 ---
 
-## 环境变量
+## 环境变量与配置文件
+
+### 加载规则
+
+- 默认环境为 `development`
+- `ENVIRONMENT=development` 时，后端读取 `backend/.env.local`
+- `ENVIRONMENT=production` 时，后端读取 `backend/.env.production`
+- 系统环境变量优先于文件中的同名配置
+- 示例模板见 `backend/.env.local.example`、`backend/.env.production.example`、`backend/.env.example`
+
+### 常用环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `APP_NAME` | 应用名称 | AnyRouter Admin |
-| `DEBUG` | 调试模式 | true |
-| `DATABASE_URL` | 数据库连接 | sqlite:///./data/anyrouter.db |
-| `REQUEST_TIMEOUT` | 请求超时(秒) | 30 |
-| `RETRY_TIMES` | 重试次数 | 3 |
-| `ANYROUTER_PROXY_ENABLED` | AnyRouter 出站代理默认开关 | false |
-| `ANYROUTER_PROXY_URL` | AnyRouter 出站代理默认地址 | 空 |
+| `ENVIRONMENT` | 运行环境，`development` 或 `production` | `development` |
+| `APP_NAME` | 应用名称 | `AnyRouter Admin` |
+| `DEBUG` | 是否开启调试 | `false` |
+| `DATABASE_URL` | 数据库连接字符串 | `sqlite:///./data/anyrouter.db` |
+| `REQUEST_TIMEOUT` | 请求超时秒数 | `30` |
+| `RETRY_TIMES` | 重试次数 | `3` |
+| `RETRY_INTERVAL` | 重试间隔秒数 | `3` |
+| `ANYROUTER_PROXY_ENABLED` | 后端平台代理默认开关 | `false` |
+| `ANYROUTER_PROXY_URL` | 后端平台代理地址 | 空 |
+| `DEFAULT_ADMIN_USERNAME` | 默认管理员用户名 | `admin` |
+| `DEFAULT_ADMIN_PASSWORD` | 默认管理员密码 | `admin123` |
 
-在 `backend/.env` 文件中配置：
+### 生产环境示例
+
+`backend/.env.production`
 
 ```env
-APP_NAME=AnyRouter Admin
 DEBUG=false
 DATABASE_URL=sqlite:///./data/anyrouter.db
 ANYROUTER_PROXY_ENABLED=false
 ANYROUTER_PROXY_URL=
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=admin123
 ```
 
 说明：
 
 - `ANYROUTER_PROXY_ENABLED` 和 `ANYROUTER_PROXY_URL` 是后端启动时的默认值
 - 如果你已经在前端「系统设置」页面保存了代理配置，运行时会优先使用页面保存的配置
-- 代理仅作用于后端访问 AnyRouter 的请求，不影响浏览器访问前端页面
+- 代理仅作用于后端访问目标平台的请求，不影响浏览器访问前端页面
+
+---
+
+## 数据库迁移说明
+
+后端启动时会自动执行数据库初始化和兼容迁移，无需手动改表。当前版本会自动处理以下内容：
+
+- 如果没有平台数据，会自动创建默认平台 `AnyRouter`
+- 旧版数据库缺少 `accounts.platform_id` 时，会自动补列并把旧账号回填到默认平台
+- 旧版数据库缺少 `platforms.checkin_api` 时，会自动补列并回填默认值 `/api/user/checkin`
+- 如果默认平台被删除后仍有其它平台，系统会自动提升最早创建的平台为新的默认平台
+
+生产环境升级前，仍然建议先备份数据库文件。
 
 ---
 
@@ -296,19 +372,20 @@ ANYROUTER_PROXY_URL=
 默认在 `backend/data/anyrouter.db`，确保目录存在且有写入权限：
 
 ```bash
-mkdir -p backend/data
-chmod 755 backend/data
+cd backend
+mkdir data
 ```
 
 ### 2. 签到失败
 
-- 检查账号的 session_cookie 是否过期
-- 检查 user_id 是否正确
+- 检查账号的 `session_cookie` 是否过期
+- 检查 `user_id` 是否正确
+- 检查账号关联的平台接口路径是否填写正确，尤其是 `sign_api` 和 `checkin_api`
 - 查看后端日志排查问题
 
-### 3. 无法访问 AnyRouter / 请求超时
+### 3. 无法访问目标平台或请求超时
 
-- 如果服务器所在网络无法直连 AnyRouter，可在「系统设置」中开启 AnyRouter 代理
+- 如果服务器所在网络无法直连目标平台，可在「系统设置」中开启后端平台代理
 - 代理地址需填写 `http://` 或 `https://` 格式
 - 如果使用带认证代理，确认用户名和密码正确
 - 查看后端日志确认是否为代理连接失败、超时或认证失败
@@ -321,7 +398,7 @@ chmod 755 backend/data
 
 ### 5. 前端无法访问后端
 
-- 开发环境：检查 vite.config.ts 中的代理配置
+- 开发环境：检查 `frontend/vite.config.ts`，如果你使用的是 JS 配置文件则检查 `frontend/vite.config.js`
 - 生产环境：检查 Nginx 反向代理配置
 
 ### 6. 跨域问题
@@ -362,7 +439,6 @@ DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 cp /opt/anyrouter-autosign/backend/data/anyrouter.db $BACKUP_DIR/anyrouter_$DATE.db
 
-# 保留最近 7 天的备份
 find $BACKUP_DIR -name "anyrouter_*.db" -mtime +7 -delete
 ```
 

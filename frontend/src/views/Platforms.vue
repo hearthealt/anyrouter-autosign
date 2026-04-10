@@ -247,7 +247,7 @@ const saving = ref(false)
 const formData = ref<PlatformForm>(createDefaultFormData())
 
 const defaultPlatform = computed(
-  () => platforms.value.find(platform => platform.is_default) ?? platforms.value[0] ?? null
+  () => platforms.value.find(platform => platform.is_default) ?? null
 )
 const totalAccounts = computed(() =>
   platforms.value.reduce((sum, platform) => sum + (platform.accounts_count ?? 0), 0)

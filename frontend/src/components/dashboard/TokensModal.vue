@@ -188,8 +188,8 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
   sync: []
   delete: [token: ApiToken]
-  create: [data: CreateTokenParams]
-  edit: [tokenId: number, data: CreateTokenParams]
+  create: [data: CreateTokenParams, done: (success: boolean) => void]
+  edit: [tokenId: number, data: CreateTokenParams, done: (success: boolean) => void]
 }>()
 
 const { copyToken: copyToClipboard } = useClipboard()
@@ -305,7 +305,7 @@ const openEditDrawer = (token: ApiToken) => {
   editingToken.value = token
   tokenForm.value = {
     name: token.name || '',
-    remain_quota: token.remain_quota || 500000,
+    remain_quota: token.remain_quota ?? 500000,
     expired_time: token.expired_time ?? -1,
     unlimited_quota: token.unlimited_quota || false,
     model_limits_enabled: token.model_limits_enabled || false,
@@ -336,11 +336,18 @@ const handleSaveToken = async () => {
   }
 
   try {
-    if (editingToken.value) {
-      emit('edit', editingToken.value.token_id, formData)
-    } else {
-      emit('create', formData)
+    const success = await new Promise<boolean>((resolve) => {
+      if (editingToken.value) {
+        emit('edit', editingToken.value.token_id, formData, resolve)
+      } else {
+        emit('create', formData, resolve)
+      }
+    })
+
+    if (!success) {
+      return
     }
+
     showDrawer.value = false
     resetForm()
   } finally {
