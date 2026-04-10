@@ -30,7 +30,6 @@ api.interceptors.response.use(
     // 401 未授权 - 跳转登录页
     if (status === 401) {
       removeToken()
-      // 避免在登录页面重复跳转
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
@@ -49,10 +48,19 @@ export const authApi = {
   changePassword: (data: { old_password: string; new_password: string }) => api.put('/auth/password', data)
 }
 
+// 平台 API
+export const platformApi = {
+  getList: () => api.get('/platforms'),
+  create: (data: { name: string; base_url: string; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string }) => api.post('/platforms', data),
+  get: (id: number) => api.get(`/platforms/${id}`),
+  update: (id: number, data: any) => api.put(`/platforms/${id}`, data),
+  delete: (id: number) => api.delete(`/platforms/${id}`)
+}
+
 // 账号 API
 export const accountApi = {
   getList: () => api.get('/accounts'),
-  create: (data: { session_cookie: string; user_id: string; group_id?: number }) => api.post('/accounts', data),
+  create: (data: { session_cookie: string; user_id: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
   get: (id: number) => api.get(`/accounts/${id}`),
   update: (id: number, data: any) => api.put(`/accounts/${id}`, data),
   delete: (id: number) => api.delete(`/accounts/${id}`),
@@ -60,28 +68,22 @@ export const accountApi = {
   getCachedInfo: (id: number) => api.get(`/accounts/${id}/cached-info`),
   getSignLogs: (id: number, page = 1, size = 20) =>
     api.get(`/accounts/${id}/sign-logs`, { params: { page, size } }),
-  // Token 相关
   getTokens: (id: number) => api.get(`/accounts/${id}/tokens`),
   syncTokens: (id: number) => api.post(`/accounts/${id}/tokens/sync`),
   createToken: (id: number, data: {
     name: string
     remain_quota: number
-    expired_time: number  // -1 表示永不过期
+    expired_time: number
     unlimited_quota: boolean
     model_limits_enabled: boolean
-    model_limits: string  // 逗号分隔的模型列表
+    model_limits: string
     allow_ips: string
     group: string
   }) => api.post(`/accounts/${id}/tokens`, data),
-  // 获取可用模型列表
   getAvailableModels: (id: number) => api.get(`/accounts/${id}/models`),
-  // 获取账号分组列表
   getAccountGroups: (id: number) => api.get(`/accounts/${id}/groups`),
-  // 删除令牌
   deleteToken: (id: number, tokenId: number) => api.delete(`/accounts/${id}/tokens/${tokenId}`),
-  // 更新令牌
   updateToken: (id: number, tokenId: number, data: any) => api.put(`/accounts/${id}/tokens/${tokenId}`, data),
-  // 健康检查
   healthCheck: (id: number) => api.post(`/accounts/${id}/health-check`),
   healthCheckAll: () => api.post('/accounts/health-check/all')
 }
@@ -128,7 +130,6 @@ export const apiEndpointsApi = {
 export const backupApi = {
   getInfo: () => api.get('/backup/info'),
   export: (includeLogs = false) => {
-    // 返回下载 URL，需要带上 token
     const token = getToken()
     return `/api/v1/backup/export?include_logs=${includeLogs}&token=${token}`
   },

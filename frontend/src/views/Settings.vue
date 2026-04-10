@@ -141,14 +141,14 @@
               </div>
             </div>
 
-            <!-- AnyRouter 代理卡片 -->
+            <!-- 平台代理卡片 -->
             <div class="setting-card">
               <div class="setting-card-header">
                 <div class="setting-card-icon proxy">
                   <n-icon :size="20"><GlobeOutline /></n-icon>
                 </div>
                 <div class="setting-card-title">
-                  <span>AnyRouter 代理</span>
+                  <span>平台代理</span>
                   <n-switch v-model:value="settings.anyrouter_proxy_enabled" size="small" />
                 </div>
               </div>
@@ -163,11 +163,11 @@
                   />
                 </div>
                 <div class="setting-note">
-                  仅影响服务端访问 AnyRouter 的请求，推荐填写 HTTP/HTTPS 代理地址
+                  仅影响服务端访问平台接口的请求，推荐填写 HTTP/HTTPS 代理地址
                 </div>
               </div>
               <div class="setting-card-footer" v-else>
-                <span class="setting-disabled-text">关闭后将直接连接 AnyRouter</span>
+                <span class="setting-disabled-text">关闭后将直接连接目标平台</span>
               </div>
             </div>
           </div>

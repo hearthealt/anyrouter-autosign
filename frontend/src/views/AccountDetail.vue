@@ -2,9 +2,9 @@
   <div class="account-detail-page">
     <!-- 顶部导航 -->
     <div class="page-nav">
-      <n-button text @click="router.push('/')">
+      <n-button text @click="router.push('/accounts')">
         <template #icon><n-icon><ArrowBackOutline /></n-icon></template>
-        返回仪表盘
+        返回账号管理
       </n-button>
     </div>
 
@@ -27,7 +27,7 @@
               </n-tag>
             </div>
             <div class="account-meta">
-              <span><n-icon><PersonOutline /></n-icon> ID: {{ account?.anyrouter_user_id || '-' }}</span>
+              <span><n-icon><PersonOutline /></n-icon> ID: {{ account?.anrouter_user_id || account?.anyrouter_user_id || '-' }}</span>
               <span><n-icon><TimeOutline /></n-icon> 创建于 {{ account ? formatDateTime(account.created_at) : '-' }}</span>
             </div>
             <div class="hero-quick-stats">
@@ -148,7 +148,7 @@
                 <div class="detail-icon"><n-icon><KeyOutline /></n-icon></div>
                 <div class="detail-content">
                   <span class="detail-label">用户ID</span>
-                  <span class="detail-value mono">{{ accountInfo?.id || account?.anyrouter_user_id || '-' }}</span>
+                  <span class="detail-value mono">{{ accountInfo?.id || account?.anrouter_user_id || account?.anyrouter_user_id || '-' }}</span>
                 </div>
               </div>
               <div class="detail-item">
@@ -202,7 +202,7 @@
               <div class="aff-link-box">
                 <span class="aff-link-label">推广链接</span>
                 <div class="aff-link-row">
-                  <code class="aff-link-code">https://anyrouter.top/register?aff={{ accountInfo.aff_code }}</code>
+                  <code class="aff-link-code">{{ getAffLink() }}</code>
                   <n-button size="small" type="primary" @click="copyAffLink">
                     <template #icon><n-icon><CopyOutline /></n-icon></template>
                     复制
@@ -282,6 +282,15 @@
         </div>
         <div class="modal-body">
           <div class="form-item">
+            <label>平台</label>
+            <n-select
+              v-model:value="editForm.platform_id"
+              :options="platformOptions"
+              placeholder="选择平台"
+              :loading="loadingPlatforms"
+            />
+          </div>
+          <div class="form-item">
             <label>User ID (new-api-user)</label>
             <n-input v-model:value="editForm.user_id" placeholder="留空则不修改" />
           </div>
@@ -343,7 +352,7 @@ import {
   TextOutline, KeyOutline, ShieldCheckmarkOutline, FolderOutline, CalendarOutline,
   ShareSocialOutline, DocumentTextOutline, NotificationsOutline
 } from '@vicons/ionicons5'
-import { accountApi, signApi, groupsApi, notifyApi } from '../api'
+import { accountApi, signApi, groupsApi, notifyApi, platformApi } from '../api'
 import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
 
 const route = useRoute()
@@ -365,6 +374,7 @@ const editForm = ref({
   user_id: '',
   session_cookie: '',
   is_active: true,
+  platform_id: null as number | null,
   group_id: null as number | null,
   notify_channel_ids: [] as number[]
 })
@@ -372,6 +382,12 @@ const editForm = ref({
 const groups = ref<any[]>([])
 const channelOptions = ref<{ label: string; value: number }[]>([])
 const loadingChannels = ref(false)
+const platformOptions = ref<{ label: string; value: number }[]>([])
+const loadingPlatforms = ref(false)
+
+const getAffBaseUrl = () => account.value?.platform?.base_url || ''
+
+const getAffLink = () => `${getAffBaseUrl()}/register?aff=${accountInfo.value?.aff_code || ''}`
 
 const getGroupColor = (color: string) => {
   const colors: Record<string, string> = {
@@ -401,6 +417,7 @@ const loadAccount = async () => {
     const res = await accountApi.get(accountId)
     account.value = res.data
     editForm.value.is_active = res.data.is_active
+    editForm.value.platform_id = res.data.platform?.id || null
     editForm.value.group_id = res.data.group_id || null
   } catch (e: any) {
     window.$notify(e.message, 'error')
@@ -477,6 +494,10 @@ const handleSign = async () => {
 const handleUpdate = async () => {
   updating.value = true
   try {
+    if (!editForm.value.platform_id) {
+      window.$notify('请选择平台', 'warning')
+      return
+    }
     const data: any = {
       is_active: editForm.value.is_active
     }
@@ -488,6 +509,9 @@ const handleUpdate = async () => {
     }
     if (editForm.value.group_id !== account.value?.group_id) {
       data.group_id = editForm.value.group_id || 0
+    }
+    if (editForm.value.platform_id !== account.value?.platform?.id) {
+      data.platform_id = editForm.value.platform_id
     }
 
     await accountApi.update(accountId, data)
@@ -517,7 +541,7 @@ const handleUpdate = async () => {
 
 const copyAffLink = () => {
   if (accountInfo.value?.aff_code) {
-    const link = `https://anyrouter.top/register?aff=${accountInfo.value.aff_code}`
+    const link = getAffLink()
     copyToClipboard(link).then(() => {
       window.$notify('推广链接已复制', 'success')
     }).catch(() => {
@@ -532,6 +556,25 @@ const loadGroups = async () => {
     groups.value = res.data || []
   } catch (e: any) {
     console.error('Failed to load groups:', e)
+  }
+}
+
+const loadPlatforms = async () => {
+  loadingPlatforms.value = true
+  try {
+    const res = await platformApi.getList()
+    const platforms = res.data || []
+    platformOptions.value = platforms.map((p: any) => ({
+      label: `${p.name} (${p.base_url})`,
+      value: p.id
+    }))
+    if (!editForm.value.platform_id && platforms.length > 0) {
+      editForm.value.platform_id = platforms[0].id
+    }
+  } catch (e: any) {
+    console.error('Failed to load platforms:', e)
+  } finally {
+    loadingPlatforms.value = false
   }
 }
 
@@ -567,10 +610,11 @@ const openEditModal = async () => {
   editForm.value.user_id = ''
   editForm.value.session_cookie = ''
   editForm.value.is_active = account.value?.is_active ?? true
+  editForm.value.platform_id = account.value?.platform?.id || null
   editForm.value.group_id = account.value?.group_id || null
   editForm.value.notify_channel_ids = []
 
-  await Promise.all([loadChannels(), loadAccountNotify()])
+  await Promise.all([loadPlatforms(), loadChannels(), loadAccountNotify()])
 }
 
 onMounted(() => {
@@ -578,6 +622,7 @@ onMounted(() => {
   loadAccountInfo()
   loadSignLogs()
   loadGroups()
+  loadPlatforms()
 })
 </script>
 

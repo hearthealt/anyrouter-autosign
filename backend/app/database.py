@@ -2,7 +2,7 @@
 数据库连接配置
 """
 import logging
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 from .config import settings
@@ -34,26 +34,109 @@ def get_db():
 def init_db():
     """初始化数据库"""
     # 导入所有模型以确保表被创建
-    from app.models import User, Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, Setting, ApiToken, ApiEndpoint
+    from app.models import User, Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, Setting, ApiToken, ApiEndpoint, Platform
 
     Base.metadata.create_all(bind=engine)
+    _migrate_platform_schema()
 
     # 初始化默认管理员
     _init_default_admin()
 
 
+def _migrate_platform_schema():
+    """将旧数据库迁移到平台化结构。"""
+    from app.models import Platform
+    from app.utils.platform import (
+        DEFAULT_BASE_URL,
+        DEFAULT_CHECKIN_API,
+        DEFAULT_CONSOLE_URL,
+        DEFAULT_GROUPS_API,
+        DEFAULT_MODELS_API,
+        DEFAULT_SIGN_API,
+        DEFAULT_STATUS_API,
+        DEFAULT_TOKEN_API,
+        DEFAULT_USER_API,
+    )
+
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("accounts"):
+            return
+
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+        if "platform_id" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN platform_id INTEGER"))
+            db.commit()
+            logger.info("已为 accounts 表添加 platform_id 列")
+
+        if inspector.has_table("platforms"):
+            platform_columns = {column["name"] for column in inspector.get_columns("platforms")}
+            if "checkin_api" not in platform_columns:
+                db.execute(text("ALTER TABLE platforms ADD COLUMN checkin_api VARCHAR(255)"))
+                db.commit()
+                logger.info("已为 platforms 表添加 checkin_api 列")
+
+            result = db.execute(
+                text("UPDATE platforms SET checkin_api = :checkin_api WHERE checkin_api IS NULL OR checkin_api = ''"),
+                {"checkin_api": DEFAULT_CHECKIN_API}
+            )
+            if result.rowcount:
+                db.commit()
+                logger.info(f"已为 {result.rowcount} 个平台回填 checkin_api")
+
+        default_platform = db.query(Platform).filter(Platform.is_default == True).first()
+        if default_platform is None:
+            anyrouter_platform = db.query(Platform).filter(Platform.base_url == DEFAULT_BASE_URL).first()
+            if anyrouter_platform is None:
+                anyrouter_platform = Platform(
+                    name="AnyRouter",
+                    base_url=DEFAULT_BASE_URL,
+                    sign_api=DEFAULT_SIGN_API,
+                    checkin_api=DEFAULT_CHECKIN_API,
+                    user_api=DEFAULT_USER_API,
+                    console_url=DEFAULT_CONSOLE_URL,
+                    models_api=DEFAULT_MODELS_API,
+                    groups_api=DEFAULT_GROUPS_API,
+                    token_api=DEFAULT_TOKEN_API,
+                    status_api=DEFAULT_STATUS_API,
+                    is_default=True,
+                )
+                db.add(anyrouter_platform)
+                db.commit()
+                db.refresh(anyrouter_platform)
+                logger.info("已创建默认平台 AnyRouter")
+            else:
+                anyrouter_platform.is_default = True
+                db.commit()
+                db.refresh(anyrouter_platform)
+                logger.info("已将现有 AnyRouter 平台设为默认平台")
+            default_platform = anyrouter_platform
+
+        result = db.execute(
+            text("UPDATE accounts SET platform_id = :platform_id WHERE platform_id IS NULL"),
+            {"platform_id": default_platform.id}
+        )
+        if result.rowcount:
+            db.commit()
+            logger.info(f"已为 {result.rowcount} 个旧账号回填默认平台")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"平台结构迁移失败: {e}")
+    finally:
+        db.close()
+
+
 def _init_default_admin():
     """初始化默认管理员账号"""
-    # 延迟导入避免循环依赖
     from app.models import User
     from app.utils import hash_password
 
     db = SessionLocal()
     try:
-        # 检查是否已存在用户
         user_count = db.query(User).count()
         if user_count == 0:
-            # 创建默认管理员
             admin = User(
                 username=settings.default_admin_username,
                 password_hash=hash_password(settings.default_admin_password),

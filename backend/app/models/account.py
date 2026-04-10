@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, synonym
 
 from app.database import Base
 
@@ -16,6 +16,7 @@ class Account(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_cookie = Column(Text, nullable=False)
     anyrouter_user_id = Column(Integer, nullable=True)
+    anrouter_user_id = synonym("anyrouter_user_id")
     username = Column(String(100), nullable=True)
     display_name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
@@ -26,6 +27,10 @@ class Account(Base):
     health_status = Column(String(20), default="unknown")  # healthy, unhealthy, unknown
     health_message = Column(String(255), nullable=True)
     last_health_check = Column(DateTime, nullable=True)
+
+    # 平台
+    platform_id = Column(Integer, ForeignKey("platforms.id"), nullable=True)
+    platform = relationship("Platform", back_populates="accounts")
 
     # 分组
     group_id = Column(Integer, ForeignKey("account_groups.id"), nullable=True)

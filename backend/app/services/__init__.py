@@ -1,7 +1,9 @@
 """
 业务服务
 """
-from .anyrouter import anyrouter_service, AnyRouterService
+from .anrouter import anrouter_service, AnyRouterService
 from .notify import NotifyFactory, NotifyBase
 
-__all__ = ["anyrouter_service", "AnyRouterService", "NotifyFactory", "NotifyBase"]
+anyrouter_service = anrouter_service
+
+__all__ = ["anrouter_service", "anyrouter_service", "AnyRouterService", "NotifyFactory", "NotifyBase"]

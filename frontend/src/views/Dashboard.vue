@@ -133,7 +133,7 @@
         <div class="status-card card">
           <div class="card-header">
             <h3 class="card-title">账号状态</h3>
-            <n-button text size="small" @click="showAllAccounts = true">查看全部</n-button>
+            <n-button text size="small" @click="$router.push('/accounts')">账号管理</n-button>
           </div>
 
           <div class="status-filter-row">
@@ -217,8 +217,8 @@
               暂无匹配的账号
             </div>
 
-            <div v-if="accounts.length > 6" class="view-all" @click="showAllAccounts = true">
-              查看全部 {{ accounts.length }} 个账号
+            <div v-if="accounts.length > 6" class="view-all" @click="$router.push('/accounts')">
+              进入账号管理 · {{ accounts.length }} 个账号
             </div>
           </div>
         </div>
@@ -597,6 +597,9 @@ const handleAccountSubmit = async (data: any) => {
       if (data.group_id !== editingAccount.value.group_id) {
         updateData.group_id = data.group_id || 0
       }
+      if (data.platform_id) {
+        updateData.platform_id = data.platform_id
+      }
       await accountApi.update(editingAccount.value.id, updateData)
 
       const notifyData = {
@@ -612,6 +615,7 @@ const handleAccountSubmit = async (data: any) => {
       const res = await accountApi.create({
         session_cookie: data.session_cookie,
         user_id: data.user_id,
+        platform_id: data.platform_id,
         group_id: data.group_id || undefined
       })
 

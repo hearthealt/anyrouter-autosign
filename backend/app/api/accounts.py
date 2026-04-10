@@ -7,18 +7,65 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken, User, AuditAction
+from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken, User, AuditAction, Platform
 from app.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountInfo,
     LastSign, ApiResponse
 )
-from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest
-from app.services import anyrouter_service
+from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest, PlatformBrief
+from app.services import anrouter_service
 from app.services.audit import log_action
-from app.utils import format_quota, format_quota_percent
+from app.utils import (
+    format_quota,
+    format_quota_percent,
+    get_platform_config,
+    get_account_platform_config,
+)
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/accounts", tags=["账号管理"])
+
+
+def get_platform_by_id(db: Session, platform_id: Optional[int]) -> Optional[Platform]:
+    """按 ID 获取平台。"""
+    if not platform_id:
+        return None
+    return db.query(Platform).filter(Platform.id == platform_id).first()
+
+
+def ensure_account_platform(account: Account) -> Platform:
+    """确保账号已绑定平台。"""
+    if not account.platform_id or not account.platform:
+        raise HTTPException(status_code=400, detail="账号未配置平台")
+    return account.platform
+
+
+def find_existing_account(
+    db: Session,
+    user_id: int,
+    platform_id: Optional[int],
+    exclude_account_id: Optional[int] = None
+) -> Optional[Account]:
+    """按平台和 user_id 查找已存在账号。"""
+    query = db.query(Account).filter(Account.anrouter_user_id == user_id)
+    if exclude_account_id is not None:
+        query = query.filter(Account.id != exclude_account_id)
+    if platform_id is None:
+        query = query.filter(Account.platform_id.is_(None))
+    else:
+        query = query.filter(Account.platform_id == platform_id)
+    return query.first()
+
+
+def get_account_platform(account: Account) -> Optional[PlatformBrief]:
+    """获取账号的平台简要信息"""
+    if account.platform_id and account.platform:
+        return PlatformBrief(
+            id=account.platform.id,
+            name=account.platform.name,
+            base_url=account.platform.base_url
+        )
+    return None
 
 
 def get_last_sign(db: Session, account_id: int) -> LastSign:
@@ -70,10 +117,12 @@ def get_accounts(db: Session = Depends(get_db)):
             id=account.id,
             username=account.username,
             display_name=account.display_name,
+            anrouter_user_id=account.anrouter_user_id,
             anyrouter_user_id=account.anyrouter_user_id,
             is_active=account.is_active,
             created_at=account.created_at,
             updated_at=account.updated_at,
+            platform=get_account_platform(account),
             notify_channels=get_account_notify_channels(db, account.id),
             last_sign=get_last_sign(db, account.id),
             health_status=account.health_status or "unknown",
@@ -98,28 +147,38 @@ def create_account(
     current_user: User = Depends(get_current_user)
 ):
     """添加账号"""
+    platform = get_platform_by_id(db, data.platform_id)
+    if not platform:
+        raise HTTPException(status_code=400, detail="平台不存在")
+    platform_config = get_platform_config(platform)
+
     # 验证 session_cookie 和 user_id
-    success, user_info = anyrouter_service.get_user_info(data.session_cookie, data.user_id)
+    success, user_info = anrouter_service.get_user_info(
+        data.session_cookie,
+        data.user_id,
+        platform_config["base_url"],
+        user_api=platform_config["user_api"],
+        console_url=platform_config["console_url"]
+    )
 
     if not success:
         raise HTTPException(status_code=400, detail=user_info.get("message", "验证失败"))
 
     # 检查是否已存在
-    existing = db.query(Account).filter(
-        Account.anyrouter_user_id == int(data.user_id)
-    ).first()
+    existing = find_existing_account(db, int(data.user_id), platform.id if platform else None)
 
     if existing:
-        raise HTTPException(status_code=400, detail="该账号已存在")
+        raise HTTPException(status_code=400, detail="该平台下该账号已存在")
 
     # 创建账号
     account = Account(
         session_cookie=data.session_cookie,
-        anyrouter_user_id=int(data.user_id),
+        anrouter_user_id=int(data.user_id),
         username=user_info.get("username"),
         display_name=user_info.get("display_name"),
         health_status="healthy",
         last_health_check=datetime.now(),
+        platform_id=platform.id if platform else None,
         group_id=data.group_id,
         # 初始化所有缓存字段
         cached_quota=user_info.get("quota", 0),
@@ -158,10 +217,12 @@ def create_account(
             id=account.id,
             username=account.username,
             display_name=account.display_name,
+            anrouter_user_id=account.anrouter_user_id,
             anyrouter_user_id=account.anyrouter_user_id,
             is_active=account.is_active,
             created_at=account.created_at,
             updated_at=account.updated_at,
+            platform=get_account_platform(account),
             notify_channels=[],
             last_sign=None,
             health_status=account.health_status,
@@ -185,10 +246,12 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
             id=account.id,
             username=account.username,
             display_name=account.display_name,
+            anrouter_user_id=account.anrouter_user_id,
             anyrouter_user_id=account.anyrouter_user_id,
             is_active=account.is_active,
             created_at=account.created_at,
             updated_at=account.updated_at,
+            platform=get_account_platform(account),
             notify_channels=get_account_notify_channels(db, account.id),
             last_sign=get_last_sign(db, account.id),
             health_status=account.health_status or "unknown",
@@ -213,19 +276,56 @@ def update_account(
         raise HTTPException(status_code=404, detail="账号不存在")
 
     changes = {}
+    target_platform = account.platform
+    target_platform_id = account.platform_id
+
+    if data.platform_id is not None:
+        new_platform_id = data.platform_id
+        target_platform = get_platform_by_id(db, new_platform_id)
+        if not target_platform:
+            raise HTTPException(status_code=400, detail="平台不存在")
+        if account.platform_id != new_platform_id:
+            changes["platform_id"] = f"{account.platform_id} -> {new_platform_id}"
+            account.platform_id = new_platform_id
+            account.platform = target_platform
+        target_platform_id = new_platform_id
+    elif not target_platform_id or not target_platform:
+        raise HTTPException(status_code=400, detail="账号未配置平台，请先选择平台")
+
+    target_user_id = data.user_id or (
+        str(account.anrouter_user_id) if account.anrouter_user_id is not None else None
+    )
+
+    if target_user_id and (data.user_id is not None or data.platform_id is not None):
+        existing = find_existing_account(
+            db,
+            int(target_user_id),
+            target_platform_id,
+            exclude_account_id=account.id
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
 
     if data.session_cookie is not None or data.user_id is not None:
         # 使用新的 user_id 或现有的
-        user_id = data.user_id or str(account.anyrouter_user_id)
+        user_id = target_user_id
         session_cookie = data.session_cookie or account.session_cookie
 
+        platform_config = get_platform_config(target_platform)
+
         # 验证新的凭证
-        success, user_info = anyrouter_service.get_user_info(session_cookie, user_id)
+        success, user_info = anrouter_service.get_user_info(
+            session_cookie,
+            user_id,
+            platform_config["base_url"],
+            user_api=platform_config["user_api"],
+            console_url=platform_config["console_url"]
+        )
         if not success:
             raise HTTPException(status_code=400, detail="凭证验证失败")
 
         account.session_cookie = session_cookie
-        account.anyrouter_user_id = int(user_id)
+        account.anrouter_user_id = int(user_id)
         account.username = user_info.get("username")
         account.display_name = user_info.get("display_name")
         # 更新所有缓存字段
@@ -316,12 +416,18 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
-    success, user_info = anyrouter_service.get_user_info(
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
+    success, user_info = anrouter_service.get_user_info(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        user_api=platform_config["user_api"],
+        console_url=platform_config["console_url"]
     )
 
     if not success:
@@ -427,12 +533,18 @@ def sync_account_tokens(db: Session, account: Account) -> int:
     Returns:
         int: 同步的 token 数量
     """
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         return 0
 
-    success, result = anyrouter_service.get_tokens(
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
+    success, result = anrouter_service.get_tokens(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        token_api=platform_config["token_api"],
+        console_url=platform_config["console_url"]
     )
 
     if not success:
@@ -491,7 +603,7 @@ def sync_tokens(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
     count = sync_account_tokens(db, account)
@@ -516,7 +628,7 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
     """
     now = datetime.now()
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         account.health_status = "unhealthy"
         account.health_message = "缺少 user_id"
         account.last_health_check = now
@@ -528,10 +640,29 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
             checked_at=now
         )
 
+    try:
+        ensure_account_platform(account)
+    except HTTPException as e:
+        account.health_status = "unhealthy"
+        account.health_message = e.detail
+        account.last_health_check = now
+        db.commit()
+        return HealthCheckResponse(
+            account_id=account.id,
+            health_status="unhealthy",
+            health_message=e.detail,
+            checked_at=now
+        )
+
+    platform_config = get_account_platform_config(account)
+
     # 尝试获取用户信息来验证凭证
-    success, user_info = anyrouter_service.get_user_info(
+    success, user_info = anrouter_service.get_user_info(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        user_api=platform_config["user_api"],
+        console_url=platform_config["console_url"]
     )
 
     if success:
@@ -619,12 +750,16 @@ def create_account_token(account_id: int, data: CreateTokenRequest, db: Session 
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
-    success, result = anyrouter_service.create_token(
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
+    success, result = anrouter_service.create_token(
         session_cookie=account.session_cookie,
-        user_id=str(account.anyrouter_user_id),
+        user_id=str(account.anrouter_user_id),
+        base_url=platform_config["base_url"],
         name=data.name,
         remain_quota=data.remain_quota,
         expired_time=data.expired_time,
@@ -632,7 +767,9 @@ def create_account_token(account_id: int, data: CreateTokenRequest, db: Session 
         model_limits_enabled=data.model_limits_enabled,
         model_limits=data.model_limits,
         allow_ips=data.allow_ips,
-        group=data.group
+        group=data.group,
+        token_api=platform_config["token_api"],
+        console_url=platform_config["console_url"]
     )
 
     if not success:
@@ -655,12 +792,18 @@ def get_account_models(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
-    success, result = anyrouter_service.get_models(
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
+    success, result = anrouter_service.get_models(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        models_api=platform_config["models_api"],
+        console_url=platform_config["console_url"]
     )
 
     if not success:
@@ -674,18 +817,24 @@ def get_account_models(account_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{account_id}/groups", response_model=ApiResponse)
 def get_account_groups(account_id: int, db: Session = Depends(get_db)):
-    """获取账号可用的分组列表（AnyRouter 平台分组）"""
+    """获取账号可用的分组列表（平台分组）"""
     account = db.query(Account).filter(Account.id == account_id).first()
 
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
-    success, result = anyrouter_service.get_groups(
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
+    success, result = anrouter_service.get_groups(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        groups_api=platform_config["groups_api"],
+        console_url=platform_config["console_url"]
     )
 
     if not success:
@@ -705,18 +854,23 @@ def delete_account_token(account_id: int, token_id: int, db: Session = Depends(g
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+
     # 尝试远程删除
-    success, result = anyrouter_service.delete_token(
+    success, result = anrouter_service.delete_token(
         session_cookie=account.session_cookie,
-        user_id=str(account.anyrouter_user_id),
+        user_id=str(account.anrouter_user_id),
+        base_url=platform_config["base_url"],
+        token_api=platform_config["token_api"],
+        console_url=platform_config["console_url"],
         token_id=token_id
     )
 
     # 无论远程删除是否成功，都删除本地记录并同步
-    # （远程可能已经删除了，或者网络问题等）
     db.query(ApiToken).filter(
         ApiToken.account_id == account_id,
         ApiToken.token_id == token_id
@@ -729,7 +883,6 @@ def delete_account_token(account_id: int, token_id: int, db: Session = Depends(g
     if success:
         return ApiResponse(success=True, message="删除成功")
     else:
-        # 远程删除失败但本地已清理，返回成功但提示
         return ApiResponse(success=True, message="本地已删除（远程可能已不存在）")
 
 
@@ -741,36 +894,38 @@ def update_account_token(account_id: int, token_id: int, data: dict, db: Session
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
+
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
 
     # 确保 token_data 包含必要字段
     data["id"] = token_id
-    data["user_id"] = account.anyrouter_user_id
+    data["user_id"] = account.anrouter_user_id
 
-    success, result = anyrouter_service.update_token(
+    success, result = anrouter_service.update_token(
         session_cookie=account.session_cookie,
-        user_id=str(account.anyrouter_user_id),
+        user_id=str(account.anrouter_user_id),
+        base_url=platform_config["base_url"],
+        token_api=platform_config["token_api"],
+        console_url=platform_config["console_url"],
         token_data=data
     )
 
     if not success:
-        # 更新失败，同步列表检查令牌是否还存在
         sync_account_tokens(db, account)
-        # 检查本地是否还有这个令牌
         token_exists = db.query(ApiToken).filter(
             ApiToken.account_id == account_id,
             ApiToken.token_id == token_id
         ).first()
 
         if not token_exists:
-            # 远程已删除
             raise HTTPException(
                 status_code=400,
                 detail="更新失败：该令牌在远程已不存在，本地已同步清理"
             )
         else:
-            # 其他原因失败（网络等）
             raise HTTPException(
                 status_code=400,
                 detail=result.get("message", "更新令牌失败")

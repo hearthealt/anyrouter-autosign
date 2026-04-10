@@ -5,7 +5,7 @@
 
 配置分类：
 - 环境相关：DEBUG、LOG_LEVEL、LOG_FORMAT、LOG_DIR 等（随环境变化）
-- 不变配置：AnyRouter API、JWT、请求配置 等（所有环境相同）
+- 不变配置：JWT、请求配置 等（所有环境相同）
 """
 import os
 from datetime import timezone, timedelta
@@ -47,15 +47,7 @@ class Settings(BaseSettings):
     log_max_size: int = 10            # 单文件最大大小（MB）
     log_backup_count: int = 30        # 保留文件数量
 
-    # ============ AnyRouter API（不变配置）============
-    anyrouter_base_url: str = "https://anyrouter.top"
-    anyrouter_user_api: str = "/api/user/self"
-    anyrouter_sign_api: str = "/api/user/sign_in"
-    anyrouter_console_url: str = "/console"
-    anyrouter_models_api: str = "/api/user/models"
-    anyrouter_groups_api: str = "/api/user/self/groups"
-    anyrouter_token_api: str = "/api/token/"
-    anyrouter_status_api: str = "/api/status"
+    # ============ 服务端代理配置 ============ 
     anyrouter_proxy_enabled: bool = False
     anyrouter_proxy_url: str = ""
 
@@ -100,6 +92,6 @@ settings = Settings()
 
 # 记录当前环境
 print(ENVIRONMENT)
-print(f"🌍 应用环境: {settings.environment.upper()}")
-print(f"🔧 调试模式: {settings.debug}")
-print(f"📝 日志级别: {settings.log_level}")
+print(f"Environment: {settings.environment.upper()}")
+print(f"Debug: {settings.debug}")
+print(f"Log level: {settings.log_level}")

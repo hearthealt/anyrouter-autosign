@@ -1,10 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isLoggedIn } from '../utils/auth'
 import Dashboard from '../views/Dashboard.vue'
+import Accounts from '../views/Accounts.vue'
 import Settings from '../views/Settings.vue'
 import AccountDetail from '../views/AccountDetail.vue'
 import SignLogs from '../views/SignLogs.vue'
 import Statistics from '../views/Statistics.vue'
+import Platforms from '../views/Platforms.vue'
 import Login from '../views/Login.vue'
 
 const router = createRouter({
@@ -23,6 +25,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/accounts',
+      name: 'accounts',
+      component: Accounts,
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/logs',
       name: 'sign-logs',
       component: SignLogs,
@@ -32,6 +40,12 @@ const router = createRouter({
       path: '/statistics',
       name: 'statistics',
       component: Statistics,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/platforms',
+      name: 'platforms',
+      component: Platforms,
       meta: { requiresAuth: true }
     },
     {
@@ -54,10 +68,8 @@ router.beforeEach((to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth !== false
 
   if (requiresAuth && !isLoggedIn()) {
-    // 需要认证但未登录，跳转到登录页
     next('/login')
   } else if (to.path === '/login' && isLoggedIn()) {
-    // 已登录访问登录页，跳转到首页
     next('/')
   } else {
     next()

@@ -4,12 +4,14 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
+from app.schemas.platform import PlatformBrief
 
 
 class AccountCreate(BaseModel):
     """创建账号请求"""
     session_cookie: str
     user_id: str  # new-api-user，必填
+    platform_id: int
     group_id: Optional[int] = None
 
 
@@ -18,6 +20,7 @@ class AccountUpdate(BaseModel):
     session_cookie: Optional[str] = None
     user_id: Optional[str] = None  # new-api-user
     is_active: Optional[bool] = None
+    platform_id: Optional[int] = None
     group_id: Optional[int] = None
 
 
@@ -47,10 +50,12 @@ class AccountResponse(BaseModel):
     id: int
     username: Optional[str] = None
     display_name: Optional[str] = None
+    anrouter_user_id: Optional[int] = None
     anyrouter_user_id: Optional[int] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    platform: Optional["PlatformBrief"] = None
     notify_channels: List[NotifyChannelBrief] = []
     last_sign: Optional[LastSign] = None
     # 健康状态

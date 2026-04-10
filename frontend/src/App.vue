@@ -303,6 +303,7 @@ import { NIcon, darkTheme } from 'naive-ui'
 import type { GlobalThemeOverrides, FormInst, FormRules } from 'naive-ui'
 import {
   GridOutline,
+  PeopleOutline,
   SettingsOutline,
   TimeOutline,
   StatsChartOutline,
@@ -324,7 +325,8 @@ import {
   AlertCircleOutline,
   CloseCircleOutline,
   InformationCircleOutline,
-  CodeOutline
+  CodeOutline,
+  ServerOutline
 } from '@vicons/ionicons5'
 import { authApi, accountApi, signApi } from './api'
 import { removeToken, isLoggedIn } from './utils/auth'
@@ -394,8 +396,10 @@ const isLoginPage = computed(() => route.path === '/login')
 
 const menuItems = [
   { path: '/', label: '仪表盘', icon: GridOutline },
+  { path: '/accounts', label: '账号管理', icon: PeopleOutline },
   { path: '/logs', label: '签到日志', icon: TimeOutline },
   { path: '/statistics', label: '统计报表', icon: StatsChartOutline },
+  { path: '/platforms', label: '平台管理', icon: ServerOutline },
   { path: '/settings', label: '系统设置', icon: SettingsOutline },
 ]
 
@@ -421,15 +425,17 @@ const breadcrumbs = computed(() => {
   const crumbs: Array<{ path: string; label: string }> = []
   const titles: Record<string, string> = {
     '/': '仪表盘',
+    '/accounts': '账号管理',
     '/logs': '签到日志',
     '/statistics': '统计报表',
+    '/platforms': '平台管理',
     '/settings': '系统设置'
   }
 
   if (route.path === '/') {
     crumbs.push({ path: '/', label: '仪表盘' })
   } else if (route.path.startsWith('/account/')) {
-    crumbs.push({ path: '/', label: '仪表盘' })
+    crumbs.push({ path: '/accounts', label: '账号管理' })
     crumbs.push({ path: route.path, label: '账号详情' })
   } else if (titles[route.path]) {
     crumbs.push({ path: route.path, label: titles[route.path] })
@@ -441,8 +447,10 @@ const breadcrumbs = computed(() => {
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/': '仪表盘',
+    '/accounts': '账号管理',
     '/logs': '签到日志',
     '/statistics': '统计报表',
+    '/platforms': '平台管理',
     '/settings': '系统设置'
   }
   if (route.path.startsWith('/account/')) return '账号详情'
