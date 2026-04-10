@@ -20,7 +20,8 @@ from app.api import (
     statistics_router,
     groups_router,
     audit_router,
-    logs_router
+    logs_router,
+    platforms_router
 )
 from app.api.deps import get_current_user
 from app.database import init_db
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
 # 创建应用
 app = FastAPI(
     title=settings.app_name,
-    description="AnyRouter 多账号管理平台 API",
+    description="多平台签到管理 API",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -86,6 +87,7 @@ app.include_router(statistics_router, prefix="/api/v1", dependencies=[Depends(ge
 app.include_router(groups_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(audit_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(logs_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(platforms_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 
 
 @app.get("/")

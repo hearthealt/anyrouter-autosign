@@ -10,10 +10,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, SignLog, Setting, NotifyChannel, AccountNotify, ApiToken, User, AuditAction
+from app.models import Account, SignLog, Setting, NotifyChannel, AccountNotify, ApiToken, User, AuditAction, Platform
 from app.schemas import ApiResponse
 from app.services.audit import log_action
 from app.api.deps import get_current_user
+from app.utils.platform import DEFAULT_CHECKIN_API
 
 router = APIRouter(prefix="/backup", tags=["备份恢复"])
 
@@ -34,11 +35,29 @@ def export_backup(
     backup_data = {
         "version": "1.0",
         "created_at": datetime.now().isoformat(),
+        "platforms": [],
         "accounts": [],
         "settings": [],
         "notify_channels": [],
         "account_notifies": [],
     }
+
+    platforms = db.query(Platform).order_by(Platform.created_at.asc()).all()
+    for platform in platforms:
+        backup_data["platforms"].append({
+            "id": platform.id,
+            "name": platform.name,
+            "base_url": platform.base_url,
+            "sign_api": platform.sign_api,
+            "checkin_api": platform.checkin_api or DEFAULT_CHECKIN_API,
+            "user_api": platform.user_api,
+            "console_url": platform.console_url,
+            "models_api": platform.models_api,
+            "groups_api": platform.groups_api,
+            "token_api": platform.token_api,
+            "status_api": platform.status_api,
+            "is_default": platform.is_default,
+        })
 
     # 导出账号（不包含敏感的 session_cookie）
     accounts = db.query(Account).all()
@@ -46,7 +65,9 @@ def export_backup(
         backup_data["accounts"].append({
             "id": acc.id,
             "session_cookie": acc.session_cookie,  # 加密存储时需要处理
+            "anrouter_user_id": acc.anyrouter_user_id,
             "anyrouter_user_id": acc.anyrouter_user_id,
+            "platform_id": acc.platform_id,
             "username": acc.username,
             "display_name": acc.display_name,
             "is_active": acc.is_active,
@@ -105,6 +126,7 @@ def export_backup(
         target_type="backup",
         detail={
             "include_logs": include_logs,
+            "platforms": len(backup_data["platforms"]),
             "accounts": len(backup_data["accounts"]),
             "settings": len(backup_data["settings"]),
             "channels": len(backup_data["notify_channels"])
@@ -156,6 +178,7 @@ async def import_backup(
         raise HTTPException(status_code=400, detail="不支持的备份版本")
 
     imported_counts = {
+        "platforms": 0,
         "accounts": 0,
         "settings": 0,
         "notify_channels": 0,
@@ -163,6 +186,48 @@ async def import_backup(
     }
 
     try:
+        platform_id_map = {}
+        if "platforms" in backup_data:
+            imported_has_default = any(p.get("is_default") for p in backup_data["platforms"])
+            if overwrite and imported_has_default:
+                db.query(Platform).update({"is_default": False})
+
+            for p in backup_data["platforms"]:
+                old_id = p["id"]
+                existing = db.query(Platform).filter(Platform.name == p["name"]).first()
+                if existing:
+                    if overwrite:
+                        existing.base_url = p["base_url"]
+                        existing.sign_api = p.get("sign_api")
+                        existing.checkin_api = p.get("checkin_api") or DEFAULT_CHECKIN_API
+                        existing.user_api = p.get("user_api")
+                        existing.console_url = p.get("console_url")
+                        existing.models_api = p.get("models_api")
+                        existing.groups_api = p.get("groups_api")
+                        existing.token_api = p.get("token_api")
+                        existing.status_api = p.get("status_api")
+                        existing.is_default = p.get("is_default", False)
+                        imported_counts["platforms"] += 1
+                    platform_id_map[old_id] = existing.id
+                else:
+                    new_platform = Platform(
+                        name=p["name"],
+                        base_url=p["base_url"],
+                        sign_api=p.get("sign_api"),
+                        checkin_api=p.get("checkin_api") or DEFAULT_CHECKIN_API,
+                        user_api=p.get("user_api"),
+                        console_url=p.get("console_url"),
+                        models_api=p.get("models_api"),
+                        groups_api=p.get("groups_api"),
+                        token_api=p.get("token_api"),
+                        status_api=p.get("status_api"),
+                        is_default=p.get("is_default", False),
+                    )
+                    db.add(new_platform)
+                    db.flush()
+                    platform_id_map[old_id] = new_platform.id
+                    imported_counts["platforms"] += 1
+
         # 导入设置
         if "settings" in backup_data:
             for s in backup_data["settings"]:
@@ -208,16 +273,24 @@ async def import_backup(
         if "accounts" in backup_data:
             for acc in backup_data["accounts"]:
                 old_id = acc["id"]
-                # 检查是否存在相同 anyrouter_user_id 的账号
+                imported_user_id = acc.get("anrouter_user_id", acc.get("anyrouter_user_id"))
+                imported_platform_id = acc.get("platform_id")
+                mapped_platform_id = platform_id_map.get(imported_platform_id)
+
+                if imported_platform_id is None or mapped_platform_id is None:
+                    raise HTTPException(status_code=400, detail="备份中的账号缺少平台信息，请使用新版本备份文件")
+
+                # 检查是否存在相同平台下的同 user_id 账号
                 existing = None
-                if acc.get("anyrouter_user_id"):
-                    existing = db.query(Account).filter(
-                        Account.anyrouter_user_id == acc["anyrouter_user_id"]
-                    ).first()
+                if imported_user_id:
+                    query = db.query(Account).filter(Account.anyrouter_user_id == imported_user_id)
+                    query = query.filter(Account.platform_id == mapped_platform_id)
+                    existing = query.first()
 
                 if existing:
                     if overwrite:
                         existing.session_cookie = acc["session_cookie"]
+                        existing.platform_id = mapped_platform_id
                         existing.username = acc.get("username")
                         existing.display_name = acc.get("display_name")
                         existing.is_active = acc.get("is_active", True)
@@ -228,7 +301,8 @@ async def import_backup(
                 else:
                     new_account = Account(
                         session_cookie=acc["session_cookie"],
-                        anyrouter_user_id=acc.get("anyrouter_user_id"),
+                        anyrouter_user_id=imported_user_id,
+                        platform_id=mapped_platform_id,
                         username=acc.get("username"),
                         display_name=acc.get("display_name"),
                         is_active=acc.get("is_active", True),
@@ -290,6 +364,9 @@ async def import_backup(
             data=imported_counts
         )
 
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"导入失败: {str(e)}")
@@ -301,6 +378,7 @@ def get_backup_info(db: Session = Depends(get_db)):
     return ApiResponse(
         success=True,
         data={
+            "platform_count": db.query(Platform).count(),
             "account_count": db.query(Account).count(),
             "sign_log_count": db.query(SignLog).count(),
             "notify_channel_count": db.query(NotifyChannel).count(),

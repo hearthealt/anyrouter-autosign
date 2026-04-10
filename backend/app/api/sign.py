@@ -2,7 +2,6 @@
 签到 API
 """
 import json
-import re
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -12,16 +11,14 @@ from app.models import Account, SignLog, NotifyChannel, AccountNotify
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
-from app.services import anyrouter_service, NotifyFactory
-from app.utils import format_quota
-from app.config import settings
+from app.services import anrouter_service, NotifyFactory
+from app.utils import format_quota, get_account_platform_config
 
 router = APIRouter(tags=["签到"])
 
 
 def send_notifications(db: Session, account: Account, title: str, content: str):
     """发送推送通知"""
-    # 获取账号关联的推送渠道
     notify_configs = db.query(AccountNotify, NotifyChannel).join(
         NotifyChannel, NotifyChannel.id == AccountNotify.channel_id
     ).filter(
@@ -34,13 +31,19 @@ def send_notifications(db: Session, account: Account, title: str, content: str):
         try:
             config = json.loads(channel.config)
             account_config = json.loads(account_notify.notify_config) if account_notify.notify_config else {}
-            # 合并配置：账号配置优先，渠道配置作为后备
             merged_config = {**config, **account_config}
 
             notifier = NotifyFactory.create(channel.type, config)
             notifier.send(title, content, merged_config)
         except Exception as e:
             pass  # 静默失败，不影响主流程
+
+
+def build_success_notification_content(reward_quota: int) -> str:
+    """构造签到成功通知文案。"""
+    if reward_quota > 0:
+        return f"获得 {format_quota(reward_quota)}，祝您使用愉快！"
+    return "签到成功"
 
 
 @router.post("/accounts/{account_id}/sign", response_model=ApiResponse)
@@ -54,30 +57,28 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     if not account.is_active:
         raise HTTPException(status_code=400, detail="账号已禁用")
 
-    if not account.anyrouter_user_id:
+    if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
+    if not account.platform_id or not account.platform:
+        raise HTTPException(status_code=400, detail="账号未配置平台")
+
+    platform_config = get_account_platform_config(account)
 
     # 执行签到
-    success, result = anyrouter_service.sign_in(
+    success, result = anrouter_service.sign_in(
         account.session_cookie,
-        str(account.anyrouter_user_id)
+        str(account.anrouter_user_id),
+        platform_config["base_url"],
+        sign_api=platform_config["sign_api"],
+        checkin_api=platform_config["checkin_api"],
+        console_url=platform_config["console_url"]
     )
 
     sign_success = success and result.get("success", False)
     message = result.get("message", "")
-    reward_quota = 0
+    reward_quota = result.get("reward_quota", 0)
+    already_signed = bool(result.get("already_signed", False))
 
-    # 判断签到状态：success=true 且 message 为空表示今日已签到
-    already_signed = sign_success and not message
-
-    # 解析奖励配额（message 中的数字是美元值，需要转换为原始配额）
-    if sign_success and message:
-        match = re.search(r'\$(\d+(?:\.\d+)?)', message)
-        if match:
-            usd_value = float(match.group(1))
-            reward_quota = int(usd_value * settings.quota_to_usd_rate)
-
-    # 记录签到日志
     if already_signed:
         log_message = "今日已签到"
         log_status = "already_signed"
@@ -98,17 +99,15 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     db.add(log)
     db.commit()
 
-    # 发送通知（已签到的不发通知）
     if sign_success and not already_signed:
         title = f"{account.username} 签到成功"
-        content = f"获得 {format_quota(reward_quota)}，祝您使用愉快！"
+        content = build_success_notification_content(reward_quota)
         send_notifications(db, account, title, content)
     elif not sign_success:
         title = f"{account.username} 签到失败"
         content = f"原因: {message}"
         send_notifications(db, account, title, content)
 
-    # 返回结果
     if already_signed:
         return_message = "今日已签到"
         status = "already_signed"
@@ -116,7 +115,7 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         return_message = message or "签到成功"
         status = "success"
     else:
-        return_message = "签到失败"
+        return_message = message or "签到失败"
         status = "failed"
 
     return ApiResponse(
@@ -137,7 +136,8 @@ def batch_sign(db: Session = Depends(get_db)):
     """批量签到所有启用账号"""
     accounts = db.query(Account).filter(
         Account.is_active == True,
-        Account.anyrouter_user_id.isnot(None)
+        Account.anrouter_user_id.isnot(None),
+        Account.platform_id.isnot(None)
     ).all()
 
     results = []
@@ -146,24 +146,21 @@ def batch_sign(db: Session = Depends(get_db)):
     already_signed_count = 0
 
     for account in accounts:
-        success, result = anyrouter_service.sign_in(
+        platform_config = get_account_platform_config(account)
+
+        success, result = anrouter_service.sign_in(
             account.session_cookie,
-            str(account.anyrouter_user_id)
+            str(account.anrouter_user_id),
+            platform_config["base_url"],
+            sign_api=platform_config["sign_api"],
+            checkin_api=platform_config["checkin_api"],
+            console_url=platform_config["console_url"]
         )
         sign_success = success and result.get("success", False)
         message = result.get("message", "")
-        reward_quota = 0
+        reward_quota = result.get("reward_quota", 0)
+        already_signed = bool(result.get("already_signed", False))
 
-        # 判断签到状态
-        already_signed = sign_success and not message
-
-        if sign_success and message:
-            match = re.search(r'\$(\d+(?:\.\d+)?)', message)
-            if match:
-                usd_value = float(match.group(1))
-                reward_quota = int(usd_value * settings.quota_to_usd_rate)
-
-        # 记录日志
         if already_signed:
             log_message = "今日已签到"
             log_status = "already_signed"
@@ -183,10 +180,9 @@ def batch_sign(db: Session = Depends(get_db)):
         )
         db.add(log)
 
-        # 发送通知（已签到的不发通知）
         if sign_success and not already_signed:
             title = f"{account.username} 签到成功"
-            content = f"获得 {format_quota(reward_quota)}"
+            content = build_success_notification_content(reward_quota)
             send_notifications(db, account, title, content)
             success_count += 1
         elif already_signed:
@@ -197,7 +193,6 @@ def batch_sign(db: Session = Depends(get_db)):
             send_notifications(db, account, title, content)
             fail_count += 1
 
-        # 结果消息
         if already_signed:
             result_message = "今日已签到"
         elif sign_success:
@@ -250,7 +245,6 @@ def get_all_sign_logs(
             q = q.filter(SignLog.sign_time < datetime.fromisoformat(end_date + " 23:59:59"))
         return q
 
-    # 构建主查询（用于分页和统计）
     query = db.query(SignLog, Account).join(Account, Account.id == SignLog.account_id)
     if account_id:
         query = query.filter(SignLog.account_id == account_id)
@@ -261,7 +255,6 @@ def get_all_sign_logs(
     if end_date:
         query = query.filter(SignLog.sign_time < datetime.fromisoformat(end_date + " 23:59:59"))
 
-    # 计算统计数据（基于过滤条件）
     stats_query = build_base_query()
     if success is not None:
         stats_query = stats_query.filter(SignLog.success == success)
@@ -311,7 +304,6 @@ def get_sign_logs(
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    # 获取总数
     total = db.query(SignLog).filter(SignLog.account_id == account_id).count()
 
     offset = (page - 1) * size

@@ -13,6 +13,7 @@ from .statistics import router as statistics_router
 from .groups import router as groups_router
 from .audit import router as audit_router
 from .logs import router as logs_router
+from .platforms import router as platforms_router
 
 __all__ = [
     "accounts_router",
@@ -26,5 +27,6 @@ __all__ = [
     "statistics_router",
     "groups_router",
     "audit_router",
-    "logs_router"
+    "logs_router",
+    "platforms_router"
 ]

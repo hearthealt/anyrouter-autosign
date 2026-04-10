@@ -1,15 +1,23 @@
 """
 API 节点管理
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApiEndpoint
+from app.models import ApiEndpoint, Platform
 from app.schemas import ApiResponse
-from app.services.anyrouter import anyrouter_service
+from app.services import anrouter_service
+from app.utils import get_platform_config
 
 router = APIRouter(prefix="/api-endpoints", tags=["API节点"])
+
+
+def get_default_platform(db: Session) -> Optional[Platform]:
+    """获取默认平台。"""
+    return db.query(Platform).filter(Platform.is_default == True).first()
 
 
 @router.get("", response_model=ApiResponse)
@@ -24,15 +32,24 @@ def get_endpoints(db: Session = Depends(get_db)):
 
 @router.post("/sync", response_model=ApiResponse)
 def sync_endpoints(db: Session = Depends(get_db)):
-    """从 AnyRouter 同步 API 节点信息"""
-    success, data = anyrouter_service.get_api_status()
+    """从平台同步 API 节点信息"""
+    default_platform = get_default_platform(db)
+    if not default_platform:
+        raise HTTPException(status_code=400, detail="请先创建并保留一个默认平台")
+
+    platform_config = get_platform_config(default_platform)
+    success, data = anrouter_service.get_api_status(
+        platform_config["base_url"],
+        status_api=platform_config["status_api"],
+        console_url=platform_config["console_url"]
+    )
 
     if not success:
         raise HTTPException(status_code=500, detail=data.get("message", "同步失败"))
 
     api_info = data.get("api_info", [])
-    if not api_info:
-        raise HTTPException(status_code=500, detail="未获取到 API 节点信息")
+    if not isinstance(api_info, list):
+        api_info = []
 
     # 先删除所有旧节点
     db.query(ApiEndpoint).delete()

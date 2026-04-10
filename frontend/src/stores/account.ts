@@ -88,6 +88,7 @@ export const useAccountStore = defineStore('account', () => {
   async function createAccount(data: {
     session_cookie: string
     user_id: string
+    platform_id: number
     group_id?: number
   }): Promise<Account> {
     const res = await accountApi.create(data)

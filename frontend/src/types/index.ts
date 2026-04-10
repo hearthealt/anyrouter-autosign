@@ -1,10 +1,36 @@
 // 账号相关类型
+export interface Platform {
+  id: number
+  name: string
+  base_url: string
+  sign_api?: string
+  checkin_api?: string
+  user_api?: string
+  console_url?: string
+  models_api?: string
+  groups_api?: string
+  token_api?: string
+  status_api?: string
+  is_default: boolean
+  accounts_count?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface PlatformBrief {
+  id: number
+  name: string
+  base_url: string
+}
+
 export interface Account {
   id: number
-  anyrouter_user_id: string
+  anrouter_user_id?: number
+  anyrouter_user_id?: number
   username: string
   display_name?: string
   is_active: boolean
+  platform?: PlatformBrief
   health_status: 'healthy' | 'unhealthy' | 'unknown'
   health_message?: string
   last_health_check?: string
@@ -43,6 +69,7 @@ export type GroupColor = 'default' | 'blue' | 'green' | 'red' | 'orange' | 'purp
 export interface CreateAccountParams {
   session_cookie: string
   user_id: string
+  platform_id: number
   group_id?: number
 }
 
@@ -50,6 +77,7 @@ export interface UpdateAccountParams {
   user_id?: string
   session_cookie?: string
   is_active?: boolean
+  platform_id?: number
   group_id?: number
 }
 
@@ -289,6 +317,7 @@ export interface PaginatedResponse<T> {
 export interface AddAccountForm {
   session_cookie: string
   user_id: string
+  platform_id: number | null
   group_id: number | null
   notify_channel_ids: number[]
 }
@@ -297,6 +326,7 @@ export interface EditAccountForm {
   user_id: string
   session_cookie: string
   is_active: boolean
+  platform_id: number | null
   group_id: number | null
   notify_channel_ids: number[]
 }

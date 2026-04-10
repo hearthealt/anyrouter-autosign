@@ -9,6 +9,7 @@ from .notify import (
 )
 from .common import ApiResponse, SettingsResponse, SettingsUpdate, DashboardResponse, RecentSign, DailyTrend
 from .auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
+from .platform import PlatformCreate, PlatformUpdate, PlatformResponse, PlatformBrief
 
 __all__ = [
     "AccountCreate", "AccountUpdate", "AccountResponse", "AccountInfo", "LastSign",
@@ -16,5 +17,6 @@ __all__ = [
     "NotifyChannelCreate", "NotifyChannelUpdate", "NotifyChannelResponse",
     "AccountNotifyConfig", "AccountNotifyResponse", "AccountNotifyUpdate",
     "ApiResponse", "SettingsResponse", "SettingsUpdate", "DashboardResponse", "RecentSign", "DailyTrend",
-    "LoginRequest", "LoginResponse", "UserInfo", "ChangePasswordRequest"
+    "LoginRequest", "LoginResponse", "UserInfo", "ChangePasswordRequest",
+    "PlatformCreate", "PlatformUpdate", "PlatformResponse", "PlatformBrief"
 ]
