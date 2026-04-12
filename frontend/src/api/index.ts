@@ -60,7 +60,7 @@ export const platformApi = {
 // 账号 API
 export const accountApi = {
   getList: () => api.get('/accounts'),
-  create: (data: { session_cookie: string; user_id: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  create: (data: { session_cookie?: string; user_id: string; login_username?: string; login_password?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
   get: (id: number) => api.get(`/accounts/${id}`),
   update: (id: number, data: any) => api.put(`/accounts/${id}`, data),
   delete: (id: number) => api.delete(`/accounts/${id}`),

@@ -60,7 +60,13 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 | 参数 | 说明 | 获取方式 |
 |------|------|----------|
 | User ID | 用户标识 | 请求头中 `new-api-user` 的值 |
-| Session Cookie | 会话凭证 | Cookie 中 `session` 的值 |
+| Session Cookie | 会话凭证 | Cookie 中 `session` 的值，可选 |
+| 登录账号 | 自动登录账号 | 平台登录邮箱或用户名，可选 |
+| 登录密码 | 自动登录密码 | 平台登录密码，可选 |
+
+说明：
+- `Session Cookie` 和 `登录账号 + 登录密码` 二选一即可
+- 如果平台的 `session` 每天会刷新，建议直接保存登录账号和密码，系统会在 `session` 失效后自动登录并回填新的 `session`
 
 获取步骤：
 1. 登录目标平台控制台

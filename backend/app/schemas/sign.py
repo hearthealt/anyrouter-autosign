@@ -24,6 +24,7 @@ class SignLogResponse(BaseModel):
     message: Optional[str] = None
     reward_quota: int
     reward_display: str
+    retry_count: int = 0
     status: str = "failed"  # success | already_signed | failed
 
     class Config:

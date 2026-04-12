@@ -73,6 +73,9 @@ class AntiCrawlerSolver:
 class AnyRouterService:
     """平台签到 API 服务"""
 
+    DEFAULT_LOGIN_API = "/api/user/login"
+    DEFAULT_LOGIN_PAGE = "/login?expired=true"
+
     # 不含 referer 的基础请求头（referer 根据平台动态生成）
     BASE_HEADERS = {
         "accept": "application/json, text/plain, */*",
@@ -352,6 +355,15 @@ class AnyRouterService:
         headers["referer"] = f"{base_url}{console_url}"
         return headers
 
+    @staticmethod
+    def _extract_session_cookie(response: requests.Response, session: requests.Session) -> Optional[str]:
+        """从响应或 Session 中提取 session cookie。"""
+        if response.cookies.get("session"):
+            return response.cookies.get("session")
+        if session.cookies.get("session"):
+            return session.cookies.get("session")
+        return None
+
     def _is_anti_crawler_challenge(self, text: str) -> bool:
         """检查是否为反爬虫挑战"""
         return "acw_sc__v2" in text and "var arg1=" in text
@@ -393,6 +405,89 @@ class AnyRouterService:
         except Exception as e:
             logger.error(f"获取 Cookies 失败: {e}")
             return {"session": session_cookie}
+
+    def login(
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        login_api: str = None,
+        login_page: str = None,
+        turnstile: str = "",
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """使用账号密码登录并提取新的 session cookie。"""
+        if login_api is None:
+            login_api = self.DEFAULT_LOGIN_API
+        if login_page is None:
+            login_page = self.DEFAULT_LOGIN_PAGE
+
+        session = self._get_session()
+        page_headers = self._get_base_headers(base_url, login_page)
+        login_headers = self._get_base_headers(base_url, login_page)
+        login_headers["content-type"] = "application/json"
+        login_headers["origin"] = base_url
+
+        cookies: Dict[str, str] = {}
+
+        try:
+            page_response = session.get(
+                f"{base_url}{login_page}",
+                headers=page_headers,
+                timeout=settings.request_timeout
+            )
+
+            for cookie in page_response.cookies:
+                cookies[cookie.name] = cookie.value
+
+            if self._is_anti_crawler_challenge(page_response.text):
+                result = self.anti_crawler.solve(page_response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+
+            response = session.post(
+                f"{base_url}{login_api}",
+                headers=login_headers,
+                cookies=cookies,
+                params={"turnstile": turnstile},
+                json={"username": username, "password": password},
+                timeout=settings.request_timeout
+            )
+
+            if self._is_anti_crawler_challenge(response.text):
+                result = self.anti_crawler.solve(response.text)
+                if result:
+                    cookies["acw_sc__v2"] = result
+                    time.sleep(2)
+                    response = session.post(
+                        f"{base_url}{login_api}",
+                        headers=login_headers,
+                        cookies=cookies,
+                        params={"turnstile": turnstile},
+                        json={"username": username, "password": password},
+                        timeout=settings.request_timeout
+                    )
+
+            data = response.json()
+            if not data.get("success"):
+                return False, {"message": data.get("message", "登录失败")}
+
+            session_cookie = self._extract_session_cookie(response, session)
+            if not session_cookie:
+                return False, {"message": "登录成功，但响应中未返回 session Cookie"}
+
+            return True, {
+                "message": data.get("message", "登录成功"),
+                "session_cookie": session_cookie,
+                "raw": data,
+            }
+
+        except json.JSONDecodeError:
+            return False, {"message": "登录响应解析失败"}
+        except requests.RequestException as e:
+            return False, {"message": f"登录请求失败: {str(e)}"}
+        except Exception as e:
+            return False, {"message": f"登录异常: {str(e)}"}
 
     def get_user_info(
         self,

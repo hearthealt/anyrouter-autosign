@@ -11,7 +11,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from app.database import SessionLocal
 from app.models import Account, SignLog, Setting, NotifyChannel
-from app.services import anrouter_service
+from app.services import anrouter_service, execute_with_session_refresh
 from app.services.notify import NotifyFactory
 from app.utils import format_quota, get_account_platform_config
 
@@ -75,16 +75,21 @@ def send_sign_notification(db, account, success: bool, sign_message: str):
             logger.error(f"通知发送异常 {channel.name}: {e}")
 
 
-def execute_sign(account) -> dict:
+def execute_sign(db, account) -> dict:
     """执行单个账号签到并返回统一结果。"""
     platform_config = get_account_platform_config(account)
-    request_success, result = anrouter_service.sign_in(
-        account.session_cookie,
-        str(account.anrouter_user_id),
-        platform_config["base_url"],
-        sign_api=platform_config["sign_api"],
-        checkin_api=platform_config["checkin_api"],
-        console_url=platform_config["console_url"]
+    request_success, result = execute_with_session_refresh(
+        db,
+        account,
+        lambda session_cookie, user_id, current_platform: anrouter_service.sign_in(
+            session_cookie,
+            user_id,
+            current_platform["base_url"],
+            sign_api=current_platform["sign_api"],
+            checkin_api=current_platform["checkin_api"],
+            console_url=current_platform["console_url"]
+        ),
+        platform_config=platform_config,
     )
 
     if not request_success:
@@ -145,7 +150,7 @@ def auto_sign_job():
 
         for account in accounts:
             try:
-                result = execute_sign(account)
+                result = execute_sign(db, account)
                 sign_success = result["success"]
                 already_signed = result["already_signed"]
                 message = result["message"]
@@ -162,11 +167,6 @@ def auto_sign_job():
                         success_count += 1
                     else:
                         fail_count += 1
-                        if retry_enabled:
-                            retry_accounts.append({
-                                "account_id": account.id,
-                                "retry_count": 0
-                            })
 
                 log = SignLog(
                     account_id=account.id,
@@ -177,11 +177,18 @@ def auto_sign_job():
                     status=log_status
                 )
                 db.add(log)
+                db.flush()
 
                 logger.info(f"账号 {account.username} 签到: {log_message}")
 
                 if not already_signed:
                     send_sign_notification(db, account, sign_success, log_message)
+                if retry_enabled and not sign_success and not already_signed:
+                    retry_accounts.append({
+                        "account_id": account.id,
+                        "retry_count": 0,
+                        "log_id": log.id,
+                    })
 
             except Exception as e:
                 logger.error(f"账号 {account.username} 签到异常: {e}")
@@ -236,6 +243,7 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         for item in accounts:
             account_id = item["account_id"]
             retry_count = item["retry_count"] + 1
+            log_id = item.get("log_id")
 
             account = db.query(Account).filter(
                 Account.id == account_id,
@@ -246,11 +254,12 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                 continue
 
             try:
-                result = execute_sign(account)
+                result = execute_sign(db, account)
                 sign_success = result["success"]
                 already_signed = result["already_signed"]
                 message = result["message"]
                 reward_quota = result["reward_quota"]
+                log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
 
                 if already_signed:
                     log_message = f"重试{retry_count}次后: 今日已签到"
@@ -267,18 +276,29 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                     if retry_count < max_retries:
                         retry_accounts.append({
                             "account_id": account_id,
-                            "retry_count": retry_count
+                            "retry_count": retry_count,
+                            "log_id": log_id,
                         })
 
-                log = SignLog(
-                    account_id=account.id,
-                    success=sign_success,
-                    message=log_message,
-                    reward_quota=reward_quota,
-                    retry_count=retry_count,
-                    status=log_status
-                )
-                db.add(log)
+                if log:
+                    log.sign_time = datetime.now()
+                    log.success = sign_success
+                    log.message = log_message
+                    log.reward_quota = reward_quota
+                    log.retry_count = retry_count
+                    log.status = log_status
+                else:
+                    log = SignLog(
+                        account_id=account.id,
+                        success=sign_success,
+                        message=log_message,
+                        reward_quota=reward_quota,
+                        retry_count=retry_count,
+                        status=log_status
+                    )
+                    db.add(log)
+                    db.flush()
+                    log_id = log.id
 
                 logger.info(f"账号 {account.username} 重试签到(第{retry_count}次): {log_message}")
 
@@ -293,10 +313,31 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
             except Exception as e:
                 logger.error(f"账号 {account.username} 重试签到异常: {e}")
                 fail_count += 1
+                log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
+                if log:
+                    log.sign_time = datetime.now()
+                    log.success = False
+                    log.message = f"重试{retry_count}次后: {e}"
+                    log.reward_quota = 0
+                    log.retry_count = retry_count
+                    log.status = "failed"
+                else:
+                    log = SignLog(
+                        account_id=account.id,
+                        success=False,
+                        message=f"重试{retry_count}次后: {e}",
+                        reward_quota=0,
+                        retry_count=retry_count,
+                        status="failed"
+                    )
+                    db.add(log)
+                    db.flush()
+                    log_id = log.id
                 if retry_count < max_retries:
                     retry_accounts.append({
                         "account_id": account_id,
-                        "retry_count": retry_count
+                        "retry_count": retry_count,
+                        "log_id": log_id,
                     })
 
         db.commit()
@@ -369,12 +410,17 @@ def health_check_job():
             try:
                 platform_config = get_account_platform_config(account)
 
-                success, user_info = anrouter_service.get_user_info(
-                    account.session_cookie,
-                    str(account.anrouter_user_id),
-                    platform_config["base_url"],
-                    user_api=platform_config["user_api"],
-                    console_url=platform_config["console_url"]
+                success, user_info = execute_with_session_refresh(
+                    db,
+                    account,
+                    lambda session_cookie, user_id, current_platform: anrouter_service.get_user_info(
+                        session_cookie,
+                        user_id,
+                        current_platform["base_url"],
+                        user_api=current_platform["user_api"],
+                        console_url=current_platform["console_url"]
+                    ),
+                    platform_config=platform_config,
                 )
 
                 now = datetime.now()

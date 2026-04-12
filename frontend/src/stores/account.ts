@@ -86,8 +86,10 @@ export const useAccountStore = defineStore('account', () => {
   }
 
   async function createAccount(data: {
-    session_cookie: string
+    session_cookie?: string
     user_id: string
+    login_username?: string
+    login_password?: string
     platform_id: number
     group_id?: number
   }): Promise<Account> {
@@ -101,6 +103,9 @@ export const useAccountStore = defineStore('account', () => {
     data: {
       user_id?: string
       session_cookie?: string
+      login_username?: string
+      login_password?: string
+      clear_login_credentials?: boolean
       is_active?: boolean
       group_id?: number
     }

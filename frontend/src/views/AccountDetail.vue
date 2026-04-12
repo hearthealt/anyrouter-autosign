@@ -177,6 +177,20 @@
                   <span class="detail-value">{{ account ? formatDateTime(account.updated_at) : '-' }}</span>
                 </div>
               </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><PersonOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">登录账号</span>
+                  <span class="detail-value">{{ account?.login_username || '-' }}</span>
+                </div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-icon"><n-icon><ShieldCheckmarkOutline /></n-icon></div>
+                <div class="detail-content">
+                  <span class="detail-label">Session 自动刷新</span>
+                  <span class="detail-value">{{ account?.has_login_credentials ? '已启用' : '未启用' }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -300,6 +314,31 @@
           </div>
           <div class="form-row">
             <div class="form-item flex-1">
+              <label>登录账号</label>
+              <n-input
+                v-model:value="editForm.login_username"
+                :disabled="editForm.clear_login_credentials"
+                placeholder="邮箱或用户名，可留空"
+              />
+            </div>
+            <div class="form-item flex-1">
+              <label>登录密码</label>
+              <n-input
+                v-model:value="editForm.login_password"
+                type="password"
+                show-password-on="click"
+                :disabled="editForm.clear_login_credentials"
+                placeholder="留空则保持原密码不变"
+              />
+            </div>
+          </div>
+          <div class="form-item" v-if="account?.has_login_credentials">
+            <n-checkbox v-model:checked="editForm.clear_login_credentials">
+              清除已保存的登录凭证
+            </n-checkbox>
+          </div>
+          <div class="form-row">
+            <div class="form-item flex-1">
               <label>状态</label>
               <n-switch v-model:value="editForm.is_active" size="large">
                 <template #checked>启用</template>
@@ -373,6 +412,9 @@ const showEditModal = ref(false)
 const editForm = ref({
   user_id: '',
   session_cookie: '',
+  login_username: '',
+  login_password: '',
+  clear_login_credentials: false,
   is_active: true,
   platform_id: null as number | null,
   group_id: null as number | null,
@@ -419,6 +461,8 @@ const loadAccount = async () => {
     editForm.value.is_active = res.data.is_active
     editForm.value.platform_id = res.data.platform?.id || null
     editForm.value.group_id = res.data.group_id || null
+    editForm.value.login_username = res.data.login_username || ''
+    editForm.value.clear_login_credentials = false
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {
@@ -507,6 +551,18 @@ const handleUpdate = async () => {
     if (editForm.value.session_cookie.trim()) {
       data.session_cookie = editForm.value.session_cookie.trim()
     }
+    if (editForm.value.clear_login_credentials) {
+      data.clear_login_credentials = true
+    } else {
+      const previousLoginUsername = account.value?.login_username?.trim() || ''
+      const currentLoginUsername = editForm.value.login_username.trim()
+      if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
+        data.login_username = currentLoginUsername
+      }
+      if (editForm.value.login_password) {
+        data.login_password = editForm.value.login_password
+      }
+    }
     if (editForm.value.group_id !== account.value?.group_id) {
       data.group_id = editForm.value.group_id || 0
     }
@@ -530,6 +586,8 @@ const handleUpdate = async () => {
     showEditModal.value = false
     editForm.value.user_id = ''
     editForm.value.session_cookie = ''
+    editForm.value.login_password = ''
+    editForm.value.clear_login_credentials = false
     loadAccount()
     loadAccountInfo()
   } catch (e: any) {
@@ -609,6 +667,9 @@ const openEditModal = async () => {
   showEditModal.value = true
   editForm.value.user_id = ''
   editForm.value.session_cookie = ''
+  editForm.value.login_username = account.value?.login_username || ''
+  editForm.value.login_password = ''
+  editForm.value.clear_login_credentials = false
   editForm.value.is_active = account.value?.is_active ?? true
   editForm.value.platform_id = account.value?.platform?.id || null
   editForm.value.group_id = account.value?.group_id || null

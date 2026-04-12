@@ -15,6 +15,8 @@ class Account(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_cookie = Column(Text, nullable=False)
+    login_username = Column(String(255), nullable=True)
+    login_password = Column(Text, nullable=True)
     anyrouter_user_id = Column(Integer, nullable=True)
     anrouter_user_id = synonym("anyrouter_user_id")
     username = Column(String(100), nullable=True)

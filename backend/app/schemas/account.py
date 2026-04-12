@@ -9,8 +9,10 @@ from app.schemas.platform import PlatformBrief
 
 class AccountCreate(BaseModel):
     """创建账号请求"""
-    session_cookie: str
+    session_cookie: Optional[str] = None
     user_id: str  # new-api-user，必填
+    login_username: Optional[str] = None
+    login_password: Optional[str] = None
     platform_id: int
     group_id: Optional[int] = None
 
@@ -19,6 +21,9 @@ class AccountUpdate(BaseModel):
     """更新账号请求"""
     session_cookie: Optional[str] = None
     user_id: Optional[str] = None  # new-api-user
+    login_username: Optional[str] = None
+    login_password: Optional[str] = None
+    clear_login_credentials: Optional[bool] = None
     is_active: Optional[bool] = None
     platform_id: Optional[int] = None
     group_id: Optional[int] = None
@@ -50,6 +55,8 @@ class AccountResponse(BaseModel):
     id: int
     username: Optional[str] = None
     display_name: Optional[str] = None
+    login_username: Optional[str] = None
+    has_login_credentials: bool = False
     anrouter_user_id: Optional[int] = None
     anyrouter_user_id: Optional[int] = None
     is_active: bool

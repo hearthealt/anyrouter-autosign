@@ -29,6 +29,8 @@ export interface Account {
   anyrouter_user_id?: number
   username: string
   display_name?: string
+  login_username?: string
+  has_login_credentials?: boolean
   is_active: boolean
   platform?: PlatformBrief
   health_status: 'healthy' | 'unhealthy' | 'unknown'
@@ -67,8 +69,10 @@ export interface AccountGroup {
 export type GroupColor = 'default' | 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'pink' | 'cyan'
 
 export interface CreateAccountParams {
-  session_cookie: string
+  session_cookie?: string
   user_id: string
+  login_username?: string
+  login_password?: string
   platform_id: number
   group_id?: number
 }
@@ -76,6 +80,9 @@ export interface CreateAccountParams {
 export interface UpdateAccountParams {
   user_id?: string
   session_cookie?: string
+  login_username?: string
+  login_password?: string
+  clear_login_credentials?: boolean
   is_active?: boolean
   platform_id?: number
   group_id?: number
@@ -317,6 +324,9 @@ export interface PaginatedResponse<T> {
 export interface AddAccountForm {
   session_cookie: string
   user_id: string
+  login_username: string
+  login_password: string
+  clear_login_credentials: boolean
   platform_id: number | null
   group_id: number | null
   notify_channel_ids: number[]
@@ -325,6 +335,9 @@ export interface AddAccountForm {
 export interface EditAccountForm {
   user_id: string
   session_cookie: string
+  login_username: string
+  login_password: string
+  clear_login_credentials: boolean
   is_active: boolean
   platform_id: number | null
   group_id: number | null

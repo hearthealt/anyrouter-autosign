@@ -38,6 +38,7 @@ def init_db():
 
     Base.metadata.create_all(bind=engine)
     _migrate_platform_schema()
+    _migrate_account_login_schema()
 
     # 初始化默认管理员
     _init_default_admin()
@@ -124,6 +125,33 @@ def _migrate_platform_schema():
     except Exception as e:
         db.rollback()
         logger.error(f"平台结构迁移失败: {e}")
+    finally:
+        db.close()
+
+
+def _migrate_account_login_schema():
+    """为旧数据库补充账号登录凭证字段。"""
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("accounts"):
+            return
+
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+
+        if "login_username" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN login_username VARCHAR(255)"))
+            db.commit()
+            logger.info("已为 accounts 表添加 login_username 列")
+
+        if "login_password" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN login_password TEXT"))
+            db.commit()
+            logger.info("已为 accounts 表添加 login_password 列")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"账号登录字段迁移失败: {e}")
     finally:
         db.close()
 

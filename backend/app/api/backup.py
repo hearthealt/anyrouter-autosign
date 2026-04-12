@@ -65,6 +65,8 @@ def export_backup(
         backup_data["accounts"].append({
             "id": acc.id,
             "session_cookie": acc.session_cookie,  # 加密存储时需要处理
+            "login_username": acc.login_username,
+            "login_password": acc.login_password,
             "anrouter_user_id": acc.anyrouter_user_id,
             "anyrouter_user_id": acc.anyrouter_user_id,
             "platform_id": acc.platform_id,
@@ -290,6 +292,8 @@ async def import_backup(
                 if existing:
                     if overwrite:
                         existing.session_cookie = acc["session_cookie"]
+                        existing.login_username = acc.get("login_username")
+                        existing.login_password = acc.get("login_password")
                         existing.platform_id = mapped_platform_id
                         existing.username = acc.get("username")
                         existing.display_name = acc.get("display_name")
@@ -301,6 +305,8 @@ async def import_backup(
                 else:
                     new_account = Account(
                         session_cookie=acc["session_cookie"],
+                        login_username=acc.get("login_username"),
+                        login_password=acc.get("login_password"),
                         anyrouter_user_id=imported_user_id,
                         platform_id=mapped_platform_id,
                         username=acc.get("username"),

@@ -16,7 +16,7 @@
         <div class="guide-grid">
           <div class="guide-card">
             <span class="guide-kicker">Capture</span>
-            <p>{{ isEdit ? '编辑时可以留空 User ID 和 Session Cookie，仅修改平台、状态、分组或通知渠道。' : '新增账号时，User ID 对应请求头 `new-api-user`，Session Cookie 填浏览器 Cookie 中 `session` 的值。' }}</p>
+            <p>{{ isEdit ? '可继续手动维护 Session，也可以保存登录账号和密码，让系统在 Session 失效后自动登录刷新。' : '新增时可二选一：直接填写 Session Cookie，或填写登录账号和密码自动获取 Session。User ID 仍填写请求头 `new-api-user` 的值。' }}</p>
           </div>
           <div class="guide-card subtle">
             <span class="guide-kicker">Notify</span>
@@ -47,14 +47,49 @@
             <div class="form-item form-span-2">
               <label class="form-label">
                 Session Cookie
-                <span class="required" v-if="!isEdit">*</span>
+                <span class="required" v-if="!isEdit && !form.login_username.trim() && !form.login_password.trim()">*</span>
               </label>
               <n-input
                 v-model:value="form.session_cookie"
                 type="textarea"
                 :rows="4"
-                :placeholder="isEdit ? '留空则不修改' : 'Cookie 中 session 的值'"
+                :placeholder="isEdit ? '留空则不修改' : 'Cookie 中 session 的值；如已填写登录账号密码，可留空自动获取'"
               />
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">
+                登录账号
+                <span class="required" v-if="!isEdit && !form.session_cookie.trim()">*</span>
+              </label>
+              <n-input
+                v-model:value="form.login_username"
+                :disabled="isEdit && form.clear_login_credentials"
+                placeholder="邮箱或用户名，可选"
+              />
+            </div>
+
+            <div class="form-item">
+              <label class="form-label">
+                登录密码
+                <span class="required" v-if="!isEdit && !form.session_cookie.trim()">*</span>
+              </label>
+              <n-input
+                v-model:value="form.login_password"
+                type="password"
+                show-password-on="click"
+                :disabled="isEdit && form.clear_login_credentials"
+                :placeholder="isEdit ? '留空则保持原密码不变' : '登录密码，可选'"
+              />
+            </div>
+
+            <div class="form-item" v-if="isEdit && props.account?.has_login_credentials">
+              <label class="form-label">自动刷新</label>
+              <div class="switch-shell clear-credentials-shell">
+                <n-checkbox v-model:checked="form.clear_login_credentials">
+                  清除已保存的登录凭证
+                </n-checkbox>
+              </div>
             </div>
 
             <div class="form-item">
@@ -131,6 +166,9 @@ const emit = defineEmits<{
   submit: [data: {
     user_id: string
     session_cookie: string
+    login_username: string
+    login_password: string
+    clear_login_credentials: boolean
     is_active?: boolean
     platform_id: number | null
     group_id: number | null
@@ -148,6 +186,9 @@ const isEdit = computed(() => !!props.account)
 const form = ref({
   user_id: '',
   session_cookie: '',
+  login_username: '',
+  login_password: '',
+  clear_login_credentials: false,
   is_active: true,
   platform_id: null as number | null,
   group_id: null as number | null,
@@ -168,6 +209,9 @@ const resetForm = () => {
   form.value = {
     user_id: '',
     session_cookie: '',
+    login_username: '',
+    login_password: '',
+    clear_login_credentials: false,
     is_active: true,
     platform_id: null,
     group_id: null,
@@ -184,6 +228,9 @@ const applyAccountToForm = (account?: Account | null) => {
   form.value = {
     user_id: '',
     session_cookie: '',
+    login_username: account.login_username || '',
+    login_password: '',
+    clear_login_credentials: false,
     is_active: account.is_active,
     platform_id: account.platform?.id || null,
     group_id: account.group_id || null,
@@ -270,8 +317,25 @@ const handleSubmit = () => {
       window.$notify('请输入 User ID', 'warning')
       return
     }
-    if (!form.value.session_cookie.trim()) {
-      window.$notify('请输入 Session Cookie', 'warning')
+    const hasSessionCookie = !!form.value.session_cookie.trim()
+    const hasLoginUsername = !!form.value.login_username.trim()
+    const hasLoginPassword = !!form.value.login_password.trim()
+
+    if (!hasSessionCookie && !(hasLoginUsername && hasLoginPassword)) {
+      window.$notify('请填写 Session Cookie，或同时填写登录账号和密码', 'warning')
+      return
+    }
+
+    if ((hasLoginUsername && !hasLoginPassword) || (!hasLoginUsername && hasLoginPassword)) {
+      window.$notify('登录账号和密码需要同时填写', 'warning')
+      return
+    }
+  } else {
+    const hasLoginUsername = !!form.value.login_username.trim()
+    const hasLoginPassword = !!form.value.login_password.trim()
+
+    if (!form.value.clear_login_credentials && ((hasLoginUsername && !hasLoginPassword && !props.account?.has_login_credentials) || (!hasLoginUsername && hasLoginPassword))) {
+      window.$notify('登录账号和密码需要同时填写', 'warning')
       return
     }
   }
@@ -416,6 +480,10 @@ defineExpose({
   min-height: 40px;
   padding: 0 12px;
   border-radius: var(--radius-lg);
+}
+
+.clear-credentials-shell {
+  justify-content: flex-start;
 }
 
 .notify-shell {

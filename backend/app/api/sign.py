@@ -11,7 +11,7 @@ from app.models import Account, SignLog, NotifyChannel, AccountNotify
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
-from app.services import anrouter_service, NotifyFactory
+from app.services import anrouter_service, execute_with_session_refresh, NotifyFactory
 from app.utils import format_quota, get_account_platform_config
 
 router = APIRouter(tags=["签到"])
@@ -46,6 +46,23 @@ def build_success_notification_content(reward_quota: int) -> str:
     return "签到成功"
 
 
+def perform_sign_request(db: Session, account: Account, platform_config: dict):
+    """执行签到请求，必要时自动刷新 session 后重试。"""
+    return execute_with_session_refresh(
+        db,
+        account,
+        lambda session_cookie, user_id, current_platform: anrouter_service.sign_in(
+            session_cookie,
+            user_id,
+            current_platform["base_url"],
+            sign_api=current_platform["sign_api"],
+            checkin_api=current_platform["checkin_api"],
+            console_url=current_platform["console_url"]
+        ),
+        platform_config=platform_config,
+    )
+
+
 @router.post("/accounts/{account_id}/sign", response_model=ApiResponse)
 def sign_account(account_id: int, db: Session = Depends(get_db)):
     """单账号签到"""
@@ -65,14 +82,7 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     platform_config = get_account_platform_config(account)
 
     # 执行签到
-    success, result = anrouter_service.sign_in(
-        account.session_cookie,
-        str(account.anrouter_user_id),
-        platform_config["base_url"],
-        sign_api=platform_config["sign_api"],
-        checkin_api=platform_config["checkin_api"],
-        console_url=platform_config["console_url"]
-    )
+    success, result = perform_sign_request(db, account, platform_config)
 
     sign_success = success and result.get("success", False)
     message = result.get("message", "")
@@ -94,6 +104,7 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         success=sign_success,
         message=log_message,
         reward_quota=reward_quota,
+        retry_count=0,
         status=log_status
     )
     db.add(log)
@@ -148,14 +159,7 @@ def batch_sign(db: Session = Depends(get_db)):
     for account in accounts:
         platform_config = get_account_platform_config(account)
 
-        success, result = anrouter_service.sign_in(
-            account.session_cookie,
-            str(account.anrouter_user_id),
-            platform_config["base_url"],
-            sign_api=platform_config["sign_api"],
-            checkin_api=platform_config["checkin_api"],
-            console_url=platform_config["console_url"]
-        )
+        success, result = perform_sign_request(db, account, platform_config)
         sign_success = success and result.get("success", False)
         message = result.get("message", "")
         reward_quota = result.get("reward_quota", 0)
@@ -176,6 +180,7 @@ def batch_sign(db: Session = Depends(get_db)):
             success=sign_success,
             message=log_message,
             reward_quota=reward_quota,
+            retry_count=0,
             status=log_status
         )
         db.add(log)
@@ -276,6 +281,7 @@ def get_all_sign_logs(
             "message": log.message,
             "reward_quota": log.reward_quota,
             "reward_display": format_quota(log.reward_quota),
+            "retry_count": log.retry_count,
             "status": log.status
         }
         for log, account in logs
@@ -319,7 +325,9 @@ def get_sign_logs(
             success=log.success,
             message=log.message,
             reward_quota=log.reward_quota,
-            reward_display=format_quota(log.reward_quota)
+            reward_display=format_quota(log.reward_quota),
+            retry_count=log.retry_count,
+            status=log.status
         )
         for log in logs
     ]

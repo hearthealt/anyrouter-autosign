@@ -490,6 +490,9 @@ const handleEditToken = async (tokenId: number, data: CreateTokenParams, done?: 
 const handleAccountSubmit = async (data: {
   user_id: string
   session_cookie: string
+  login_username: string
+  login_password: string
+  clear_login_credentials: boolean
   is_active?: boolean
   platform_id: number | null
   group_id: number | null
@@ -501,6 +504,18 @@ const handleAccountSubmit = async (data: {
 
       if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
       if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+      if (data.clear_login_credentials) {
+        updateData.clear_login_credentials = true
+      } else {
+        const previousLoginUsername = editingAccount.value.login_username?.trim() || ''
+        const currentLoginUsername = data.login_username.trim()
+        if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
+          updateData.login_username = currentLoginUsername
+        }
+        if (data.login_password) {
+          updateData.login_password = data.login_password
+        }
+      }
       if (data.group_id !== editingAccount.value.group_id) {
         updateData.group_id = data.group_id || 0
       }
@@ -521,8 +536,10 @@ const handleAccountSubmit = async (data: {
       window.$notify('账号更新成功', 'success')
     } else {
       const res: any = await accountApi.create({
-        session_cookie: data.session_cookie,
-        user_id: data.user_id,
+        session_cookie: data.session_cookie.trim() || undefined,
+        user_id: data.user_id.trim(),
+        login_username: data.login_username.trim() || undefined,
+        login_password: data.login_password || undefined,
         platform_id: data.platform_id as number,
         group_id: data.group_id || undefined
       })
