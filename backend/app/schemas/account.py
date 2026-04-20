@@ -10,9 +10,10 @@ from app.schemas.platform import PlatformBrief
 class AccountCreate(BaseModel):
     """创建账号请求"""
     session_cookie: Optional[str] = None
-    user_id: str  # new-api-user，必填
+    user_id: Optional[str] = None  # new-api-user，填写了登录账号密码时可留空
     login_username: Optional[str] = None
     login_password: Optional[str] = None
+    note: Optional[str] = None
     platform_id: int
     group_id: Optional[int] = None
 
@@ -23,6 +24,7 @@ class AccountUpdate(BaseModel):
     user_id: Optional[str] = None  # new-api-user
     login_username: Optional[str] = None
     login_password: Optional[str] = None
+    note: Optional[str] = None
     clear_login_credentials: Optional[bool] = None
     is_active: Optional[bool] = None
     platform_id: Optional[int] = None
@@ -55,6 +57,7 @@ class AccountResponse(BaseModel):
     id: int
     username: Optional[str] = None
     display_name: Optional[str] = None
+    note: Optional[str] = None
     login_username: Optional[str] = None
     has_login_credentials: bool = False
     anrouter_user_id: Optional[int] = None
@@ -125,3 +128,28 @@ class CreateTokenRequest(BaseModel):
     model_limits: str = ""  # 逗号分隔的模型列表
     allow_ips: str = ""
     group: str = "default"
+
+
+class BatchImportItem(BaseModel):
+    """批量导入的单条账号"""
+    session_cookie: Optional[str] = None
+    user_id: Optional[str] = None
+    login_username: Optional[str] = None
+    login_password: Optional[str] = None
+    note: Optional[str] = None
+    platform_id: int
+    group_id: Optional[int] = None
+
+
+class BatchImportRequest(BaseModel):
+    """批量导入请求"""
+    items: List[BatchImportItem]
+
+
+class BatchImportResultItem(BaseModel):
+    """批量导入结果单条"""
+    index: int
+    success: bool
+    message: str
+    account_id: Optional[int] = None
+    username: Optional[str] = None

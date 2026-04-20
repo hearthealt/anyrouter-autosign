@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { getToken, removeToken } from '../utils/auth'
+import router from '../router'
+import { ApiError } from '../utils/apiError'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -25,17 +27,22 @@ api.interceptors.response.use(
   response => response.data,
   error => {
     const status = error.response?.status
-    const message = error.response?.data?.detail || error.message
+    const detail = error.response?.data
+    const message = detail?.detail || error.message
 
-    // 401 未授权 - 跳转登录页
+    // 401 未授权 - 跳转登录页（保留当前路径便于回跳）
     if (status === 401) {
       removeToken()
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      const current = router.currentRoute.value
+      if (current.path !== '/login') {
+        router.push({
+          path: '/login',
+          query: current.fullPath !== '/' ? { redirect: current.fullPath } : undefined
+        })
       }
     }
 
-    return Promise.reject(new Error(message))
+    return Promise.reject(new ApiError(message, status, detail))
   }
 )
 
@@ -59,8 +66,27 @@ export const platformApi = {
 
 // 账号 API
 export const accountApi = {
-  getList: () => api.get('/accounts'),
-  create: (data: { session_cookie?: string; user_id: string; login_username?: string; login_password?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  getList: (params?: {
+    page?: number
+    size?: number
+    keyword?: string
+    platform_id?: number
+    group_id?: number
+    status?: string
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
+  }) => api.get('/accounts', { params }),
+  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  batchImport: (data: {
+    items: Array<{
+      session_cookie?: string
+      user_id?: string
+      login_username?: string
+      login_password?: string
+      platform_id: number
+      group_id?: number
+    }>
+  }) => api.post('/accounts/batch-import', data),
   get: (id: number) => api.get(`/accounts/${id}`),
   update: (id: number, data: any) => api.put(`/accounts/${id}`, data),
   delete: (id: number) => api.delete(`/accounts/${id}`),
@@ -92,7 +118,16 @@ export const accountApi = {
 export const signApi = {
   sign: (accountId: number) => api.post(`/accounts/${accountId}/sign`),
   batchSign: () => api.post('/sign/batch'),
-  getAllLogs: (params?: { page?: number; size?: number; account_id?: number; success?: boolean; start_date?: string; end_date?: string }) =>
+  getAllLogs: (params?: {
+    page?: number
+    size?: number
+    account_id?: number
+    success?: boolean
+    start_date?: string
+    end_date?: string
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
+  }) =>
     api.get('/sign-logs', { params })
 }
 
@@ -120,19 +155,23 @@ export const settingsApi = {
   getScheduler: () => api.get('/settings/scheduler')
 }
 
+export const eventsApi = {
+  streamUrl: (token: string) => `/api/v1/events?token=${encodeURIComponent(token)}`
+}
+
 // API 节点
 export const apiEndpointsApi = {
-  getList: () => api.get('/api-endpoints'),
-  sync: () => api.post('/api-endpoints/sync')
+  getList: (platformId?: number) =>
+    api.get('/api-endpoints', { params: platformId != null ? { platform_id: platformId } : undefined }),
+  sync: (platformId?: number) =>
+    api.post('/api-endpoints/sync', null, { params: platformId != null ? { platform_id: platformId } : undefined })
 }
 
 // 备份恢复 API
 export const backupApi = {
   getInfo: () => api.get('/backup/info'),
-  export: (includeLogs = false) => {
-    const token = getToken()
-    return `/api/v1/backup/export?include_logs=${includeLogs}&token=${token}`
-  },
+  // 导出走 fetch + Authorization header（见 Settings.vue handleExport），此处保留 path 供使用者拼装
+  exportPath: (includeLogs = false) => `/api/v1/backup/export?include_logs=${includeLogs}`,
   import: (file: File, overwrite = false) => {
     const formData = new FormData()
     formData.append('file', file)

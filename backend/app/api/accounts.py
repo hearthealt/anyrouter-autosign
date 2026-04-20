@@ -2,15 +2,16 @@
 账号管理 API
 """
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy import String, asc, case, cast, desc, func, or_
+from sqlalchemy.orm import Query, Session
 
 from app.database import get_db
 from app.models import Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, ApiToken, User, AuditAction, Platform
 from app.schemas import (
     AccountCreate, AccountUpdate, AccountResponse, AccountInfo,
-    LastSign, ApiResponse
+    LastSign, ApiResponse, BatchImportRequest, BatchImportResultItem
 )
 from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest, PlatformBrief
 from app.services import (
@@ -20,6 +21,7 @@ from app.services import (
     resolve_session_cookie,
 )
 from app.services.audit import log_action
+from app.services.events import publish_event
 from app.utils import (
     format_quota,
     format_quota_percent,
@@ -125,6 +127,14 @@ def clean_optional_secret(value: Optional[str]) -> Optional[str]:
     return value if value != "" else None
 
 
+def clean_optional_note(value: Optional[str]) -> Optional[str]:
+    """清理备注字段并限制长度。"""
+    cleaned = clean_optional_str(value)
+    if not cleaned:
+        return None
+    return cleaned[:255]
+
+
 def build_account_response(db: Session, account: Account) -> AccountResponse:
     """统一构造账号响应。"""
     total_quota = account.cached_quota + account.cached_used_quota
@@ -132,6 +142,7 @@ def build_account_response(db: Session, account: Account) -> AccountResponse:
         id=account.id,
         username=account.username,
         display_name=account.display_name,
+        note=account.note,
         login_username=account.login_username,
         has_login_credentials=has_login_credentials(account),
         anrouter_user_id=account.anrouter_user_id,
@@ -154,12 +165,187 @@ def build_account_response(db: Session, account: Account) -> AccountResponse:
     )
 
 
-@router.get("", response_model=ApiResponse)
-def get_accounts(db: Session = Depends(get_db)):
-    """获取账号列表"""
-    accounts = db.query(Account).order_by(Account.created_at.desc()).all()
+def build_accounts_query(
+    db: Session,
+    keyword: Optional[str] = None,
+    platform_id: Optional[int] = None,
+    group_id: Optional[int] = None
+) -> Tuple[Query, Query]:
+    """构造账号列表基础查询。"""
+    last_sign_subquery = db.query(
+        SignLog.account_id.label("account_id"),
+        func.max(SignLog.sign_time).label("last_sign_time")
+    ).group_by(SignLog.account_id).subquery()
 
-    return ApiResponse(success=True, data=[build_account_response(db, account) for account in accounts])
+    query = db.query(Account).outerjoin(
+        Platform, Platform.id == Account.platform_id
+    ).outerjoin(
+        AccountGroup, AccountGroup.id == Account.group_id
+    ).outerjoin(
+        last_sign_subquery, last_sign_subquery.c.account_id == Account.id
+    )
+
+    cleaned_keyword = clean_optional_str(keyword)
+    if cleaned_keyword:
+        like_pattern = f"%{cleaned_keyword}%"
+        query = query.filter(or_(
+            Account.username.ilike(like_pattern),
+            Account.display_name.ilike(like_pattern),
+            Account.note.ilike(like_pattern),
+            Platform.name.ilike(like_pattern),
+            cast(Account.anyrouter_user_id, String).ilike(like_pattern)
+        ))
+
+    if platform_id is not None:
+        query = query.filter(Account.platform_id == platform_id)
+
+    if group_id is not None:
+        query = query.filter(Account.group_id == group_id)
+
+    return query, last_sign_subquery
+
+
+def apply_account_status_filter(
+    query: Query,
+    status: Optional[str],
+    last_sign_subquery: Query,
+    today_start: datetime
+) -> Query:
+    """应用账号状态筛选。"""
+    if not status:
+        return query
+
+    if status == "healthy":
+        return query.filter(Account.is_active == True, Account.health_status == "healthy")
+    if status == "unhealthy":
+        return query.filter(Account.is_active == True, Account.health_status == "unhealthy")
+    if status == "pending":
+        return query.filter(
+            Account.is_active == True,
+            or_(
+                last_sign_subquery.c.last_sign_time.is_(None),
+                last_sign_subquery.c.last_sign_time < today_start
+            )
+        )
+    if status == "disabled":
+        return query.filter(Account.is_active == False)
+
+    return query
+
+
+def build_accounts_summary(
+    base_query: Query,
+    last_sign_subquery: Query,
+    today_start: datetime
+) -> dict:
+    """构造账号列表汇总信息。"""
+    summary_query = base_query.order_by(None)
+    active_query = summary_query.filter(Account.is_active == True)
+
+    return {
+        "total": summary_query.count(),
+        "active_count": active_query.count(),
+        "healthy_count": active_query.filter(Account.health_status == "healthy").count(),
+        "unhealthy_count": active_query.filter(Account.health_status == "unhealthy").count(),
+        "disabled_count": summary_query.filter(Account.is_active == False).count(),
+        "pending_count": active_query.filter(or_(
+            last_sign_subquery.c.last_sign_time.is_(None),
+            last_sign_subquery.c.last_sign_time < today_start
+        )).count()
+    }
+
+
+def apply_account_sort(
+    query: Query,
+    sort_by: Optional[str],
+    sort_order: str,
+    last_sign_subquery: Query
+) -> Query:
+    """应用账号列表排序。"""
+    normalized_order = (sort_order or "desc").lower()
+    is_desc = normalized_order.startswith("desc")
+
+    if not sort_by:
+        return query.order_by(Account.created_at.desc(), Account.id.desc())
+
+    if sort_by == "username":
+        sort_column = Account.username
+    elif sort_by == "platform":
+        sort_column = Platform.name
+    elif sort_by == "group":
+        sort_column = AccountGroup.name
+    elif sort_by == "quota":
+        sort_column = Account.cached_quota
+    elif sort_by == "last_sign":
+        sort_column = last_sign_subquery.c.last_sign_time
+        null_rank = case((last_sign_subquery.c.last_sign_time.is_(None), 1), else_=0)
+        return query.order_by(
+            null_rank.asc(),
+            desc(sort_column) if is_desc else asc(sort_column),
+            Account.id.desc()
+        )
+    elif sort_by == "health":
+        sort_column = case(
+            (Account.is_active == False, 0),
+            (Account.health_status == "unhealthy", 1),
+            (Account.health_status == "unknown", 2),
+            (Account.health_status == "healthy", 3),
+            else_=2
+        )
+    else:
+        return query.order_by(Account.created_at.desc(), Account.id.desc())
+
+    return query.order_by(desc(sort_column) if is_desc else asc(sort_column), Account.id.desc())
+
+
+@router.get("", response_model=ApiResponse)
+def get_accounts(
+    page: Optional[int] = None,
+    size: Optional[int] = None,
+    keyword: Optional[str] = None,
+    platform_id: Optional[int] = None,
+    group_id: Optional[int] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: str = "desc",
+    db: Session = Depends(get_db)
+):
+    """获取账号列表"""
+    base_query, last_sign_subquery = build_accounts_query(
+        db=db,
+        keyword=keyword,
+        platform_id=platform_id,
+        group_id=group_id
+    )
+
+    if all(param is None for param in (page, size, keyword, platform_id, group_id, status, sort_by)):
+        accounts = base_query.order_by(Account.created_at.desc()).all()
+        return ApiResponse(success=True, data=[build_account_response(db, account) for account in accounts])
+
+    today_start = datetime.combine(datetime.now().date(), datetime.min.time())
+    summary = build_accounts_summary(base_query, last_sign_subquery, today_start)
+    filtered_query = apply_account_status_filter(base_query, status, last_sign_subquery, today_start)
+    total = filtered_query.order_by(None).count()
+
+    resolved_page = max(page or 1, 1)
+    resolved_size = min(max(size or 10, 1), 100)
+    accounts = apply_account_sort(
+        filtered_query,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        last_sign_subquery=last_sign_subquery
+    ).offset((resolved_page - 1) * resolved_size).limit(resolved_size).all()
+
+    return ApiResponse(
+        success=True,
+        data={
+            "items": [build_account_response(db, account) for account in accounts],
+            "total": total,
+            "page": resolved_page,
+            "size": resolved_size,
+            "summary": summary
+        }
+    )
 
 
 @router.post("", response_model=ApiResponse)
@@ -174,25 +360,34 @@ def create_account(
     if not platform:
         raise HTTPException(status_code=400, detail="平台不存在")
     platform_config = get_platform_config(platform)
-    user_id = (data.user_id or "").strip()
-    if not user_id:
-        raise HTTPException(status_code=400, detail="请输入 User ID")
+    user_id = clean_optional_str(data.user_id)
 
     session_cookie = clean_optional_str(data.session_cookie)
     login_username = clean_optional_str(data.login_username)
     login_password = clean_optional_secret(data.login_password)
+    note = clean_optional_note(data.note)
 
     if bool(login_username) != bool(login_password):
         raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
 
+    if not user_id and not (login_username and login_password):
+        raise HTTPException(status_code=400, detail="请填写 User ID，或填写登录账号和密码")
+
+    prefer_login = not user_id and bool(login_username and login_password)
     resolved, session_result = resolve_session_cookie(
         base_url=platform_config["base_url"],
         session_cookie=session_cookie,
         login_username=login_username,
         login_password=login_password,
+        prefer_login=prefer_login,
     )
     if not resolved:
         raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
+
+    if not user_id:
+        user_id = clean_optional_str(session_result.get("user_id"))
+        if not user_id:
+            raise HTTPException(status_code=400, detail="登录成功但未获取到 User ID，请手动填写")
 
     # 验证 session_cookie 和 user_id
     success, user_info = anrouter_service.get_user_info(
@@ -217,6 +412,7 @@ def create_account(
         session_cookie=session_result.get("session_cookie", ""),
         login_username=login_username,
         login_password=login_password,
+        note=note,
         anrouter_user_id=int(user_id),
         username=user_info.get("username"),
         display_name=user_info.get("display_name"),
@@ -254,10 +450,176 @@ def create_account(
         request=request
     )
 
+    publish_event(
+        "account_changed",
+        {
+            "account_id": account.id,
+            "username": account.username or "",
+            "action": "created",
+        }
+    )
+
     return ApiResponse(
         success=True,
         message="账号添加成功",
         data=build_account_response(db, account)
+    )
+
+
+@router.post("/batch-import", response_model=ApiResponse)
+def batch_import_accounts(
+    data: BatchImportRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """批量导入账号：逐条验证，不抛异常，返回每条结果"""
+    results: List[BatchImportResultItem] = []
+    success_count = 0
+
+    for idx, item in enumerate(data.items):
+        try:
+            platform = get_platform_by_id(db, item.platform_id)
+            if not platform:
+                results.append(BatchImportResultItem(
+                    index=idx, success=False, message="平台不存在"
+                ))
+                continue
+
+            platform_config = get_platform_config(platform)
+            user_id = clean_optional_str(item.user_id)
+            session_cookie = clean_optional_str(item.session_cookie)
+            login_username = clean_optional_str(item.login_username)
+            login_password = clean_optional_secret(item.login_password)
+            note = clean_optional_note(item.note)
+
+            if bool(login_username) != bool(login_password):
+                results.append(BatchImportResultItem(
+                    index=idx, success=False, message="登录账号和密码需要同时填写"
+                ))
+                continue
+
+            if not user_id and not (login_username and login_password):
+                results.append(BatchImportResultItem(
+                    index=idx, success=False, message="缺少 User ID 或登录凭证"
+                ))
+                continue
+
+            prefer_login = not user_id and bool(login_username and login_password)
+            resolved, session_result = resolve_session_cookie(
+                base_url=platform_config["base_url"],
+                session_cookie=session_cookie,
+                login_username=login_username,
+                login_password=login_password,
+                prefer_login=prefer_login,
+            )
+            if not resolved:
+                results.append(BatchImportResultItem(
+                    index=idx, success=False,
+                    message=session_result.get("message", "凭证解析失败")
+                ))
+                continue
+
+            if not user_id:
+                user_id = clean_optional_str(session_result.get("user_id"))
+                if not user_id:
+                    results.append(BatchImportResultItem(
+                        index=idx, success=False, message="未能获取 User ID"
+                    ))
+                    continue
+
+            ok, user_info = anrouter_service.get_user_info(
+                session_result.get("session_cookie", ""),
+                user_id,
+                platform_config["base_url"],
+                user_api=platform_config["user_api"],
+                console_url=platform_config["console_url"]
+            )
+            if not ok:
+                results.append(BatchImportResultItem(
+                    index=idx, success=False,
+                    message=user_info.get("message", "验证失败")
+                ))
+                continue
+
+            if find_existing_account(db, int(user_id), platform.id):
+                results.append(BatchImportResultItem(
+                    index=idx, success=False,
+                    message="该平台下该账号已存在",
+                    username=user_info.get("username")
+                ))
+                continue
+
+            account = Account(
+                session_cookie=session_result.get("session_cookie", ""),
+                login_username=login_username,
+                login_password=login_password,
+                note=note,
+                anrouter_user_id=int(user_id),
+                username=user_info.get("username"),
+                display_name=user_info.get("display_name"),
+                health_status="healthy",
+                last_health_check=datetime.now(),
+                platform_id=platform.id,
+                group_id=item.group_id,
+                cached_quota=user_info.get("quota", 0),
+                cached_used_quota=user_info.get("used_quota", 0),
+                cached_request_count=user_info.get("request_count", 0),
+                cached_user_group=user_info.get("group", "default"),
+                cached_aff_code=user_info.get("aff_code"),
+                cached_aff_count=user_info.get("aff_count", 0),
+                cached_aff_history_quota=user_info.get("aff_history_quota", 0),
+                quota_updated_at=datetime.now()
+            )
+            db.add(account)
+            db.commit()
+            db.refresh(account)
+
+            try:
+                sync_account_tokens(db, account)
+            except Exception:
+                pass
+
+            log_action(
+                db=db,
+                action=AuditAction.ACCOUNT_CREATE,
+                user_id=current_user.id,
+                username=current_user.username,
+                target_type="account",
+                target_id=account.id,
+                target_name=account.username,
+                request=request
+            )
+
+            publish_event(
+                "account_changed",
+                {
+                    "account_id": account.id,
+                    "username": account.username or "",
+                    "action": "created",
+                }
+            )
+
+            success_count += 1
+            results.append(BatchImportResultItem(
+                index=idx, success=True, message="导入成功",
+                account_id=account.id, username=account.username
+            ))
+        except Exception as e:
+            db.rollback()
+            results.append(BatchImportResultItem(
+                index=idx, success=False, message=str(e) or "导入失败"
+            ))
+
+    return ApiResponse(
+        success=True,
+        message=f"批量导入完成：成功 {success_count}，失败 {len(data.items) - success_count}",
+        data={
+            "total": len(data.items),
+            "success_count": success_count,
+            "fail_count": len(data.items) - success_count,
+            "results": [r.model_dump() for r in results]
+        }
     )
 
 
@@ -314,10 +676,14 @@ def update_account(
         clean_optional_secret(data.login_password)
         if data.login_password is not None else account.login_password
     )
+    next_note = account.note
 
     if data.clear_login_credentials:
         target_login_username = None
         target_login_password = None
+
+    if data.note is not None:
+        next_note = clean_optional_note(data.note)
 
     if target_user_id and (data.user_id is not None or data.platform_id is not None):
         existing = find_existing_account(
@@ -401,6 +767,11 @@ def update_account(
             changes["group_id"] = f"{account.group_id} -> {data.group_id if data.group_id > 0 else None}"
         account.group_id = data.group_id if data.group_id > 0 else None
 
+    if data.note is not None:
+        if account.note != next_note:
+            changes["note"] = "已更新"
+        account.note = next_note
+
     account.updated_at = datetime.now()
     db.commit()
 
@@ -415,6 +786,15 @@ def update_account(
         target_name=account.username,
         detail=changes if changes else None,
         request=request
+    )
+
+    publish_event(
+        "account_changed",
+        {
+            "account_id": account.id,
+            "username": account.username or "",
+            "action": "updated",
+        }
     )
 
     return ApiResponse(success=True, message="账号更新成功")
@@ -455,6 +835,15 @@ def delete_account(
         target_id=account_id,
         target_name=account_name,
         request=request
+    )
+
+    publish_event(
+        "account_changed",
+        {
+            "account_id": account_id,
+            "username": account_name or "",
+            "action": "deleted",
+        }
     )
 
     return ApiResponse(success=True, message="账号删除成功")
@@ -689,12 +1078,28 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
         HealthCheckResponse: 健康检查结果
     """
     now = datetime.now()
+    previous_status = account.health_status or "unknown"
+
+    def emit_health_change() -> None:
+        if previous_status == account.health_status:
+            return
+        publish_event(
+            "health_changed",
+            {
+                "account_id": account.id,
+                "username": account.username or "",
+                "health_status": account.health_status,
+                "health_message": account.health_message,
+                "previous_status": previous_status,
+            }
+        )
 
     if not account.anrouter_user_id:
         account.health_status = "unhealthy"
         account.health_message = "缺少 user_id"
         account.last_health_check = now
         db.commit()
+        emit_health_change()
         return HealthCheckResponse(
             account_id=account.id,
             health_status="unhealthy",
@@ -709,6 +1114,7 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
         account.health_message = e.detail
         account.last_health_check = now
         db.commit()
+        emit_health_change()
         return HealthCheckResponse(
             account_id=account.id,
             health_status="unhealthy",
@@ -755,6 +1161,7 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
 
     account.last_health_check = now
     db.commit()
+    emit_health_change()
 
     return HealthCheckResponse(
         account_id=account.id,

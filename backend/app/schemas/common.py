@@ -23,6 +23,7 @@ class SettingsResponse(BaseModel):
     sign_retry_interval: int = 30
     anyrouter_proxy_enabled: bool = False
     anyrouter_proxy_url: str = ""
+    quota_warning_threshold: float = 5.0
 
 
 class SettingsUpdate(BaseModel):
@@ -36,6 +37,7 @@ class SettingsUpdate(BaseModel):
     sign_retry_interval: Optional[int] = None
     anyrouter_proxy_enabled: Optional[bool] = None
     anyrouter_proxy_url: Optional[str] = None
+    quota_warning_threshold: Optional[float] = None
 
 
 class RecentSign(BaseModel):

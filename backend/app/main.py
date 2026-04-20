@@ -21,7 +21,8 @@ from app.api import (
     groups_router,
     audit_router,
     logs_router,
-    platforms_router
+    platforms_router,
+    events_router
 )
 from app.api.deps import get_current_user
 from app.database import init_db
@@ -88,6 +89,7 @@ app.include_router(groups_router, prefix="/api/v1", dependencies=[Depends(get_cu
 app.include_router(audit_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(logs_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
 app.include_router(platforms_router, prefix="/api/v1", dependencies=[Depends(get_current_user)])
+app.include_router(events_router, prefix="/api/v1")
 
 
 @app.get("/")

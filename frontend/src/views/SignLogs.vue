@@ -1,83 +1,88 @@
 <template>
-  <div class="sign-logs-page">
-    <!-- 筛选条件 -->
-    <div class="filter-card">
-      <div class="filter-left">
-        <n-select
-          v-model:value="filters.account_id"
-          :options="accountOptions"
-          placeholder="全部账号"
-          clearable
-          style="width: 200px;"
-          @update:value="loadLogs(1)"
-        />
-        <n-select
-          v-model:value="filters.success"
-          :options="statusOptions"
-          placeholder="全部状态"
-          clearable
-          style="width: 140px;"
-          @update:value="loadLogs(1)"
-        />
-        <n-date-picker
-          v-model:value="filters.dateRange"
-          type="daterange"
-          clearable
-          style="width: 260px;"
-          @update:value="loadLogs(1)"
-        />
+  <div class="sign-logs-page page-shell">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">签到日志</h1>
+        <p class="page-subtitle">所有账号的签到结果、奖励和错误信息</p>
       </div>
-      <div class="filter-right">
-        <n-button @click="loadLogs(1)" :loading="loading">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
-          刷新
-        </n-button>
+      <div class="metrics">
+        <div class="metric">
+          <span class="metric-label">总记录</span>
+          <span class="metric-value">{{ pagination.itemCount }}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">成功</span>
+          <span class="metric-value success">{{ summary.success_count }}</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">失败</span>
+          <span class="metric-value error">{{ summary.fail_count }}</span>
+        </div>
       </div>
     </div>
 
-    <!-- 签到记录 -->
-    <div class="logs-card">
-      <div class="card-header">
-        <div class="card-title-section">
-          <h3 class="card-title">
-            <n-icon><ListOutline /></n-icon>
-            签到记录
-          </h3>
-          <span class="card-subtitle">共 {{ pagination.itemCount }} 条记录</span>
-        </div>
-      </div>
+    <div class="filter-bar">
+      <n-select
+        v-model:value="filters.account_id"
+        :options="accountOptions"
+        placeholder="全部账号"
+        size="small"
+        clearable
+        class="filter-item"
+        @update:value="loadLogs(1)"
+      />
+      <n-select
+        v-model:value="filters.success"
+        :options="statusOptions"
+        placeholder="全部状态"
+        size="small"
+        clearable
+        class="filter-item"
+        @update:value="loadLogs(1)"
+      />
+      <n-date-picker
+        v-model:value="filters.dateRange"
+        type="daterange"
+        size="small"
+        clearable
+        class="filter-date"
+        @update:value="loadLogs(1)"
+      />
+      <n-button size="small" @click="loadLogs(1)" :loading="loading">
+        <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        刷新
+      </n-button>
+    </div>
 
-      <div class="logs-table-wrapper" v-if="loading || logs.length > 0">
+    <div class="logs-card">
+      <div v-if="loading || logs.length > 0" class="table-wrap">
         <n-data-table
-          class="logs-table"
           :columns="columns"
           :data="logs"
           :row-key="(row: any) => row.id"
           :loading="loading"
           :pagination="false"
           :single-line="false"
+          :remote="true"
           size="small"
+          @update:sorter="handleSorterChange"
         />
       </div>
 
-      <!-- 空状态 -->
-      <div class="logs-empty" v-else>
-        <div class="empty-illustration">
-          <n-icon :size="64" color="var(--text-quaternary)"><DocumentTextOutline /></n-icon>
-        </div>
+      <div v-else class="empty-state">
+        <n-icon :size="32" color="var(--text-quaternary)"><DocumentTextOutline /></n-icon>
         <div class="empty-title">暂无签到记录</div>
-        <div class="empty-desc">签到后记录将显示在这里</div>
+        <div class="empty-desc">当前筛选条件下没有匹配数据</div>
       </div>
 
-      <!-- 分页 -->
-      <div class="logs-pagination" v-if="pagination.itemCount > 0">
+      <div v-if="pagination.itemCount > 0" class="pagination-wrap">
         <n-pagination
           v-model:page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :item-count="pagination.itemCount"
           :page-sizes="pagination.pageSizes"
           show-size-picker
-          show-quick-jumper
+          size="small"
           @update:page="handlePageChange"
           @update:page-size="handlePageSizeChange"
         />
@@ -87,21 +92,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
-import { NTag, type DataTableColumns } from 'naive-ui'
+import { ref, onMounted, computed, h, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import {
+  NTag,
+  type DataTableColumns,
+  type DataTableSortOrder,
+  type DataTableSortState
+} from 'naive-ui'
 import {
   RefreshOutline,
   DocumentTextOutline,
-  ListOutline
 } from '@vicons/ionicons5'
 import { signApi, accountApi } from '../api'
-import { useFormat } from '../composables'
+import { useFormat, useViewRefresh } from '../composables'
 
 const { formatDateTime } = useFormat()
+const route = useRoute()
 
 const loading = ref(false)
 const logs = ref<any[]>([])
 const accounts = ref<any[]>([])
+const summary = ref({
+  success_count: 0,
+  fail_count: 0
+})
 
 const filters = ref({
   account_id: null as number | null,
@@ -114,7 +129,11 @@ const pagination = ref({
   pageSize: 10,
   itemCount: 0,
   showSizePicker: true,
-  pageSizes: [10, 20, 50]
+  pageSizes: [10, 20, 50, 100]
+})
+const sortState = ref<{ columnKey: 'username' | 'status' | 'reward' | 'sign_time'; order: DataTableSortOrder }>({
+  columnKey: 'sign_time',
+  order: 'descend'
 })
 
 const accountOptions = ref<{ label: string; value: number }[]>([])
@@ -123,6 +142,50 @@ const statusOptions = [
   { label: '签到成功', value: true },
   { label: '签到失败', value: false }
 ]
+
+const buildTodayRange = (): [number, number] => {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date()
+  end.setHours(23, 59, 59, 999)
+
+  return [start.getTime(), end.getTime()]
+}
+
+const buildDateRangeFromQuery = (startDate?: string, endDate?: string): [number, number] | null => {
+  if (!startDate || !endDate) return null
+
+  const start = new Date(`${startDate}T00:00:00`)
+  const end = new Date(`${endDate}T23:59:59.999`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return null
+  }
+
+  return [start.getTime(), end.getTime()]
+}
+
+const syncFiltersFromRoute = () => {
+  const accountId = Number(route.query.account_id)
+  filters.value.account_id = Number.isInteger(accountId) && accountId > 0 ? accountId : null
+
+  if (route.query.success === 'true') {
+    filters.value.success = true
+  } else if (route.query.success === 'false') {
+    filters.value.success = false
+  } else {
+    filters.value.success = null
+  }
+
+  if (route.query.today) {
+    filters.value.dateRange = buildTodayRange()
+    return
+  }
+
+  const startDate = typeof route.query.start_date === 'string' ? route.query.start_date : undefined
+  const endDate = typeof route.query.end_date === 'string' ? route.query.end_date : undefined
+  filters.value.dateRange = buildDateRangeFromQuery(startDate, endDate)
+}
 
 const getStatusTagType = (status?: string): 'success' | 'warning' | 'error' => {
   switch (status) {
@@ -140,13 +203,13 @@ const getStatusTagType = (status?: string): 'success' | 'warning' | 'error' => {
 const getStatusLabel = (status?: string): string => {
   switch (status) {
     case 'success':
-      return '签到成功'
+      return '成功'
     case 'already_signed':
-      return '今日已签到'
+      return '已签到'
     case 'failed':
-      return '签到失败'
+      return '失败'
     default:
-      return '签到失败'
+      return '失败'
   }
 }
 
@@ -155,51 +218,61 @@ const getRewardDisplay = (row: any) => {
   return `+${row.reward_display || row.reward_quota}`
 }
 
+const getSortOrder = (columnKey: 'username' | 'status' | 'reward' | 'sign_time'): DataTableSortOrder =>
+  sortState.value.columnKey === columnKey ? sortState.value.order : false
+
 const columns = computed<DataTableColumns<any>>(() => [
   {
     title: '账号',
     key: 'username',
-    minWidth: 180,
+    minWidth: 160,
     ellipsis: { tooltip: true },
-    render: (row) => row.username || `账号${row.account_id ?? '-'}`
+    sorter: 'default',
+    sortOrder: getSortOrder('username'),
+    render: row => row.username || `账号${row.account_id ?? '-'}`
   },
   {
     title: '状态',
     key: 'status',
-    width: 120,
+    width: 90,
     align: 'center',
-    render: (row) =>
+    sorter: 'default',
+    sortOrder: getSortOrder('status'),
+    render: row =>
       h(
         NTag,
         {
           type: getStatusTagType(row.status),
           size: 'small',
-          bordered: false
+          bordered: false,
+          round: false
         },
-        {
-          default: () => getStatusLabel(row.status)
-        }
+        { default: () => getStatusLabel(row.status) }
       )
   },
   {
     title: '奖励',
     key: 'reward',
-    width: 130,
-    align: 'center',
-    render: (row) => h('span', { class: 'reward-value' }, getRewardDisplay(row))
+    width: 100,
+    align: 'right',
+    sorter: 'default',
+    sortOrder: getSortOrder('reward'),
+    render: row => h('span', { class: 'reward-value' }, getRewardDisplay(row))
   },
   {
-    title: '签到结果',
+    title: '结果',
     key: 'message',
-    minWidth: 300,
+    minWidth: 280,
     ellipsis: { tooltip: true },
-    render: (row) => row.message || '-'
+    render: row => row.message || '-'
   },
   {
-    title: '签到时间',
+    title: '时间',
     key: 'sign_time',
-    width: 200,
-    render: (row) => (row.sign_time ? formatDateTime(row.sign_time) : '-')
+    width: 170,
+    sorter: 'default',
+    sortOrder: getSortOrder('sign_time'),
+    render: row => (row.sign_time ? formatDateTime(row.sign_time) : '-')
   }
 ])
 
@@ -207,9 +280,9 @@ const loadAccounts = async () => {
   try {
     const res = await accountApi.getList()
     accounts.value = res.data || []
-    accountOptions.value = accounts.value.map((a: any) => ({
-      label: a.username || `账号${a.id}`,
-      value: a.id
+    accountOptions.value = accounts.value.map((account: any) => ({
+      label: account.username || `账号${account.id}`,
+      value: account.id
     }))
   } catch (e: any) {
     window.$notify(e.message, 'error')
@@ -223,6 +296,7 @@ const loadLogs = async (page = 1) => {
       page,
       size: pagination.value.pageSize
     }
+
     if (filters.value.account_id) {
       params.account_id = filters.value.account_id
     }
@@ -233,11 +307,15 @@ const loadLogs = async (page = 1) => {
       params.start_date = new Date(filters.value.dateRange[0]).toISOString().split('T')[0]
       params.end_date = new Date(filters.value.dateRange[1]).toISOString().split('T')[0]
     }
+    params.sort_by = sortState.value.columnKey
+    params.sort_order = sortState.value.order === 'ascend' ? 'asc' : 'desc'
 
     const res = await signApi.getAllLogs(params)
     logs.value = res.data?.items || []
     pagination.value.itemCount = res.data?.total || 0
     pagination.value.page = page
+    summary.value.success_count = res.data?.success_count || 0
+    summary.value.fail_count = res.data?.fail_count || 0
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {
@@ -254,194 +332,155 @@ const handlePageSizeChange = (pageSize: number) => {
   loadLogs(1)
 }
 
+const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | null) => {
+  const nextSorter = Array.isArray(sorter) ? (sorter[0] ?? null) : sorter
+
+  if (!nextSorter?.columnKey || !nextSorter.order) {
+    sortState.value = {
+      columnKey: 'sign_time',
+      order: 'descend'
+    }
+    loadLogs(1)
+    return
+  }
+
+  sortState.value = {
+    columnKey: String(nextSorter.columnKey) as 'username' | 'status' | 'reward' | 'sign_time',
+    order: nextSorter.order
+  }
+  loadLogs(1)
+}
+
 onMounted(() => {
   loadAccounts()
+  syncFiltersFromRoute()
   loadLogs()
 })
+
+watch(
+  () => [
+    route.query.today,
+    route.query.account_id,
+    route.query.success,
+    route.query.start_date,
+    route.query.end_date
+  ],
+  () => {
+    syncFiltersFromRoute()
+    loadLogs(1)
+  }
+)
+
+useViewRefresh(() => loadLogs(pagination.value.page))
 </script>
 
 <style scoped>
 .sign-logs-page {
-  margin: 0 auto;
-  padding: var(--spacing-6);
-}
-
-/* 筛选卡片 */
-.filter-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-4) var(--spacing-5);
-  margin-bottom: var(--spacing-5);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   gap: var(--spacing-4);
-  box-shadow: var(--shadow-sm);
 }
 
-.filter-left {
+.metrics {
   display: flex;
-  gap: var(--spacing-3);
+  gap: var(--spacing-5);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.metric-value {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.metric-value.success {
+  color: var(--success-color);
+}
+
+.metric-value.error {
+  color: var(--error-color);
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--spacing-2);
   flex-wrap: wrap;
-  align-items: center;
 }
 
-.filter-right {
-  flex-shrink: 0;
+.filter-item {
+  width: 180px;
 }
 
-/* 日志卡片 */
+.filter-date {
+  width: 260px;
+}
+
 .logs-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-4) var(--spacing-5);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.card-title-section {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.card-subtitle {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.logs-table-wrapper {
-  padding: var(--spacing-3);
-}
-
-.logs-table {
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.logs-table :deep(.n-data-table-wrapper) {
-  border-radius: var(--radius-lg);
+.table-wrap {
+  padding: 0;
 }
 
-.logs-table :deep(.n-data-table-th) {
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-  font-weight: var(--font-semibold);
+.table-wrap :deep(.n-data-table) {
+  border: none;
+  border-radius: 0;
 }
 
-.logs-table :deep(.n-data-table-td),
-.logs-table :deep(.n-data-table-th) {
-  padding-top: 12px;
-  padding-bottom: 12px;
-}
-
-.logs-table :deep(.n-data-table-tr:hover .n-data-table-td) {
-  background: var(--bg-card-hover);
-}
-
-.logs-table :deep(.reward-value) {
-  color: var(--warning-color);
-  font-weight: var(--font-semibold);
-}
-
-/* 空状态 */
-.logs-empty {
+.pagination-wrap {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-10);
-  text-align: center;
-}
-
-.empty-illustration {
-  margin-bottom: var(--spacing-4);
-  opacity: 0.5;
-}
-
-.empty-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-secondary);
-  margin-bottom: var(--spacing-2);
-}
-
-.empty-desc {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-/* 分页 */
-.logs-pagination {
-  display: flex;
-  justify-content: center;
-  padding: var(--spacing-5);
+  justify-content: flex-end;
+  padding: var(--spacing-3) var(--spacing-4);
   border-top: 1px solid var(--border-color-light);
+  background: var(--bg-card-hover);
 }
 
-/* 响应式 */
-@media (max-width: 768px) {
-  .sign-logs-page {
-    padding: var(--spacing-4);
-  }
+.empty-state {
+  padding: var(--spacing-12) var(--spacing-5);
+}
 
-  .filter-card {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.sign-logs-page :deep(.reward-value) {
+  font-weight: var(--font-semibold);
+  color: var(--primary-color);
+  font-family: var(--font-mono);
+}
 
-  .filter-left {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-left .n-select,
-  .filter-left .n-date-picker {
-    width: 100% !important;
-  }
-
-  .filter-right {
-    width: 100%;
-  }
-
-  .filter-right .n-button {
-    width: 100%;
-  }
-
-  .card-header {
+@media (max-width: 900px) {
+  .page-head {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--spacing-3);
   }
 
-  .logs-table-wrapper {
-    overflow-x: auto;
-    padding: var(--spacing-2);
+  .metrics {
+    width: 100%;
+    justify-content: space-between;
   }
 
-  .logs-table {
-    min-width: 860px;
+  .metric {
+    align-items: flex-start;
   }
 }
 
+@media (max-width: 640px) {
+  .filter-bar {
+    flex-direction: column;
+  }
+
+  .filter-item,
+  .filter-date {
+    width: 100%;
+  }
+}
 </style>

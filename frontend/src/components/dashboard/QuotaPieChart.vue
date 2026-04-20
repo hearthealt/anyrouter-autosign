@@ -1,5 +1,5 @@
 <template>
-  <div class="quota-pie-section" v-if="hasData">
+  <div class="quota-shell" v-if="hasData">
     <div ref="chartRef" class="pie-chart-container"></div>
     <div class="quota-legend">
       <div v-for="item in legendData" :key="item.name" class="legend-item">
@@ -9,7 +9,7 @@
       </div>
     </div>
   </div>
-  <div v-else class="empty-state">
+  <div v-else class="empty-state quota-empty">
     <n-icon :size="48" color="var(--text-tertiary)"><WalletOutline /></n-icon>
     <span class="empty-text">暂无额度数据</span>
   </div>
@@ -31,10 +31,10 @@ let chart: echarts.ECharts | null = null
 
 const hasData = computed(() => props.accounts && props.accounts.length > 0)
 
-// 图表颜色
+// 图表颜色（Linear 配色）
 const chartColors = [
-  '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899',
-  '#06b6d4', '#22c55e', '#ef4444', '#6366f1', '#14b8a6'
+  '#5e6ad2', '#0284c7', '#7c3aed', '#d97706', '#db2777',
+  '#0891b2', '#16a34a', '#dc2626', '#64748b', '#ea580c'
 ]
 
 // 图例数据
@@ -57,16 +57,16 @@ const legendData = computed(() => {
 const getChartTheme = () => {
   return props.isDark ? {
     backgroundColor: 'transparent',
-    textColor: 'rgba(255, 255, 255, 0.85)',
-    tooltipBg: 'rgba(30, 30, 46, 0.95)',
-    tooltipBorder: 'rgba(255, 255, 255, 0.1)',
-    labelColor: 'rgba(255, 255, 255, 0.65)'
+    textColor: 'rgba(255, 255, 255, 0.7)',
+    tooltipBg: '#16181c',
+    tooltipBorder: '#2a2d33',
+    labelColor: 'rgba(255, 255, 255, 0.5)'
   } : {
     backgroundColor: 'transparent',
-    textColor: 'rgba(0, 0, 0, 0.65)',
-    tooltipBg: 'rgba(255, 255, 255, 0.98)',
-    tooltipBorder: 'rgba(0, 0, 0, 0.08)',
-    labelColor: 'rgba(0, 0, 0, 0.45)'
+    textColor: 'rgba(11, 12, 14, 0.6)',
+    tooltipBg: '#ffffff',
+    tooltipBorder: '#e3e5e8',
+    labelColor: 'rgba(11, 12, 14, 0.45)'
   }
 }
 
@@ -139,8 +139,8 @@ const updateChart = () => {
         center: ['50%', '50%'],
         avoidLabelOverlap: true,
         itemStyle: {
-          borderRadius: 6,
-          borderColor: props.isDark ? '#1a3328' : '#ffffff',
+          borderRadius: 3,
+          borderColor: props.isDark ? '#16181c' : '#ffffff',
           borderWidth: 2
         },
         label: {
@@ -149,14 +149,9 @@ const updateChart = () => {
         emphasis: {
           label: {
             show: true,
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: 'bold',
             color: theme.textColor
-          },
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.2)'
           }
         },
         labelLine: {
@@ -165,10 +160,7 @@ const updateChart = () => {
         data: pieData.map((item, index) => ({
           ...item,
           itemStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: chartColors[index % chartColors.length] },
-              { offset: 1, color: adjustColor(chartColors[index % chartColors.length], -20) }
-            ])
+            color: chartColors[index % chartColors.length]
           }
         }))
       }
@@ -176,15 +168,6 @@ const updateChart = () => {
   }
 
   chart.setOption(option)
-}
-
-// 调整颜色亮度
-const adjustColor = (color: string, amount: number): string => {
-  const hex = color.replace('#', '')
-  const r = Math.max(0, Math.min(255, parseInt(hex.slice(0, 2), 16) + amount))
-  const g = Math.max(0, Math.min(255, parseInt(hex.slice(2, 4), 16) + amount))
-  const b = Math.max(0, Math.min(255, parseInt(hex.slice(4, 6), 16) + amount))
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
 
 const handleResize = () => {
@@ -222,44 +205,44 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.quota-pie-section {
+.quota-shell {
   display: flex;
   align-items: center;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
   height: 100%;
-  min-height: 200px;
+  min-height: 220px;
 }
 
 .pie-chart-container {
   flex: 1;
   height: 220px;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .quota-legend {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
-  min-width: 140px;
+  gap: var(--spacing-1);
+  min-width: 130px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-  padding: var(--spacing-1) 0;
+  padding: 3px 0;
 }
 
 .legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-sm);
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
   flex-shrink: 0;
 }
 
 .legend-name {
   flex: 1;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -268,18 +251,19 @@ onUnmounted(() => {
 }
 
 .legend-value {
-  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
-.empty-state {
+.quota-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 200px;
-  gap: var(--spacing-3);
+  height: 220px;
+  gap: var(--spacing-2);
 }
 
 .empty-text {
@@ -288,13 +272,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 600px) {
-  .quota-pie-section {
+  .quota-shell {
     flex-direction: column;
   }
 
   .pie-chart-container {
     width: 100%;
-    height: 180px;
+    height: 160px;
   }
 
   .quota-legend {
@@ -305,7 +289,7 @@ onUnmounted(() => {
   }
 
   .legend-item {
-    padding: var(--spacing-1) var(--spacing-2);
+    padding: 2px 6px;
   }
 }
 </style>

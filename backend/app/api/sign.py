@@ -4,6 +4,7 @@
 import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,6 +13,7 @@ from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
 from app.services import anrouter_service, execute_with_session_refresh, NotifyFactory
+from app.services.events import publish_event
 from app.utils import format_quota, get_account_platform_config
 
 router = APIRouter(tags=["签到"])
@@ -129,6 +131,19 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         return_message = message or "签到失败"
         status = "failed"
 
+    publish_event(
+        "sign_completed",
+        {
+            "account_id": account.id,
+            "username": account.username or "",
+            "success": sign_success,
+            "already_signed": already_signed,
+            "message": return_message,
+            "reward_quota": reward_quota,
+            "reward_display": format_quota(reward_quota),
+        }
+    )
+
     return ApiResponse(
         success=True,
         message=return_message,
@@ -214,6 +229,20 @@ def batch_sign(db: Session = Depends(get_db)):
 
     db.commit()
 
+    for account, result_item in zip(accounts, results):
+        publish_event(
+            "sign_completed",
+            {
+                "account_id": account.id,
+                "username": account.username or "",
+                "success": result_item.success,
+                "already_signed": result_item.message == "今日已签到",
+                "message": result_item.message,
+                "reward_quota": 0,
+                "reward_display": format_quota(0),
+            }
+        )
+
     return ApiResponse(
         success=True,
         message=f"批量签到完成：成功 {success_count}，已签到 {already_signed_count}，失败 {fail_count}",
@@ -235,6 +264,8 @@ def get_all_sign_logs(
     success: bool = None,
     start_date: str = None,
     end_date: str = None,
+    sort_by: str = "sign_time",
+    sort_order: str = "desc",
     db: Session = Depends(get_db)
 ):
     """获取所有签到日志"""
@@ -268,8 +299,23 @@ def get_all_sign_logs(
     success_count = stats_query.filter(SignLog.success == True).count()
     fail_count = stats_query.filter(SignLog.success == False).count()
 
+    normalized_order = (sort_order or "desc").lower()
+    is_desc = normalized_order.startswith("desc")
+
+    if sort_by == "username":
+        sort_column = Account.username
+    elif sort_by == "status":
+        sort_column = SignLog.status
+    elif sort_by == "reward":
+        sort_column = SignLog.reward_quota
+    else:
+        sort_column = SignLog.sign_time
+
     offset = (page - 1) * size
-    logs = query.order_by(SignLog.sign_time.desc()).offset(offset).limit(size).all()
+    logs = query.order_by(
+        desc(sort_column) if is_desc else asc(sort_column),
+        SignLog.id.desc()
+    ).offset(offset).limit(size).all()
 
     items = [
         {

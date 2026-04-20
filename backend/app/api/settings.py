@@ -26,7 +26,8 @@ DEFAULT_SETTINGS = {
     "sign_max_retries": 3,
     "sign_retry_interval": 30,
     "anyrouter_proxy_enabled": False,
-    "anyrouter_proxy_url": ""
+    "anyrouter_proxy_url": "",
+    "quota_warning_threshold": 5.0,
 }
 
 
@@ -117,11 +118,15 @@ def update_settings(
     merged_settings = {**current_settings, **update_data}
     proxy_enabled = merged_settings.get("anyrouter_proxy_enabled", False)
     proxy_url = merged_settings.get("anyrouter_proxy_url", "")
+    quota_warning_threshold = merged_settings.get("quota_warning_threshold", 5.0)
 
     if proxy_enabled:
         if not proxy_url:
             raise HTTPException(status_code=400, detail="启用代理时必须填写代理地址")
         validate_proxy_url(proxy_url)
+
+    if quota_warning_threshold is None or quota_warning_threshold < 0:
+        raise HTTPException(status_code=400, detail="额度告警阈值不能小于 0")
 
     for key, value in update_data.items():
         if value is not None:

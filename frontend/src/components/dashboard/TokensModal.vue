@@ -56,8 +56,13 @@
                 </n-tag>
               </div>
               <div class="token-key-row">
-                <code class="token-key">sk-{{ token.key.slice(0, 8) }}...{{ token.key.slice(-4) }}</code>
+                <code class="token-key">{{ renderKey(token) }}</code>
                 <div class="token-actions">
+                  <n-button size="tiny" quaternary :title="revealed.has(token.token_id) ? '隐藏' : '显示明文'" @click="toggleReveal(token)">
+                    <template #icon>
+                      <n-icon :size="14"><component :is="revealed.has(token.token_id) ? EyeOffOutline : EyeOutline" /></n-icon>
+                    </template>
+                  </n-button>
                   <n-button size="tiny" quaternary @click="copyToken(token.key)">
                     <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
                   </n-button>
@@ -169,7 +174,8 @@
 import { ref, computed, watch } from 'vue'
 import {
   KeyOutline, CloseOutline, AddOutline, RefreshOutline,
-  CopyOutline, CreateOutline, TrashOutline
+  CopyOutline, CreateOutline, TrashOutline,
+  EyeOutline, EyeOffOutline
 } from '@vicons/ionicons5'
 import { accountApi } from '../../api'
 import { useClipboard, useFormat } from '../../composables'
@@ -236,6 +242,25 @@ const expireOptions = [
 const close = () => {
   visible.value = false
 }
+
+const revealed = ref(new Set<number>())
+
+const toggleReveal = (token: ApiToken) => {
+  const next = new Set(revealed.value)
+  if (next.has(token.token_id)) next.delete(token.token_id)
+  else next.add(token.token_id)
+  revealed.value = next
+}
+
+const renderKey = (token: ApiToken) => {
+  const key = token.key || ''
+  if (revealed.value.has(token.token_id)) return `sk-${key}`
+  return `sk-${key.slice(0, 8)}...${key.slice(-4)}`
+}
+
+watch(() => props.show, (val) => {
+  if (!val) revealed.value = new Set()
+})
 
 const copyToken = (key: string) => {
   copyToClipboard(key)
@@ -365,80 +390,94 @@ watch(showDrawer, (val) => {
 </script>
 
 <style scoped>
-.tokens-modal {
-  width: 680px;
-}
-
 .modal-container {
   background: var(--bg-modal);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
+}
+
+.tokens-modal {
+  width: min(640px, calc(100vw - 24px));
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-4) var(--spacing-5);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+  gap: var(--spacing-3);
 }
 
 .modal-title-group {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
+  gap: var(--spacing-2);
 }
 
 .modal-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-color-light);
+  color: var(--primary-color);
+  display: grid;
+  place-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
 .modal-subtitle {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-.tokens-body {
-  padding: 0;
+.modal-body {
+  padding: var(--spacing-4);
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-card-hover);
+}
+
+/* Tokens */
 .tokens-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-3) var(--spacing-4);
-  background: var(--bg-card-hover);
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: var(--spacing-3);
 }
 
 .tokens-stats {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-1);
+  gap: 6px;
 }
 
 .tokens-count {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
+  line-height: 1;
 }
 
 .tokens-label {
-  font-size: var(--text-base);
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
@@ -448,134 +487,121 @@ watch(showDrawer, (val) => {
 }
 
 .tokens-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--spacing-3);
-  max-height: 420px;
-  overflow-y: auto;
-  padding: var(--spacing-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
 }
 
 .token-card {
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
   padding: var(--spacing-3);
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast);
 }
 
 .token-card:hover {
-  border-color: var(--primary-color);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--border-color);
 }
 
 .token-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-2);
+  gap: var(--spacing-2);
+  margin-bottom: 6px;
 }
 
 .token-name {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
 }
 
 .token-quota {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
-  flex-shrink: 0;
+  gap: 6px;
 }
 
 .quota-used {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 .token-models {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--spacing-1);
-  margin-bottom: var(--spacing-2);
-  max-height: 48px;
-  overflow-y: auto;
-}
-
-.token-models .n-tag {
-  background: var(--info-color-light);
-  color: var(--info-color);
-  font-size: 10px;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
 .token-key-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   gap: var(--spacing-2);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-1) var(--spacing-1) var(--spacing-1) var(--spacing-2);
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .token-key {
-  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .token-actions {
   display: flex;
-  align-items: center;
   gap: 2px;
-  flex-shrink: 0;
 }
 
 .tokens-empty {
-  text-align: center;
-  padding: var(--spacing-12) var(--spacing-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-10);
+  gap: var(--spacing-2);
+  color: var(--text-tertiary);
 }
 
 .empty-icon {
-  color: var(--text-tertiary);
-  margin-bottom: var(--spacing-3);
+  color: var(--text-quaternary);
 }
 
 .empty-text {
-  font-size: var(--text-lg);
-  font-weight: var(--font-medium);
-  color: var(--text-tertiary);
-  margin-bottom: var(--spacing-1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .empty-hint {
-  font-size: var(--text-base);
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-  padding: var(--spacing-4) var(--spacing-5);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-card-hover);
-}
-
+/* Drawer form */
 .token-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+}
+
+.required {
+  color: var(--error-color);
+  margin-left: 2px;
 }
 
 .drawer-footer {
@@ -584,14 +610,4 @@ watch(showDrawer, (val) => {
   gap: var(--spacing-2);
 }
 
-@media (max-width: 768px) {
-  .tokens-modal {
-    width: 95vw;
-    max-width: 680px;
-  }
-
-  .tokens-list {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

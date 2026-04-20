@@ -1,323 +1,267 @@
 <template>
   <div class="statistics-page">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <div class="page-title">
-        <div class="title-icon"></div>
-        <div class="title-text">
-          <h1>数据统计</h1>
-          <p>签到数据分析与趋势</p>
-        </div>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">统计</h1>
+        <p class="page-subtitle">签到趋势、月度成功率、日历分布、账号排行</p>
       </div>
-    </div>
-
-    <!-- 统计概览骨架屏 -->
-    <div class="stats-overview" v-if="loadingOverview">
-      <div class="stat-card skeleton-card" v-for="i in 4" :key="i">
-        <n-skeleton circle :width="48" :height="48" />
-        <div class="stat-content">
-          <n-skeleton text :width="80" :height="28" style="margin-bottom: 8px;" />
-          <n-skeleton text :width="60" :height="16" />
-        </div>
-      </div>
-    </div>
-
-    <!-- 统计概览 -->
-    <div class="stats-overview" v-else>
-      <div class="stat-card primary">
-        <div class="stat-icon">
-          <n-icon :size="24"><CalendarOutline /></n-icon>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ overview.month_success || 0 }}<span class="stat-sub">/{{ overview.month_total || 0 }}</span></div>
-          <div class="stat-label">本月签到</div>
-        </div>
-        <div class="stat-rate" v-if="overview.month_success_rate">
-          {{ overview.month_success_rate }}%
-        </div>
-      </div>
-      <div class="stat-card success">
-        <div class="stat-icon">
-          <n-icon :size="24"><TrophyOutline /></n-icon>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ overview.month_reward_display || '$0.00' }}</div>
-          <div class="stat-label">本月奖励</div>
-        </div>
-      </div>
-      <div class="stat-card info">
-        <div class="stat-icon">
-          <n-icon :size="24"><GiftOutline /></n-icon>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ overview.total_reward_display || '$0.00' }}</div>
-          <div class="stat-label">累计奖励</div>
-        </div>
-      </div>
-      <div class="stat-card warning">
-        <div class="stat-icon">
-          <n-icon :size="24"><TrendingUpOutline /></n-icon>
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{{ overview.success_rate || 0 }}%</div>
-          <div class="stat-label">总成功率</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 图表区域 -->
-    <div class="charts-row">
-      <!-- 每日签到趋势 -->
-      <div class="chart-card trend-card">
-        <div class="chart-header">
-          <div class="chart-title">
-            <span class="title-icon"></span>
-            <h3>签到趋势</h3>
-          </div>
-          <div class="period-tabs">
-            <button
-              v-for="period in [7, 30, 60]"
-              :key="period"
-              :class="['period-tab', { active: dailyDays === period }]"
-              @click="dailyDays = period"
-            >
-              {{ period }}天
-            </button>
-          </div>
-        </div>
-        <div class="chart-body">
-          <!-- ECharts 图表容器 -->
-          <div ref="trendChartRef" class="echarts-container" v-show="displayDailyData.length > 0"></div>
-          <!-- 空状态 -->
-          <div class="chart-empty" v-if="displayDailyData.length === 0">
-            <span>暂无签到数据</span>
-          </div>
-        </div>
-        <!-- 图例固定在底部 -->
-        <div class="chart-footer">
-          <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-dot success"></span>
-              <span>成功</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-dot fail"></span>
-              <span>失败</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 月度统计 -->
-      <div class="chart-card monthly-card">
-        <div class="chart-header">
-          <div class="chart-title">
-            <span class="title-icon orange"></span>
-            <h3>月度统计</h3>
-          </div>
-        </div>
-        <div class="chart-body monthly-body">
-          <!-- ECharts 图表容器 -->
-          <div ref="monthlyChartRef" class="echarts-container" v-show="monthlyData.length > 0"></div>
-          <!-- 空状态 -->
-          <div class="chart-empty" v-if="monthlyData.length === 0">
-            <span>暂无月度数据</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 签到日历 -->
-    <div class="calendar-card">
-      <div class="calendar-header">
-        <div class="calendar-title">
-          <span class="title-icon green"></span>
-          <h3>签到日历</h3>
-        </div>
-        <div class="calendar-controls">
-          <n-button size="small" @click="changeMonth(-1)">
-            <template #icon><n-icon><ChevronBackOutline /></n-icon></template>
-          </n-button>
-          <span class="current-month">{{ currentMonthDisplay }}</span>
-          <n-button size="small" @click="changeMonth(1)" :disabled="isCurrentMonth">
-            <template #icon><n-icon><ChevronForwardOutline /></n-icon></template>
-          </n-button>
-        </div>
-        <div class="calendar-legend">
-          <span class="legend-item">
-            <span class="legend-dot" style="background: var(--bg-card-hover);"></span>
-            无签到
-          </span>
-          <span class="legend-item">
-            <span class="legend-dot" style="background: #00b38a;"></span>
-            全部成功
-          </span>
-          <span class="legend-item">
-            <span class="legend-dot" style="background: #f0a020;"></span>
-            部分成功
-          </span>
-          <span class="legend-item">
-            <span class="legend-dot" style="background: #d03050;"></span>
-            全部失败
-          </span>
-        </div>
-      </div>
-      <div class="calendar-body">
-        <div class="month-calendar">
-          <!-- 星期标题 -->
-          <div class="calendar-weekdays-row">
-            <div v-for="day in ['周日', '周一', '周二', '周三', '周四', '周五', '周六']" :key="day" class="weekday-header">
-              {{ day }}
-            </div>
-          </div>
-          <!-- 日期网格 -->
-          <div class="calendar-days-grid">
-            <div
-              v-for="(day, index) in monthDays"
-              :key="index"
-              class="day-cell"
-              :class="getDayClass(day)"
-              @click="day.date && handleDayClick(day)"
-            >
-              <div class="day-number" v-if="day.date">{{ day.day }}</div>
-              <div class="day-status" v-if="day.date && (day.success > 0 || day.fail > 0)">
-                <div class="status-bar">
-                  <span class="success-count" v-if="day.success > 0">✓{{ day.success }}</span>
-                  <span class="fail-count" v-if="day.fail > 0">✗{{ day.fail }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 账号排行 -->
-    <div class="ranking-card">
-      <div class="ranking-header">
-        <h3>账号排行</h3>
-        <n-button size="small" @click="loadAccountStats" :loading="loadingAccounts">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+      <div class="head-actions">
+        <n-button size="small" :loading="loadingAccounts" @click="loadAccountStats">
+          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
         </n-button>
       </div>
-      <n-spin :show="loadingAccounts">
+    </div>
+
+    <!-- 指标卡 -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">本月签到</div>
+        <div class="stat-value">
+          {{ overview.month_success || 0 }}<span class="stat-sub">/{{ overview.month_total || 0 }}</span>
+        </div>
+        <div class="stat-foot">
+          <span class="tag success">{{ overview.month_success_rate || 0 }}% 成功率</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月奖励</div>
+        <div class="stat-value">{{ overview.month_reward_display || '$0.00' }}</div>
+        <div class="stat-foot">
+          <span class="muted">本月累计获得</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">累计奖励</div>
+        <div class="stat-value">{{ overview.total_reward_display || '$0.00' }}</div>
+        <div class="stat-foot">
+          <span class="muted">全部签到所得</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">总成功率</div>
+        <div class="stat-value">{{ overview.success_rate || 0 }}<span class="stat-sub">%</span></div>
+        <div class="stat-foot">
+          <span class="muted">历史所有记录</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图表 -->
+    <div class="charts-row">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">签到趋势</div>
+          <div class="trend-controls">
+            <n-radio-group v-model:value="dailyDays" size="small" :disabled="!!customRange">
+              <n-radio-button :value="7">7 天</n-radio-button>
+              <n-radio-button :value="30">30 天</n-radio-button>
+              <n-radio-button :value="60">60 天</n-radio-button>
+            </n-radio-group>
+            <n-date-picker
+              v-model:value="customRange"
+              type="daterange"
+              size="small"
+              clearable
+              class="trend-range"
+              :shortcuts="rangeShortcuts"
+            />
+          </div>
+        </div>
+        <div class="chart-body">
+          <div ref="trendChartRef" class="echarts-container" v-show="displayDailyData.length > 0"></div>
+          <div v-if="displayDailyData.length === 0" class="chart-empty">暂无签到数据</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">月度统计</div>
+        </div>
+        <div class="chart-body">
+          <div ref="monthlyChartRef" class="echarts-container" v-show="monthlyData.length > 0"></div>
+          <div v-if="monthlyData.length === 0" class="chart-empty">暂无月度数据</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 日历 -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">签到日历</div>
+        <div class="calendar-controls">
+          <n-button size="tiny" quaternary @click="changeMonth(-1)">
+            <template #icon><n-icon :size="14"><ChevronBackOutline /></n-icon></template>
+          </n-button>
+          <span class="current-month">{{ currentMonthDisplay }}</span>
+          <n-button size="tiny" quaternary :disabled="isCurrentMonth" @click="changeMonth(1)">
+            <template #icon><n-icon :size="14"><ChevronForwardOutline /></n-icon></template>
+          </n-button>
+        </div>
+      </div>
+      <div class="calendar-legend">
+        <span class="legend-item"><span class="legend-dot success"></span>全部成功</span>
+        <span class="legend-item"><span class="legend-dot warning"></span>部分成功</span>
+        <span class="legend-item"><span class="legend-dot error"></span>全部失败</span>
+        <span class="legend-item"><span class="legend-dot default"></span>无签到</span>
+      </div>
+      <div class="calendar-body">
+        <div class="weekdays">
+          <div v-for="day in weekdays" :key="day" class="weekday">{{ day }}</div>
+        </div>
+        <div class="days-grid">
+          <div
+            v-for="(day, index) in monthDays"
+            :key="index"
+            class="day-cell"
+            :class="getDayClass(day)"
+          >
+            <div v-if="day.date" class="day-number">{{ day.day }}</div>
+            <div v-if="day.date && (day.success > 0 || day.fail > 0)" class="day-status">
+              <span v-if="day.success > 0" class="day-pill success">{{ day.success }}</span>
+              <span v-if="day.fail > 0" class="day-pill error">{{ day.fail }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 排行 -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">账号排行</div>
+      </div>
+      <div v-if="loadingAccounts" class="table-wrap skeleton-table" aria-busy="true" aria-label="加载中">
+        <n-skeleton v-for="i in 6" :key="i" :height="32" :sharp="false" style="margin-bottom: 8px" />
+      </div>
+      <div v-else-if="accountStats.length > 0" class="table-wrap">
         <n-data-table
-          v-if="accountStats.length > 0"
           :columns="accountColumns"
           :data="accountStats"
           :row-key="(row: any) => row.account_id"
-          :max-height="400"
+          :max-height="420"
+          :pagination="false"
           size="small"
         />
-        <n-empty v-else description="暂无数据" />
-      </n-spin>
+      </div>
+      <div v-else class="chart-empty">暂无数据</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, h, nextTick } from 'vue'
-import { NTag, NIcon, NProgress } from 'naive-ui'
+import { NTag } from 'naive-ui'
 import {
-  CalendarOutline,
-  TrophyOutline,
-  GiftOutline,
-  TrendingUpOutline,
   RefreshOutline,
-  FlameOutline,
   ChevronBackOutline,
   ChevronForwardOutline,
 } from '@vicons/ionicons5'
 import { statisticsApi } from '../api'
+import { useViewRefresh } from '../composables'
 import * as echarts from 'echarts'
-
 
 const overview = ref<any>({})
 const dailyData = ref<any[]>([])
 const monthlyData = ref<any[]>([])
 const accountStats = ref<any[]>([])
 const loadingAccounts = ref(false)
-const loadingOverview = ref(true)
 
 const dailyDays = ref(7)
+const customRange = ref<[number, number] | null>(null)
 const calendarData = ref<any[]>([])
 const currentMonth = ref(new Date())
 
-// ECharts 实例
+const formatYmd = (ts: number) => {
+  const d = new Date(ts)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const rangeShortcuts = {
+  '最近 7 天': (): [number, number] => {
+    const end = Date.now()
+    return [end - 6 * 86400000, end]
+  },
+  '最近 30 天': (): [number, number] => {
+    const end = Date.now()
+    return [end - 29 * 86400000, end]
+  },
+  '本月': (): [number, number] => {
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    return [start, Date.now()]
+  }
+}
+
+const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
 const trendChartRef = ref<HTMLElement | null>(null)
 const monthlyChartRef = ref<HTMLElement | null>(null)
 let trendChart: echarts.ECharts | null = null
 let monthlyChart: echarts.ECharts | null = null
 
-// 检测深色模式
-const isDarkMode = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-// 监听系统主题变化
+const isDarkMode = ref(document.documentElement.dataset.theme === 'dark'
+  || window.matchMedia('(prefers-color-scheme: dark)').matches)
 const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 const handleThemeChange = (e: MediaQueryListEvent) => {
   isDarkMode.value = e.matches
   updateChartsTheme()
 }
 
-// 获取图表主题配置
 const getChartTheme = () => {
   return isDarkMode.value ? {
     backgroundColor: 'transparent',
-    textColor: 'rgba(255, 255, 255, 0.85)',
-    axisLineColor: 'rgba(255, 255, 255, 0.15)',
-    splitLineColor: 'rgba(255, 255, 255, 0.08)',
-    tooltipBg: 'rgba(30, 30, 46, 0.95)',
-    tooltipBorder: 'rgba(255, 255, 255, 0.1)',
-    successColor: '#00d4a0',
-    failColor: '#ff6b6b',
-    rewardColor: '#f0a020'
+    textColor: 'rgba(255, 255, 255, 0.7)',
+    axisLineColor: 'rgba(255, 255, 255, 0.1)',
+    splitLineColor: 'rgba(255, 255, 255, 0.06)',
+    tooltipBg: '#16181c',
+    tooltipBorder: '#2a2d33',
+    successColor: '#22c55e',
+    failColor: '#ef4444',
+    rewardColor: '#f59e0b',
+    primaryColor: '#7b84dd'
   } : {
     backgroundColor: 'transparent',
-    textColor: 'rgba(0, 0, 0, 0.65)',
-    axisLineColor: 'rgba(0, 0, 0, 0.15)',
-    splitLineColor: 'rgba(0, 0, 0, 0.06)',
-    tooltipBg: 'rgba(255, 255, 255, 0.98)',
-    tooltipBorder: 'rgba(0, 0, 0, 0.08)',
-    successColor: '#00b38a',
-    failColor: '#ee5a5a',
-    rewardColor: '#f0a020'
+    textColor: 'rgba(11, 12, 14, 0.6)',
+    axisLineColor: 'rgba(11, 12, 14, 0.1)',
+    splitLineColor: 'rgba(11, 12, 14, 0.05)',
+    tooltipBg: '#ffffff',
+    tooltipBorder: '#e3e5e8',
+    successColor: '#16a34a',
+    failColor: '#dc2626',
+    rewardColor: '#d97706',
+    primaryColor: '#5e6ad2'
   }
 }
 
-// 当前月份显示文本
 const currentMonthDisplay = computed(() => {
   const year = currentMonth.value.getFullYear()
   const month = currentMonth.value.getMonth() + 1
-  return `${year}年${month}月`
+  return `${year} · ${String(month).padStart(2, '0')}`
 })
 
-// 是否是当前月
 const isCurrentMonth = computed(() => {
   const now = new Date()
   return currentMonth.value.getFullYear() === now.getFullYear() &&
-         currentMonth.value.getMonth() === now.getMonth()
+    currentMonth.value.getMonth() === now.getMonth()
 })
 
-// 生成月历数据
 const monthDays = computed(() => {
   const year = currentMonth.value.getFullYear()
   const month = currentMonth.value.getMonth()
 
-  // 获取当月第一天和最后一天
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-
-  // 获取第一天是星期几（0-6，0是周日）
   const firstDayOfWeek = firstDay.getDay()
 
-  // 创建日期到数据的映射
   const dataMap = new Map()
   for (const item of calendarData.value) {
     dataMap.set(item.date, item)
   }
 
-  // 辅助函数：格式化日期为 YYYY-MM-DD（本地时间）
   const formatLocalDate = (date: Date) => {
     const y = date.getFullYear()
     const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -326,39 +270,30 @@ const monthDays = computed(() => {
   }
 
   const days: any[] = []
-
-  // 填充上月的空白日期
   for (let i = 0; i < firstDayOfWeek; i++) {
     days.push({ date: null, day: null, success: 0, fail: 0, total: 0 })
   }
-
-  // 填充当月日期
   for (let day = 1; day <= lastDay.getDate(); day++) {
     const date = new Date(year, month, day)
     const dateStr = formatLocalDate(date)
     const data = dataMap.get(dateStr)
-
     days.push({
       date: dateStr,
-      day: day,
+      day,
       success: data?.success || 0,
       fail: data?.fail || 0,
       total: data?.total || 0
     })
   }
-
-  // 填充下月的空白日期，使总数是7的倍数
   const remainingDays = 7 - (days.length % 7)
   if (remainingDays < 7) {
     for (let i = 0; i < remainingDays; i++) {
       days.push({ date: null, day: null, success: 0, fail: 0, total: 0 })
     }
   }
-
   return days
 })
 
-// 切换月份
 const changeMonth = (offset: number) => {
   const newDate = new Date(currentMonth.value)
   newDate.setMonth(newDate.getMonth() + offset)
@@ -366,126 +301,93 @@ const changeMonth = (offset: number) => {
   loadCalendarData()
 }
 
-// 点击日期
-const handleDayClick = (day: any) => {
-  if (!day.date) return
-}
-
 const getDayClass = (day: any) => {
   if (!day.date) return 'empty'
-
   const today = new Date().toISOString().split('T')[0]
   const isToday = day.date === today
-
   let statusClass = ''
-  if (day.total === 0) {
-    statusClass = 'no-sign'
-  } else if (day.fail > 0 && day.success === 0) {
-    statusClass = 'all-fail'
-  } else if (day.success > 0 && day.fail === 0) {
-    statusClass = 'all-success'
-  } else {
-    statusClass = 'partial-success'
-  }
-
+  if (day.total === 0) statusClass = 'no-sign'
+  else if (day.fail > 0 && day.success === 0) statusClass = 'all-fail'
+  else if (day.success > 0 && day.fail === 0) statusClass = 'all-success'
+  else statusClass = 'partial'
   return `${statusClass} ${isToday ? 'today' : ''}`
 }
 
-const displayDailyData = computed(() => {
-  // 直接返回已加载的数据（已经是对应天数的）
-  return dailyData.value
-})
+const displayDailyData = computed(() => dailyData.value)
 
-// 账号排行表格列定义
 const accountColumns = [
   {
-    title: '排名',
+    title: '#',
     key: 'rank',
-    render: (_: any, index: number) => {
-      const colors: Record<string, string> = {
-        gold: 'background: linear-gradient(135deg, #ffd700, #ffb700); color: white;',
-        silver: 'background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: white;',
-        bronze: 'background: linear-gradient(135deg, #cd7f32, #b87333); color: white;'
-      }
-      const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''
-      const style = `display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 600; ${colors[rankClass] || 'background: var(--bg-card-hover); color: var(--text-secondary);'}`
-      return h('span', { style }, index + 1)
-    }
+    width: 50,
+    render: (_: any, index: number) =>
+      h('span', { class: 'rank-num' }, index + 1)
   },
   {
     title: '账号',
     key: 'username',
-    render: (row: any) => {
-      return h('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
-        h('span', { style: 'font-size: 13px; font-weight: 500; color: var(--text-primary);' }, row.username),
-        row.health_status === 'unhealthy' ? h(NTag, { type: 'error', size: 'tiny', bordered: false }, { default: () => '异常' }) : null
+    render: (row: any) =>
+      h('div', { class: 'cell-account' }, [
+        h('span', { class: 'account-name' }, row.username),
+        row.health_status === 'unhealthy'
+          ? h(NTag, { type: 'error', size: 'tiny', bordered: false }, { default: () => '异常' })
+          : null
       ])
-    }
   },
   {
     title: '连签',
     key: 'streak_days',
+    width: 100,
     render: (row: any) => {
       if (row.streak_days > 0) {
         const isHot = row.streak_days >= 3
-        const color = isHot ? '#d03050' : '#f0a020'
-        const bgColor = isHot ? 'rgba(208,48,80,0.1)' : 'rgba(240,160,32,0.1)'
-        return h('span', {
-          style: `display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: ${color}; background: ${bgColor}; padding: 2px 8px; border-radius: 10px;`
-        }, [
-          h(NIcon, null, { default: () => h(FlameOutline) }),
+        return h('span', { class: ['streak', isHot ? 'hot' : 'warm'] }, [
+          h('span', { class: 'flame-icon' }, isHot ? '🔥' : ''),
           ` ${row.streak_days}天`
         ])
       }
-      return h('span', { style: 'color: var(--text-tertiary);' }, '-')
+      return h('span', { class: 'muted' }, '—')
     }
   },
   {
     title: '成功',
     key: 'success_count',
-    render: (row: any) => h('span', { style: 'color: #18a058; font-weight: 600;' }, row.success_count)
+    width: 80,
+    align: 'right',
+    render: (row: any) => h('span', { class: 'success-num' }, row.success_count)
   },
   {
     title: '成功率',
     key: 'success_rate',
+    width: 140,
     render: (row: any) => {
-      const color = row.success_rate >= 90 ? '#18a058' : row.success_rate >= 70 ? '#f0a020' : '#d03050'
-      return h('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
-        h(NProgress, {
-          type: 'line',
-          percentage: row.success_rate,
-          showIndicator: false,
-          height: 6,
-          borderRadius: 3,
-          color: color,
-          style: 'width: 60px;'
-        }),
-        h('span', { style: 'font-size: 12px; color: var(--text-secondary);' }, `${row.success_rate}%`)
+      const level = row.success_rate >= 90 ? 'high' : row.success_rate >= 70 ? 'mid' : 'low'
+      return h('div', { class: 'success-rate-cell' }, [
+        h('div', { class: 'rate-bar' }, [
+          h('div', { class: `rate-fill ${level}`, style: { width: `${row.success_rate}%` } })
+        ]),
+        h('span', { class: 'rate-text' }, `${row.success_rate}%`)
       ])
     }
   },
   {
     title: '累计奖励',
     key: 'total_reward_display',
-    render: (row: any) => h('span', { style: 'color: #f0a020; font-weight: 500;' }, row.total_reward_display)
+    width: 120,
+    align: 'right',
+    render: (row: any) => h('span', { class: 'reward-num' }, row.total_reward_display)
   }
 ]
 
-// 初始化签到趋势图表
 const initTrendChart = () => {
   if (!trendChartRef.value) return
-
   trendChart = echarts.init(trendChartRef.value)
   updateTrendChart()
-
-  // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
 }
 
-// 更新签到趋势图表
 const updateTrendChart = () => {
   if (!trendChart) return
-
   const theme = getChartTheme()
   const data = displayDailyData.value
 
@@ -493,64 +395,37 @@ const updateTrendChart = () => {
     backgroundColor: theme.backgroundColor,
     tooltip: {
       trigger: 'axis',
-      axisPointer: {
-        type: 'shadow'
-      },
+      axisPointer: { type: 'shadow' },
       backgroundColor: theme.tooltipBg,
       borderColor: theme.tooltipBorder,
       borderWidth: 1,
-      padding: [12, 16],
-      textStyle: {
-        color: isDarkMode.value ? '#fff' : '#333',
-        fontSize: 13
-      },
+      padding: [8, 12],
+      textStyle: { color: isDarkMode.value ? '#fff' : '#0b0c0e', fontSize: 12 },
       formatter: (params: any) => {
         const date = params[0]?.axisValue || ''
-        let html = `<div style="font-weight: 600; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid ${theme.tooltipBorder}">${date}</div>`
-
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${date}</div>`
         params.forEach((item: any) => {
           const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
-          html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 4px 0;">
-            <span style="display: flex; align-items: center; gap: 6px;">
-              <span style="width: 10px; height: 10px; border-radius: 2px; background: ${color};"></span>
-              ${item.seriesName}
-            </span>
-            <span style="font-weight: 600;">${item.value}</span>
-          </div>`
+          html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;">
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <span style="width:8px;height:8px;border-radius:2px;background:${color};"></span>${item.seriesName}
+            </span><span>${item.value}</span></div>`
         })
-
-        // 添加奖励信息
         const dayData = data.find((d: any) => d.date === date)
         if (dayData?.reward_display) {
-          html += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${theme.tooltipBorder}; color: ${theme.rewardColor};">
-            奖励: <span style="font-weight: 600;">${dayData.reward_display}</span>
-          </div>`
+          html += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${theme.tooltipBorder};font-size:12px;color:${theme.rewardColor};">
+            奖励 ${dayData.reward_display}</div>`
         }
-
         return html
       }
     },
-    legend: {
-      show: false
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '8%',
-      containLabel: true
-    },
+    legend: { show: false },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
     xAxis: {
       type: 'category',
       data: data.map((d: any) => d.date),
-      axisLine: {
-        lineStyle: {
-          color: theme.axisLineColor
-        }
-      },
-      axisTick: {
-        show: false
-      },
+      axisLine: { lineStyle: { color: theme.axisLineColor } },
+      axisTick: { show: false },
       axisLabel: {
         color: theme.textColor,
         fontSize: 11,
@@ -563,89 +438,43 @@ const updateTrendChart = () => {
     yAxis: {
       type: 'value',
       minInterval: 1,
-      axisLine: {
-        show: false
-      },
-      axisTick: {
-        show: false
-      },
-      axisLabel: {
-        color: theme.textColor,
-        fontSize: 11
-      },
-      splitLine: {
-        lineStyle: {
-          color: theme.splitLineColor,
-          type: 'dashed'
-        }
-      }
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: theme.textColor, fontSize: 11 },
+      splitLine: { lineStyle: { color: theme.splitLineColor, type: 'dashed' } }
     },
-    dataZoom: [],
     series: [
       {
         name: '成功',
         type: 'bar',
         stack: 'total',
         barWidth: '60%',
-        barMaxWidth: 30,
+        barMaxWidth: 24,
         data: data.map((d: any) => d.success),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#00d4a0' },
-            { offset: 1, color: theme.successColor }
-          ]),
-          borderRadius: [0, 0, 0, 0]
-        },
-        emphasis: {
-          itemStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#00e8b0' },
-              { offset: 1, color: '#00c090' }
-            ])
-          }
-        }
+        itemStyle: { color: theme.successColor, borderRadius: [0, 0, 0, 0] }
       },
       {
         name: '失败',
         type: 'bar',
         stack: 'total',
         barWidth: '60%',
-        barMaxWidth: 30,
+        barMaxWidth: 24,
         data: data.map((d: any) => d.fail),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#ff8080' },
-            { offset: 1, color: theme.failColor }
-          ]),
-          borderRadius: [4, 4, 0, 0]
-        },
-        emphasis: {
-          itemStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#ff9090' },
-              { offset: 1, color: '#ff6060' }
-            ])
-          }
-        }
+        itemStyle: { color: theme.failColor, borderRadius: [3, 3, 0, 0] }
       }
     ]
   }
-
   trendChart.setOption(option)
 }
 
-// 初始化月度统计图表
 const initMonthlyChart = () => {
   if (!monthlyChartRef.value) return
-
   monthlyChart = echarts.init(monthlyChartRef.value)
   updateMonthlyChart()
 }
 
-// 更新月度统计图表
 const updateMonthlyChart = () => {
   if (!monthlyChart) return
-
   const theme = getChartTheme()
   const data = monthlyData.value
 
@@ -656,48 +485,26 @@ const updateMonthlyChart = () => {
       backgroundColor: theme.tooltipBg,
       borderColor: theme.tooltipBorder,
       borderWidth: 1,
-      padding: [12, 16],
-      textStyle: {
-        color: isDarkMode.value ? '#fff' : '#333',
-        fontSize: 13
-      },
+      padding: [8, 12],
+      textStyle: { color: isDarkMode.value ? '#fff' : '#0b0c0e', fontSize: 12 },
       formatter: (params: any) => {
         const monthData = data.find((d: any) => d.month === params[0]?.axisValue)
         if (!monthData) return ''
-
-        return `<div style="font-weight: 600; margin-bottom: 8px;">${monthData.month}</div>
-          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0;">
-            <span>成功率</span>
-            <span style="font-weight: 600; color: ${theme.successColor}">${monthData.success_rate}%</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0;">
-            <span>签到</span>
-            <span style="font-weight: 600;">${monthData.success}/${monthData.total}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0; color: ${theme.rewardColor}">
-            <span>奖励</span>
-            <span style="font-weight: 600;">${monthData.reward_display}</span>
-          </div>`
+        return `<div style="font-weight:600;margin-bottom:6px;">${monthData.month}</div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;">
+            <span>成功率</span><span style="color:${theme.successColor};">${monthData.success_rate}%</span></div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;">
+            <span>签到</span><span>${monthData.success}/${monthData.total}</span></div>
+          <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:${theme.rewardColor};">
+            <span>奖励</span><span>${monthData.reward_display}</span></div>`
       }
     },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '12%',
-      containLabel: true
-    },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true },
     xAxis: {
       type: 'category',
       data: data.map((d: any) => d.month),
-      axisLine: {
-        lineStyle: {
-          color: theme.axisLineColor
-        }
-      },
-      axisTick: {
-        show: false
-      },
+      axisLine: { lineStyle: { color: theme.axisLineColor } },
+      axisTick: { show: false },
       axisLabel: {
         color: theme.textColor,
         fontSize: 11,
@@ -710,45 +517,19 @@ const updateMonthlyChart = () => {
     yAxis: [
       {
         type: 'value',
-        name: '签到数',
-        position: 'left',
-        axisLine: {
-          show: false
-        },
-        axisTick: {
-          show: false
-        },
-        axisLabel: {
-          color: theme.textColor,
-          fontSize: 11
-        },
-        splitLine: {
-          lineStyle: {
-            color: theme.splitLineColor,
-            type: 'dashed'
-          }
-        }
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: theme.textColor, fontSize: 11 },
+        splitLine: { lineStyle: { color: theme.splitLineColor, type: 'dashed' } }
       },
       {
         type: 'value',
-        name: '成功率',
-        position: 'right',
         min: 0,
         max: 100,
-        axisLine: {
-          show: false
-        },
-        axisTick: {
-          show: false
-        },
-        axisLabel: {
-          color: theme.textColor,
-          fontSize: 11,
-          formatter: '{value}%'
-        },
-        splitLine: {
-          show: false
-        }
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: theme.textColor, fontSize: 11, formatter: '{value}%' },
+        splitLine: { show: false }
       }
     ],
     series: [
@@ -756,15 +537,9 @@ const updateMonthlyChart = () => {
         name: '签到数',
         type: 'bar',
         barWidth: '50%',
-        barMaxWidth: 24,
+        barMaxWidth: 20,
         data: data.map((d: any) => d.total),
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(0, 179, 138, 0.8)' },
-            { offset: 1, color: 'rgba(0, 179, 138, 0.3)' }
-          ]),
-          borderRadius: [4, 4, 0, 0]
-        }
+        itemStyle: { color: theme.primaryColor, borderRadius: [3, 3, 0, 0] }
       },
       {
         name: '成功率',
@@ -773,93 +548,76 @@ const updateMonthlyChart = () => {
         data: data.map((d: any) => d.success_rate),
         smooth: true,
         symbol: 'circle',
-        symbolSize: 8,
-        lineStyle: {
-          color: theme.rewardColor,
-          width: 3
-        },
-        itemStyle: {
-          color: theme.rewardColor,
-          borderColor: isDarkMode.value ? '#1e1e2e' : '#fff',
-          borderWidth: 2
-        },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(240, 160, 32, 0.3)' },
-            { offset: 1, color: 'rgba(240, 160, 32, 0.05)' }
-          ])
-        }
+        symbolSize: 6,
+        lineStyle: { color: theme.rewardColor, width: 2 },
+        itemStyle: { color: theme.rewardColor, borderColor: isDarkMode.value ? '#16181c' : '#fff', borderWidth: 2 }
       }
     ]
   }
-
   monthlyChart.setOption(option)
 }
 
-// 更新图表主题
 const updateChartsTheme = () => {
   updateTrendChart()
   updateMonthlyChart()
 }
 
-// 处理窗口大小变化
 const handleResize = () => {
   trendChart?.resize()
   monthlyChart?.resize()
 }
 
 const loadOverview = async () => {
-  loadingOverview.value = true
   try {
     const res = await statisticsApi.getOverview()
     overview.value = res.data || {}
   } catch (e: any) {
     console.error('Failed to load overview:', e)
-  } finally {
-    loadingOverview.value = false
   }
 }
 
 const loadDailyStats = async () => {
   try {
-    const res = await statisticsApi.getDaily(dailyDays.value)
-    dailyData.value = res.data || []
+    if (customRange.value) {
+      const [s, e] = customRange.value
+      const days = Math.ceil((e - s) / 86400000) + 1
+      const res = await statisticsApi.getDaily(days, formatYmd(s), formatYmd(e))
+      dailyData.value = res.data || []
+    } else {
+      const res = await statisticsApi.getDaily(dailyDays.value)
+      dailyData.value = res.data || []
+    }
   } catch (e: any) {
     console.error('Failed to load daily stats:', e)
   }
 }
 
-// 监听天数切换，重新加载数据
 watch(dailyDays, async () => {
+  if (customRange.value) return
   await loadDailyStats()
-  nextTick(() => {
-    updateTrendChart()
-  })
+  nextTick(() => updateTrendChart())
 })
 
-// 监听数据变化更新图表
+watch(customRange, async () => {
+  await loadDailyStats()
+  nextTick(() => updateTrendChart())
+})
+
 watch(dailyData, () => {
-  nextTick(() => {
-    updateTrendChart()
-  })
+  nextTick(() => updateTrendChart())
 }, { deep: true })
 
 watch(monthlyData, () => {
-  nextTick(() => {
-    updateMonthlyChart()
-  })
+  nextTick(() => updateMonthlyChart())
 }, { deep: true })
 
 const loadCalendarData = async () => {
   try {
-    // 获取当前显示月份的第一天和最后一天
     const year = currentMonth.value.getFullYear()
     const month = currentMonth.value.getMonth()
     const lastDay = new Date(year, month + 1, 0)
-
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-
     const res = await statisticsApi.getDaily(31, startDate, endDate)
     calendarData.value = res.data || []
   } catch (e: any) {
@@ -889,28 +647,32 @@ const loadAccountStats = async () => {
 }
 
 onMounted(async () => {
-  // 监听主题变化
   mediaQuery.addEventListener('change', handleThemeChange)
 
-  // 加载数据
   loadOverview()
   await Promise.all([loadDailyStats(), loadMonthlyStats()])
   loadCalendarData()
   loadAccountStats()
 
-  // 初始化图表
   nextTick(() => {
     initTrendChart()
     initMonthlyChart()
   })
 })
 
+useViewRefresh(async () => {
+  await Promise.all([
+    loadOverview(),
+    loadDailyStats(),
+    loadMonthlyStats(),
+    loadCalendarData(),
+    loadAccountStats()
+  ])
+})
+
 onUnmounted(() => {
-  // 清理事件监听
   mediaQuery.removeEventListener('change', handleThemeChange)
   window.removeEventListener('resize', handleResize)
-
-  // 销毁图表实例
   trendChart?.dispose()
   monthlyChart?.dispose()
 })
@@ -918,553 +680,437 @@ onUnmounted(() => {
 
 <style scoped>
 .statistics-page {
-  margin: 0 auto;
-  padding: var(--spacing-6);
-}
-
-/* 页面标题 */
-.page-header {
-  margin-bottom: var(--spacing-6);
-}
-
-.page-title {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--spacing-4);
 }
 
-.title-icon {
-  font-size: 36px;
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding-bottom: var(--spacing-3);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
-.title-text h1 {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-1) 0;
-}
-
-.title-text p {
-  font-size: var(--text-md);
-  color: var(--text-tertiary);
+.page-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
   margin: 0;
 }
 
-.stats-overview {
+.page-subtitle {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.head-actions {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.trend-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+.trend-range {
+  width: 240px;
+}
+
+/* 指标 */
+.stat-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-3);
 }
 
 .stat-card {
+  padding: var(--spacing-4);
   background: var(--bg-card);
-  border-radius: 12px;
-  padding: 20px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
   display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: var(--shadow-sm);
-  position: relative;
+  flex-direction: column;
+  gap: var(--spacing-2);
 }
 
-.stat-card.skeleton-card {
-  min-height: 88px;
+.stat-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-
-.stat-card.primary .stat-icon { background: rgba(0,179,138,0.1); color: #00b38a; }
-.stat-card.success .stat-icon { background: rgba(24,160,88,0.1); color: #18a058; }
-.stat-card.info .stat-icon { background: rgba(32,128,240,0.1); color: #2080f0; }
-.stat-card.warning .stat-icon { background: rgba(240,160,32,0.1); color: #f0a020; }
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-content { flex: 1; }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1;
   color: var(--text-primary);
 }
 
 .stat-sub {
-  font-size: 14px;
-  font-weight: 400;
+  font-size: var(--text-md);
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+
+.stat-foot {
+  font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-.stat-label {
-  font-size: 13px;
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.tag.success {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.muted {
   color: var(--text-tertiary);
-  margin-top: 4px;
 }
 
-.stat-rate {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  font-size: 12px;
-  color: #18a058;
-  background: rgba(24,160,88,0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
+/* 图表 Panel */
 .charts-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: var(--spacing-3);
 }
 
-.chart-card {
+.panel {
   background: var(--bg-card);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-/* 签到趋势卡片特殊样式 */
-.trend-card {
-  background: var(--bg-card);
+.panel-head {
   display: flex;
-  flex-direction: column;
-}
-
-.chart-header {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px 12px;
+  gap: var(--spacing-3);
+  height: 44px;
+  padding: 0 var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
-.chart-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.title-icon {
-  width: 4px;
-  height: 18px;
-  background: linear-gradient(180deg, #00b38a 0%, #18a058 100%);
-  border-radius: 2px;
-}
-
-.title-icon.orange {
-  background: linear-gradient(180deg, #f0a020 0%, #e09000 100%);
-}
-
-.chart-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+.panel-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-/* 时间段切换按钮 */
-.period-tabs {
-  display: flex;
-  background: var(--bg-card-hover);
-  border-radius: 8px;
-  padding: 3px;
-}
-
-.period-tab {
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.period-tab:hover {
-  color: var(--text-primary);
-}
-
-.period-tab.active {
-  background: var(--bg-card);
-  color: #00b38a;
-  box-shadow: var(--shadow-sm);
 }
 
 .chart-body {
-  padding: 0 20px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  padding: var(--spacing-4);
+  min-height: 260px;
+  position: relative;
 }
 
-/* ECharts 图表容器 */
 .echarts-container {
   width: 100%;
-  height: 220px;
-  min-height: 180px;
+  height: 280px;
 }
 
-.monthly-body {
-  padding: 12px 20px;
-}
-
-.monthly-body .echarts-container {
-  height: 200px;
-}
-
-/* 空状态 */
 .chart-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  color: var(--text-tertiary);
-  font-size: 13px;
+  height: 260px;
+  color: var(--text-quaternary);
+  font-size: var(--text-sm);
 }
 
-/* 图表底部 */
-.chart-footer {
-  padding: 12px 20px 16px;
-}
-
-/* 图例 */
-.chart-legend {
-  display: flex;
-  justify-content: center;
-  gap: 24px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color-light);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-}
-
-.legend-dot.success {
-  background: linear-gradient(135deg, #00d4a0 0%, #00b38a 100%);
-}
-
-.legend-dot.fail {
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
-}
-
-/* 账号排行 */
-.ranking-card {
-  background: var(--bg-card);
-  border-radius: 12px;
-  box-shadow: var(--shadow-sm);
-}
-
-.ranking-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.ranking-header h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* 签到日历 */
-.calendar-card {
-  background: var(--bg-card);
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 24px;
-  overflow: hidden;
-}
-
-.calendar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.calendar-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.calendar-title h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.title-icon.green {
-  background: linear-gradient(180deg, #00b38a 0%, #18a058 100%);
-}
-
+/* Calendar */
 .calendar-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-2);
 }
 
 .current-month {
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  min-width: 100px;
+  min-width: 80px;
   text-align: center;
 }
 
 .calendar-legend {
   display: flex;
-  align-items: center;
-  gap: 16px;
   flex-wrap: wrap;
+  gap: var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-light);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
-.calendar-legend .legend-item {
-  display: flex;
+.legend-item {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: 4px;
 }
 
-.calendar-legend .legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.legend-dot.success {
+  background: var(--success-color);
+}
+
+.legend-dot.warning {
+  background: var(--warning-color);
+}
+
+.legend-dot.error {
+  background: var(--error-color);
+}
+
+.legend-dot.default {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color-light);
 }
 
 .calendar-body {
-  padding: 0 20px 20px;
+  padding: var(--spacing-3) var(--spacing-4);
+  max-width: 720px;
 }
 
-.month-calendar {
-  width: 100%;
-}
-
-.calendar-weekdays-row {
+.weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 
-.weekday-header {
+.weekday {
+  padding: 6px 0;
   text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-medium);
 }
 
-.calendar-days-grid {
+.days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
 }
 
 .day-cell {
-  height: 50px;
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 4px 6px;
+  aspect-ratio: 2.2 / 1;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
   display: flex;
   flex-direction: column;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.day-cell:hover:not(.empty) {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary-color);
+  justify-content: space-between;
+  transition: all var(--transition-fast);
+  min-height: 32px;
 }
 
 .day-cell.empty {
-  background: transparent;
   border-color: transparent;
-  cursor: default;
-}
-
-.day-cell.empty:hover {
-  transform: none;
-  box-shadow: none;
 }
 
 .day-cell.no-sign {
-  background: var(--bg-card-hover);
+  background: transparent;
 }
 
 .day-cell.all-success {
-  background: rgba(0, 179, 138, 0.1);
-  border-color: #00b38a;
+  background: var(--success-color-light);
+  border-color: rgba(22, 163, 74, 0.24);
+}
+
+.day-cell.partial {
+  background: var(--warning-color-light);
+  border-color: rgba(217, 119, 6, 0.24);
 }
 
 .day-cell.all-fail {
-  background: rgba(208, 48, 80, 0.1);
-  border-color: #d03050;
-}
-
-.day-cell.partial-success {
-  background: rgba(240, 160, 32, 0.1);
-  border-color: #f0a020;
+  background: var(--error-color-light);
+  border-color: rgba(220, 38, 38, 0.24);
 }
 
 .day-cell.today {
-  box-shadow: 0 0 0 2px var(--primary-color);
+  box-shadow: inset 0 0 0 2px var(--primary-color);
 }
 
 .day-number {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
   color: var(--text-primary);
-  margin-bottom: 2px;
 }
 
 .day-status {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-}
-
-.status-bar {
   display: flex;
   gap: 3px;
   flex-wrap: wrap;
-  width: 100%;
 }
 
-.success-count {
+.day-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 3px;
+  height: 12px;
+  border-radius: var(--radius-xs);
   font-size: 9px;
-  font-weight: 500;
-  color: #00b38a;
-  background: rgba(0, 179, 138, 0.15);
-  padding: 1px 3px;
-  border-radius: 3px;
+  font-weight: var(--font-semibold);
 }
 
-.fail-count {
-  font-size: 9px;
-  font-weight: 500;
-  color: #d03050;
-  background: rgba(208, 48, 80, 0.15);
-  padding: 1px 3px;
-  border-radius: 3px;
+.day-pill.success {
+  background: rgba(22, 163, 74, 0.2);
+  color: var(--success-color);
 }
 
-.no-streak {
-  color: var(--text-tertiary);
+.day-pill.error {
+  background: rgba(220, 38, 38, 0.2);
+  color: var(--error-color);
 }
 
-@media (max-width: 900px) {
-  .stats-overview {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* Ranking */
+.table-wrap :deep(.n-data-table) {
+  border: none;
+  border-radius: 0;
+}
 
+.statistics-page :deep(.rank-num) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+}
+
+.statistics-page :deep(.cell-account) {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.statistics-page :deep(.account-name) {
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
+}
+
+.statistics-page :deep(.streak) {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.statistics-page :deep(.streak.warm) {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.statistics-page :deep(.streak.hot) {
+  background: var(--error-color-light);
+  color: var(--error-color);
+}
+
+.statistics-page :deep(.success-num) {
+  color: var(--success-color);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-mono);
+}
+
+.statistics-page :deep(.reward-num) {
+  color: var(--warning-color);
+  font-weight: var(--font-medium);
+  font-family: var(--font-mono);
+}
+
+.statistics-page :deep(.success-rate-cell) {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.statistics-page :deep(.rate-bar) {
+  flex: 1;
+  height: 3px;
+  background: var(--border-color-light);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.statistics-page :deep(.rate-fill) {
+  height: 100%;
+  transition: width var(--transition-slow);
+}
+
+.statistics-page :deep(.rate-fill.high) {
+  background: var(--success-color);
+}
+
+.statistics-page :deep(.rate-fill.mid) {
+  background: var(--warning-color);
+}
+
+.statistics-page :deep(.rate-fill.low) {
+  background: var(--error-color);
+}
+
+.statistics-page :deep(.rate-text) {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.statistics-page :deep(.muted) {
+  color: var(--text-quaternary);
+}
+
+@media (max-width: 1100px) {
   .charts-row {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 600px) {
-  .stats-overview {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .stat-card {
-    padding: 16px;
-  }
-
-  .stat-icon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .stat-value {
-    font-size: 20px;
-  }
-
-  .chart-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .period-tabs {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .ranking-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .ranking-header .n-button {
-    width: 100%;
-  }
-
-  /* 日历响应式 */
-  .calendar-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .calendar-legend {
-    width: 100%;
-  }
-
-  .calendar-controls {
-    width: 100%;
-    justify-content: center;
+@media (max-width: 768px) {
+  .stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .day-cell {
-    height: 45px;
-    padding: 3px 4px;
+    min-height: 36px;
   }
+}
 
-  .day-number {
-    font-size: 10px;
-  }
-
-  .success-count,
-  .fail-count {
-    font-size: 8px;
-    padding: 1px 2px;
+@media (max-width: 480px) {
+  .stat-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

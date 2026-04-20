@@ -1,132 +1,189 @@
 <template>
   <div class="accounts-page">
-    <section class="toolbar-card rise-1">
-      <div class="toolbar-top">
-        <div class="toolbar-copy">
-        <h1>账号管理</h1>
-          <p>直接查看、筛选和操作账号，顶部只保留高频动作。</p>
-        </div>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">账号</h1>
+        <p class="page-subtitle">{{ pagination.itemCount }} 个账号 · 健康率 {{ healthRatio }}% · 待签到 {{ pendingCount }}</p>
+      </div>
+      <div class="head-actions">
+        <n-button size="small" :loading="loading" @click="handleRefresh">
+          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+          刷新
+        </n-button>
+        <n-button size="small" :loading="batchChecking" @click="handleBatchHealthCheck">
+          <template #icon><n-icon :size="14"><PulseOutline /></n-icon></template>
+          批量检查
+        </n-button>
+        <n-button size="small" :loading="batchSigning" @click="handleBatchSign">
+          <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
+          一键签到
+        </n-button>
+        <n-button size="small" @click="showBatchImportModal = true">
+          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+          批量导入
+        </n-button>
+        <n-button size="small" type="primary" @click="showAddModal">
+          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+          添加账号
+        </n-button>
+      </div>
+    </div>
 
-        <div class="toolbar-actions">
-          <n-button quaternary @click="loadData" :loading="loading">
-            <template #icon><n-icon><RefreshOutline /></n-icon></template>
-            刷新数据
+    <div class="filter-bar">
+      <n-input
+        v-model:value="searchKeyword"
+        size="small"
+        clearable
+        placeholder="搜索用户名、平台或 User ID"
+        class="search-input"
+      >
+        <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
+      </n-input>
+
+      <n-select
+        v-model:value="selectedPlatformId"
+        :options="platformOptions"
+        size="small"
+        clearable
+        placeholder="全部平台"
+        class="filter-item"
+      />
+
+      <n-select
+        v-model:value="selectedGroupId"
+        :options="groupOptions"
+        size="small"
+        clearable
+        placeholder="全部分组"
+        class="filter-item"
+      />
+    </div>
+
+    <div class="status-tabs" role="group" aria-label="账号状态筛选">
+      <button
+        v-for="pill in quickStatusPills"
+        :key="pill.key"
+        class="status-tab"
+        :class="{ active: (pill.value === null && selectedStatus === null) || selectedStatus === pill.value }"
+        :aria-pressed="(pill.value === null && selectedStatus === null) || selectedStatus === pill.value"
+        @click="setStatusFilter(pill.value)"
+      >
+        <span v-if="pill.value" class="status-dot" :class="pill.tone" aria-hidden="true"></span>
+        {{ pill.label }} <b>{{ pill.count }}</b>
+      </button>
+    </div>
+
+    <div v-if="selectedAccounts.length > 0" class="bulk-bar">
+      <div class="bulk-bar-info">
+        已选择 <strong>{{ selectedAccounts.length }}</strong> 个账号
+      </div>
+      <div class="bulk-bar-actions">
+        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'sign'" @click="handleSelectedSign">
+          批量签到
+        </n-button>
+        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'health'" @click="handleSelectedHealthCheck">
+          健康检查
+        </n-button>
+        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'enable'" @click="handleBulkToggleActive(true)">
+          启用
+        </n-button>
+        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'disable'" @click="handleBulkToggleActive(false)">
+          禁用
+        </n-button>
+        <n-select
+          v-model:value="bulkTargetPlatformId"
+          :options="platformOptions"
+          size="small"
+          placeholder="迁移平台"
+          class="bulk-select"
+          :disabled="bulkDisabled"
+        />
+        <n-button size="small" :disabled="bulkDisabled || !bulkTargetPlatformId" :loading="bulkLoading === 'platform'" @click="handleBulkMovePlatform">
+          应用平台
+        </n-button>
+        <n-select
+          v-model:value="bulkTargetGroupId"
+          :options="groupOptions"
+          size="small"
+          clearable
+          placeholder="加入分组"
+          class="bulk-select"
+          :disabled="bulkDisabled"
+        />
+        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'group'" @click="handleBulkAssignGroup">
+          应用分组
+        </n-button>
+        <n-popconfirm
+          positive-text="删除"
+          negative-text="取消"
+          @positive-click="handleBulkDelete"
+        >
+          <template #trigger>
+            <n-button size="small" type="error" ghost :disabled="bulkDisabled" :loading="bulkLoading === 'delete'">
+              批量删除
+            </n-button>
+          </template>
+          确定删除选中的 {{ selectedAccounts.length }} 个账号？
+        </n-popconfirm>
+        <n-button size="small" quaternary :disabled="bulkDisabled" @click="clearSelection">
+          清空选择
+        </n-button>
+      </div>
+    </div>
+
+    <div class="accounts-card">
+      <div v-if="loading || accounts.length > 0" class="table-wrap">
+        <n-data-table
+          :columns="columns"
+          :data="accounts"
+          :row-key="getAccountRowKey"
+          :checked-row-keys="checkedRowKeys"
+          :loading="loading"
+          :pagination="false"
+          :single-line="false"
+          :remote="true"
+          size="small"
+          :scroll-x="1200"
+          :row-class-name="getRowClassName"
+          @update:checked-row-keys="handleCheckedRowKeysChange"
+          @update:sorter="handleSorterChange"
+        />
+      </div>
+
+      <div v-else class="empty-state">
+        <n-icon :size="32" color="var(--text-quaternary)"><PeopleOutline /></n-icon>
+        <div class="empty-title">{{ hasActiveFilters ? '没有匹配的账号' : '还没有账号' }}</div>
+        <div class="empty-desc">
+          {{ hasActiveFilters ? '当前筛选条件下没有结果，试试清空筛选或更换关键词。' : '先去平台页确认配置，再添加账号或批量导入，避免后续校验失败。' }}
+        </div>
+        <div class="empty-actions">
+          <n-button v-if="!hasActiveFilters" size="small" @click="router.push('/platforms')">
+            去平台页检查配置
           </n-button>
-          <n-button secondary @click="handleBatchHealthCheck" :loading="batchChecking">
-            <template #icon><n-icon><PulseOutline /></n-icon></template>
-            批量检查
+          <n-button size="small" @click="showBatchImportModal = true">
+            <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+            批量导入
           </n-button>
-          <n-button secondary @click="handleBatchSign" :loading="batchSigning">
-            <template #icon><n-icon><FlashOutline /></n-icon></template>
-            一键签到
-          </n-button>
-          <n-button type="primary" @click="showAddModal">
-            <template #icon><n-icon><AddOutline /></n-icon></template>
+          <n-button size="small" type="primary" @click="showAddModal">
+            <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
             添加账号
           </n-button>
         </div>
       </div>
 
-      <div class="toolbar-filters">
-        <div class="filter-field search-span">
-          <n-input
-            v-model:value="searchKeyword"
-            clearable
-            placeholder="搜索用户名、显示名、平台或 User ID"
-          >
-            <template #prefix><n-icon><SearchOutline /></n-icon></template>
-          </n-input>
-        </div>
-
-        <div class="filter-field">
-          <n-select
-            v-model:value="selectedPlatformId"
-            :options="platformOptions"
-            clearable
-            placeholder="全部平台"
-          />
-        </div>
-
-        <div class="filter-field">
-          <n-select
-            v-model:value="selectedGroupId"
-            :options="groupOptions"
-            clearable
-            placeholder="全部分组"
-          />
-        </div>
-      </div>
-
-      <div class="toolbar-bottom">
-        <div class="toolbar-metrics">
-          <span class="metric-chip">账号 {{ formatNumber(accounts.length) }}</span>
-          <span class="metric-chip">健康率 {{ healthRatio }}%</span>
-          <span class="metric-chip">待签到 {{ formatNumber(pendingCount) }}</span>
-          <span class="metric-chip">剩余 {{ formatQuota(totalQuota) }}</span>
-        </div>
-
-        <div class="status-rail compact">
-          <button
-            v-for="pill in quickStatusPills"
-            :key="pill.key"
-            type="button"
-            class="status-pill"
-            :class="[pill.tone, { active: (pill.value === null && selectedStatus === null) || selectedStatus === pill.value }]"
-            @click="setStatusFilter(pill.value)"
-          >
-            <span class="pill-label">{{ pill.label }}</span>
-            <strong>{{ pill.count }}</strong>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section class="workspace-shell rise-2">
-      <div class="workspace-head compact">
-        <div class="workspace-copy">
-          <h2>账号列表</h2>
-        </div>
-
-        <div class="workspace-summary">
-          <div class="summary-chip">
-            <span>当前结果</span>
-            <strong>{{ filteredAccounts.length }}</strong>
-          </div>
-          <div class="summary-chip">
-            <span>异常账号</span>
-            <strong>{{ unhealthyCount }}</strong>
-          </div>
-          <div class="summary-chip">
-            <span>禁用账号</span>
-            <strong>{{ disabledCount }}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="loading || filteredAccounts.length > 0" class="table-wrap">
-        <n-data-table
-          class="accounts-table"
-          :columns="columns"
-          :data="filteredAccounts"
-          :row-key="getAccountRowKey"
-          :loading="loading"
-          :pagination="false"
-          :single-line="false"
+      <div v-if="pagination.itemCount > 0" class="pagination-wrap">
+        <n-pagination
+          v-model:page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :item-count="pagination.itemCount"
+          :page-sizes="pagination.pageSizes"
+          show-size-picker
           size="small"
-          :scroll-x="1420"
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
         />
       </div>
-
-      <div v-else class="empty-state">
-        <div class="empty-state-mark">A</div>
-        <h3>没有匹配的账号</h3>
-        <p>当前筛选条件下没有结果。可以放宽筛选范围，或者直接添加新的接入账号。</p>
-        <n-button type="primary" @click="showAddModal">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
-          添加账号
-        </n-button>
-      </div>
-    </section>
+    </div>
 
     <AccountModal
       ref="accountModalRef"
@@ -134,6 +191,13 @@
       :account="editingAccount"
       :groups="groups"
       @submit="handleAccountSubmit"
+    />
+
+    <BatchImportModal
+      v-model:show="showBatchImportModal"
+      :platforms="platforms"
+      :groups="groups"
+      @imported="handleBatchImported"
     />
 
     <TokensModal
@@ -152,40 +216,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, type DataTableColumns } from 'naive-ui'
+import {
+  NButton,
+  NIcon,
+  NPopconfirm,
+  NTooltip,
+  type DataTableColumns,
+  type DataTableSortOrder,
+  type DataTableSortState
+} from 'naive-ui'
 import {
   AddOutline,
-  CreateOutline,
-  EyeOutline,
+  AlertCircleOutline,
+  DocumentTextOutline,
   FlashOutline,
-  KeyOutline,
+  PeopleOutline,
   PulseOutline,
   RefreshOutline,
   SearchOutline,
-  TrashOutline
 } from '@vicons/ionicons5'
-import { AccountModal, TokensModal } from '../components'
-import { accountApi, groupsApi, notifyApi, platformApi, signApi } from '../api'
-import { useFormat } from '../composables'
+import { AccountModal, BatchImportModal, TokensModal } from '../components'
+import { accountApi, groupsApi, notifyApi, platformApi, settingsApi, signApi } from '../api'
+import { useEventStream, useFormat, useViewRefresh } from '../composables'
 import type { Account, AccountGroup, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
 
 type StatusFilter = 'healthy' | 'unhealthy' | 'pending' | 'disabled'
+type SortKey = 'username' | 'platform' | 'group' | 'quota' | 'last_sign' | 'health'
 
 const router = useRouter()
-const { formatDateTime, formatQuota, formatRelativeTime, formatNumber } = useFormat()
-
-const groupColors: Record<string, string> = {
-  default: '#8f877a',
-  blue: '#2f6de1',
-  green: '#23735d',
-  red: '#c24d3c',
-  orange: '#cf7a2a',
-  purple: '#7852d7',
-  pink: '#c75883',
-  cyan: '#1f8f99'
-}
+const { formatQuota, formatRelativeTime } = useFormat()
 
 const accounts = ref<Account[]>([])
 const groups = ref<AccountGroup[]>([])
@@ -199,7 +260,12 @@ const searchKeyword = ref('')
 const selectedPlatformId = ref<number | null>(null)
 const selectedGroupId = ref<number | null>(null)
 const selectedStatus = ref<StatusFilter | null>(null)
+const checkedRowKeys = ref<number[]>([])
+const bulkLoading = ref<'sign' | 'health' | 'enable' | 'disable' | 'platform' | 'group' | 'delete' | null>(null)
+const bulkTargetPlatformId = ref<number | null>(null)
+const bulkTargetGroupId = ref<number | null>(null)
 const showAccountModal = ref(false)
+const showBatchImportModal = ref(false)
 const editingAccount = ref<Account | null>(null)
 const accountModalRef = ref<InstanceType<typeof AccountModal> | null>(null)
 const showTokensVisible = ref(false)
@@ -208,13 +274,33 @@ const tokens = ref<ApiToken[]>([])
 const loadingTokens = ref(false)
 const syncingTokens = ref(false)
 const deletingTokenId = ref<number | null>(null)
+const quotaWarningThreshold = ref(5)
+const listSummary = ref({
+  total: 0,
+  active_count: 0,
+  healthy_count: 0,
+  unhealthy_count: 0,
+  disabled_count: 0,
+  pending_count: 0
+})
+const pagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  pageSizes: [10, 20, 50, 100]
+})
+const sortState = ref<{ columnKey: SortKey | null; order: DataTableSortOrder }>({
+  columnKey: null,
+  order: false
+})
+let eventRefreshTimer: number | null = null
+let searchDebounceTimer: number | null = null
 
-const activeCount = computed(() => accounts.value.filter(account => account.is_active).length)
-const healthyCount = computed(() => accounts.value.filter(account => account.is_active && account.health_status === 'healthy').length)
-const unhealthyCount = computed(() => accounts.value.filter(account => account.is_active && account.health_status === 'unhealthy').length)
-const disabledCount = computed(() => accounts.value.filter(account => !account.is_active).length)
-const pendingCount = computed(() => accounts.value.filter(account => account.is_active && (!account.last_sign || !isToday(account.last_sign.time))).length)
-const totalQuota = computed(() => accounts.value.reduce((sum, account) => sum + (account.cached_quota || 0), 0))
+const activeCount = computed(() => listSummary.value.active_count)
+const healthyCount = computed(() => listSummary.value.healthy_count)
+const unhealthyCount = computed(() => listSummary.value.unhealthy_count)
+const disabledCount = computed(() => listSummary.value.disabled_count)
+const pendingCount = computed(() => listSummary.value.pending_count)
 const healthRatio = computed(() => (activeCount.value > 0 ? Math.round((healthyCount.value / activeCount.value) * 100) : 0))
 
 const platformOptions = computed<SelectOption<number>[]>(() =>
@@ -223,37 +309,25 @@ const platformOptions = computed<SelectOption<number>[]>(() =>
 const groupOptions = computed<SelectOption<number>[]>(() =>
   groups.value.map(group => ({ label: group.name, value: group.id }))
 )
+const selectedAccounts = computed(() =>
+  accounts.value.filter(account => checkedRowKeys.value.includes(account.id))
+)
+const bulkDisabled = computed(() => !!bulkLoading.value)
+const quotaWarningValue = computed(() => quotaWarningThreshold.value * 500000)
+const hasActiveFilters = computed(() =>
+  !!searchKeyword.value.trim() ||
+  selectedPlatformId.value != null ||
+  selectedGroupId.value != null ||
+  selectedStatus.value != null
+)
 
 const quickStatusPills = computed(() => [
-  { key: 'all', label: '全部', count: accounts.value.length, value: null as StatusFilter | null, tone: 'all' },
-  { key: 'healthy', label: '健康', count: healthyCount.value, value: 'healthy' as StatusFilter, tone: 'healthy' },
-  { key: 'unhealthy', label: '异常', count: unhealthyCount.value, value: 'unhealthy' as StatusFilter, tone: 'unhealthy' },
-  { key: 'pending', label: '待签到', count: pendingCount.value, value: 'pending' as StatusFilter, tone: 'pending' },
-  { key: 'disabled', label: '禁用', count: disabledCount.value, value: 'disabled' as StatusFilter, tone: 'disabled' }
+  { key: 'all', label: '全部', count: listSummary.value.total, value: null as StatusFilter | null, tone: 'default' },
+  { key: 'healthy', label: '健康', count: healthyCount.value, value: 'healthy' as StatusFilter, tone: 'success' },
+  { key: 'unhealthy', label: '异常', count: unhealthyCount.value, value: 'unhealthy' as StatusFilter, tone: 'error' },
+  { key: 'pending', label: '待签到', count: pendingCount.value, value: 'pending' as StatusFilter, tone: 'warning' },
+  { key: 'disabled', label: '禁用', count: disabledCount.value, value: 'disabled' as StatusFilter, tone: 'default' }
 ])
-
-const filteredAccounts = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-
-  return accounts.value.filter(account => {
-    const matchesKeyword =
-      !keyword ||
-      [account.username, account.display_name, getPlatformName(account), String(getUserId(account))]
-        .filter(Boolean)
-        .some(value => String(value).toLowerCase().includes(keyword))
-
-    const matchesPlatform = selectedPlatformId.value == null || account.platform?.id === selectedPlatformId.value
-    const matchesGroup = selectedGroupId.value == null || account.group_id === selectedGroupId.value
-    const matchesStatus =
-      selectedStatus.value == null ||
-      (selectedStatus.value === 'healthy' && account.is_active && account.health_status === 'healthy') ||
-      (selectedStatus.value === 'unhealthy' && account.is_active && account.health_status === 'unhealthy') ||
-      (selectedStatus.value === 'pending' && account.is_active && (!account.last_sign || !isToday(account.last_sign.time))) ||
-      (selectedStatus.value === 'disabled' && !account.is_active)
-
-    return matchesKeyword && matchesPlatform && matchesGroup && matchesStatus
-  })
-})
 
 const getAccountRowKey = (account: Account) => account.id
 
@@ -265,30 +339,22 @@ const setStatusFilter = (status: StatusFilter | null) => {
   selectedStatus.value = selectedStatus.value === status ? null : status
 }
 
-const isToday = (value: string) => {
-  const date = new Date(value)
-  const today = new Date()
-  return date.toDateString() === today.toDateString()
-}
-
-const getUserId = (account: Account) => account.anrouter_user_id ?? account.anyrouter_user_id ?? '-'
-const getPlatformName = (account: Account) => account.platform?.name || '未分配平台'
+const getUserId = (account: Account) => account.anyrouter_user_id ?? '-'
+const getPlatformName = (account: Account) => account.platform?.name || '—'
 const getGroupInfo = (account: Account) => account.group || groups.value.find(group => group.id === account.group_id)
-const getGroupName = (account: Account) => getGroupInfo(account)?.name || '未分组'
-const getGroupColor = (color?: string) => groupColors[color || 'default'] || groupColors.default
 
 const getHealthTone = (account: Account) => {
-  if (!account.is_active) return 'disabled'
-  if (account.health_status === 'healthy') return 'healthy'
-  if (account.health_status === 'unhealthy') return 'unhealthy'
-  return 'pending'
+  if (!account.is_active) return 'default'
+  if (account.health_status === 'healthy') return 'success'
+  if (account.health_status === 'unhealthy') return 'error'
+  return 'warning'
 }
 
 const getHealthLabel = (account: Account) => {
   if (!account.is_active) return '已禁用'
   if (account.health_status === 'healthy') return '健康'
   if (account.health_status === 'unhealthy') return '异常'
-  return '待检查'
+  return '未检查'
 }
 
 const getQuotaRatio = (account: Account) => {
@@ -297,26 +363,13 @@ const getQuotaRatio = (account: Account) => {
   return Math.max(0, Math.min(100, ratio))
 }
 
-const getLastSignTone = (account: Account) => {
-  if (!account.last_sign) return 'pending'
-  if (account.last_sign.success && isToday(account.last_sign.time)) return 'healthy'
-  if (account.last_sign.success) return 'pending'
-  return 'unhealthy'
-}
+const isLowQuota = (account: Account) => (account.cached_quota || 0) < quotaWarningValue.value
 
-const getLastSignCell = (account: Account) => {
-  if (!account.last_sign) return '未签到'
-  return account.last_sign.success ? `成功 · ${formatRelativeTime(account.last_sign.time)}` : `失败 · ${formatRelativeTime(account.last_sign.time)}`
+const getRowClassName = (account: Account) => {
+  if (account.health_status === 'unhealthy') return 'account-row-alert'
+  if (isLowQuota(account)) return 'account-row-warning'
+  return ''
 }
-
-const getLastSignDetail = (account: Account) => {
-  if (!account.last_sign) return '暂无签到记录。'
-  if (account.last_sign.message) return account.last_sign.message
-  return account.last_sign.success ? '最近一次签到成功。' : '最近一次签到失败。'
-}
-
-const getHealthDetail = (account: Account) =>
-  account.health_message || (account.health_status === 'healthy' ? '最近一次健康检查正常。' : '暂无健康检查备注。')
 
 const openAccountDetail = (account: Account) => {
   router.push(`/account/${account.id}`)
@@ -333,10 +386,6 @@ const showEditModal = (account: Account) => {
 }
 
 const handleDeleteAccount = async (account: Account) => {
-  if (!confirm(`确定删除账号 "${account.username}" 吗？`)) {
-    return
-  }
-
   try {
     await accountApi.delete(account.id)
     window.$notify('账号删除成功', 'success')
@@ -348,17 +397,17 @@ const handleDeleteAccount = async (account: Account) => {
 
 const handleSign = async (account: Account) => {
   if (!account.is_active) {
-    window.$notify('该账号已禁用，无法签到', 'warning')
+    window.$notify('该账号已禁用，无法签到', 'warning', { route: `/account/${account.id}` })
     return
   }
 
   signingId.value = account.id
   try {
     const res: any = await signApi.sign(account.id)
-    window.$notify(res.data?.message || '签到成功', 'success')
+    window.$notify(res.data?.message || '签到成功', 'success', { route: `/account/${account.id}` })
     await loadData()
   } catch (e: any) {
-    window.$notify(e.message || '签到失败', 'error')
+    window.$notify(e.message || '签到失败', 'error', { route: `/account/${account.id}` })
   } finally {
     signingId.value = null
   }
@@ -381,10 +430,10 @@ const handleHealthCheck = async (account: Account) => {
   checkingId.value = account.id
   try {
     await accountApi.healthCheck(account.id)
-    window.$notify('健康检查完成', 'success')
+    window.$notify('健康检查完成', 'success', { route: `/account/${account.id}` })
     await loadData()
   } catch (e: any) {
-    window.$notify(e.message || '健康检查失败', 'error')
+    window.$notify(e.message || '健康检查失败', 'error', { route: `/account/${account.id}` })
   } finally {
     checkingId.value = null
   }
@@ -492,6 +541,7 @@ const handleAccountSubmit = async (data: {
   session_cookie: string
   login_username: string
   login_password: string
+  note: string
   clear_login_credentials: boolean
   is_active?: boolean
   platform_id: number | null
@@ -504,6 +554,7 @@ const handleAccountSubmit = async (data: {
 
       if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
       if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+      if (data.note.trim() !== (editingAccount.value.note || '')) updateData.note = data.note.trim()
       if (data.clear_login_credentials) {
         updateData.clear_login_credentials = true
       } else {
@@ -537,9 +588,10 @@ const handleAccountSubmit = async (data: {
     } else {
       const res: any = await accountApi.create({
         session_cookie: data.session_cookie.trim() || undefined,
-        user_id: data.user_id.trim(),
+        user_id: data.user_id.trim() || undefined,
         login_username: data.login_username.trim() || undefined,
         login_password: data.login_password || undefined,
+        note: data.note.trim() || undefined,
         platform_id: data.platform_id as number,
         group_id: data.group_id || undefined
       })
@@ -567,34 +619,198 @@ const handleAccountSubmit = async (data: {
   }
 }
 
-const loadData = async () => {
+const handleBatchImported = async () => {
+  await loadData(1)
+}
+
+const clearSelection = () => {
+  checkedRowKeys.value = []
+}
+
+const handleCheckedRowKeysChange = (keys: Array<string | number>) => {
+  checkedRowKeys.value = keys.map(key => Number(key)).filter(key => !Number.isNaN(key))
+}
+
+const runBulkOperation = async (
+  loadingKey: NonNullable<typeof bulkLoading.value>,
+  items: Account[],
+  action: (account: Account) => Promise<unknown>,
+  successMessage: (successCount: number, failCount: number, skippedCount: number) => string,
+  skippedPredicate?: (account: Account) => boolean
+) => {
+  if (items.length === 0) {
+    window.$notify('请先选择账号', 'warning')
+    return
+  }
+
+  bulkLoading.value = loadingKey
+  try {
+    const executable = skippedPredicate ? items.filter(account => !skippedPredicate(account)) : items
+    const skippedCount = items.length - executable.length
+
+    const results = await Promise.allSettled(executable.map(account => action(account)))
+    const successCount = results.filter(result => result.status === 'fulfilled').length
+    const failCount = results.length - successCount
+
+    window.$notify(
+      successMessage(successCount, failCount, skippedCount),
+      failCount > 0 ? 'warning' : 'success'
+    )
+    await loadData()
+    if (loadingKey === 'delete') {
+      clearSelection()
+    }
+  } catch (e: any) {
+    window.$notify(e.message || '批量操作失败', 'error')
+  } finally {
+    bulkLoading.value = null
+  }
+}
+
+const handleSelectedSign = async () => {
+  await runBulkOperation(
+    'sign',
+    selectedAccounts.value,
+    account => signApi.sign(account.id),
+    (successCount, failCount, skippedCount) =>
+      `批量签到完成，成功 ${successCount}，失败 ${failCount}${skippedCount > 0 ? `，跳过 ${skippedCount}` : ''}`,
+    account => !account.is_active
+  )
+}
+
+const handleSelectedHealthCheck = async () => {
+  await runBulkOperation(
+    'health',
+    selectedAccounts.value,
+    account => accountApi.healthCheck(account.id),
+    (successCount, failCount) => `健康检查完成，成功 ${successCount}，失败 ${failCount}`
+  )
+}
+
+const handleBulkToggleActive = async (active: boolean) => {
+  await runBulkOperation(
+    active ? 'enable' : 'disable',
+    selectedAccounts.value,
+    account => accountApi.update(account.id, { is_active: active }),
+    (successCount, failCount) => `${active ? '启用' : '禁用'}完成，成功 ${successCount}，失败 ${failCount}`
+  )
+}
+
+const handleBulkMovePlatform = async () => {
+  if (!bulkTargetPlatformId.value) {
+    window.$notify('请先选择目标平台', 'warning')
+    return
+  }
+
+  await runBulkOperation(
+    'platform',
+    selectedAccounts.value,
+    account => accountApi.update(account.id, { platform_id: bulkTargetPlatformId.value }),
+    (successCount, failCount) => `平台迁移完成，成功 ${successCount}，失败 ${failCount}`
+  )
+}
+
+const handleBulkAssignGroup = async () => {
+  await runBulkOperation(
+    'group',
+    selectedAccounts.value,
+    account => accountApi.update(account.id, { group_id: bulkTargetGroupId.value || 0 }),
+    (successCount, failCount) => `分组更新完成，成功 ${successCount}，失败 ${failCount}`
+  )
+}
+
+const handleBulkDelete = async () => {
+  await runBulkOperation(
+    'delete',
+    selectedAccounts.value,
+    account => accountApi.delete(account.id),
+    (successCount, failCount) => `批量删除完成，成功 ${successCount}，失败 ${failCount}`
+  )
+}
+
+const loadMeta = async () => {
+  const [groupsRes, platformsRes, settingsRes] = await Promise.allSettled([
+    groupsApi.getList(),
+    platformApi.getList(),
+    settingsApi.get()
+  ])
+
+  if (groupsRes.status === 'fulfilled') {
+    groups.value = groupsRes.value.data || []
+  } else {
+    groups.value = []
+    console.error('Failed to load groups:', groupsRes.reason)
+  }
+
+  if (platformsRes.status === 'fulfilled') {
+    platforms.value = platformsRes.value.data || []
+  } else {
+    platforms.value = []
+    console.error('Failed to load platforms:', platformsRes.reason)
+  }
+
+  if (settingsRes.status === 'fulfilled') {
+    quotaWarningThreshold.value = settingsRes.value.data?.quota_warning_threshold ?? 5
+  } else {
+    console.error('Failed to load settings:', settingsRes.reason)
+  }
+}
+
+const loadData = async (page = pagination.value.page) => {
   loading.value = true
   try {
-    const [accountsRes, groupsRes, platformsRes] = await Promise.allSettled([
-      accountApi.getList(),
-      groupsApi.getList(),
-      platformApi.getList()
-    ])
-
-    if (accountsRes.status === 'fulfilled') {
-      accounts.value = accountsRes.value.data || []
-    } else {
-      accounts.value = []
-      window.$notify(accountsRes.reason?.message || '加载账号数据失败', 'error')
+    const params: {
+      page: number
+      size: number
+      keyword?: string
+      platform_id?: number
+      group_id?: number
+      status?: StatusFilter
+      sort_by?: SortKey
+      sort_order?: 'asc' | 'desc'
+    } = {
+      page,
+      size: pagination.value.pageSize
     }
 
-    if (groupsRes.status === 'fulfilled') {
-      groups.value = groupsRes.value.data || []
-    } else {
-      groups.value = []
-      console.error('Failed to load groups:', groupsRes.reason)
+    const keyword = searchKeyword.value.trim()
+    if (keyword) {
+      params.keyword = keyword
+    }
+    if (selectedPlatformId.value != null) {
+      params.platform_id = selectedPlatformId.value
+    }
+    if (selectedGroupId.value != null) {
+      params.group_id = selectedGroupId.value
+    }
+    if (selectedStatus.value) {
+      params.status = selectedStatus.value
+    }
+    if (sortState.value.columnKey && sortState.value.order) {
+      params.sort_by = sortState.value.columnKey
+      params.sort_order = sortState.value.order === 'ascend' ? 'asc' : 'desc'
     }
 
-    if (platformsRes.status === 'fulfilled') {
-      platforms.value = platformsRes.value.data || []
-    } else {
-      platforms.value = []
-      console.error('Failed to load platforms:', platformsRes.reason)
+    const res: any = await accountApi.getList(params)
+    const responseData = res.data || {}
+    const total = responseData.total || 0
+    const totalPages = total > 0 ? Math.ceil(total / pagination.value.pageSize) : 0
+
+    if (totalPages > 0 && page > totalPages) {
+      await loadData(totalPages)
+      return
+    }
+
+    accounts.value = responseData.items || []
+    pagination.value.page = page
+    pagination.value.itemCount = total
+    listSummary.value = responseData.summary || {
+      total: total,
+      active_count: 0,
+      healthy_count: 0,
+      unhealthy_count: 0,
+      disabled_count: 0,
+      pending_count: 0
     }
   } catch (e: any) {
     window.$notify(e.message || '加载账号数据失败', 'error')
@@ -603,926 +819,599 @@ const loadData = async () => {
   }
 }
 
-const renderAccountNameCell = (account: Account) =>
-  h('div', { class: 'simple-cell' }, [
-    h('strong', { class: 'simple-name' }, account.username || '-')
-  ])
-
-const renderPlatformCell = (account: Account) =>
-  h('div', { class: 'simple-cell' }, [
-    h('span', { class: 'simple-text' }, getPlatformName(account))
-  ])
-
-const renderGroupCell = (account: Account) => {
-  const group = getGroupInfo(account)
-  if (!group) {
-    return h('div', { class: 'simple-cell' }, [
-      h('span', { class: 'simple-text muted' }, '未分组')
-    ])
-  }
-
-  return h('div', { class: 'simple-cell' }, [
-    h(
-      'span',
-      { class: 'group-pill', style: { '--group-color': getGroupColor(group.color) } },
-      group.name
-    )
-  ])
+const handleRefresh = async () => {
+  await loadMeta()
+  await loadData(pagination.value.page)
 }
 
-const renderQuotaCell = (account: Account) =>
-  h('div', { class: 'quota-cell' }, [
-    h('strong', { class: 'quota-primary' }, formatQuota(account.cached_quota || 0)),
-    h('span', { class: 'quota-secondary' }, `已用 ${formatQuota(account.cached_used_quota || 0)} · 请求 ${formatNumber(account.cached_request_count || 0)}`),
-    h('div', { class: 'quota-rail' }, [
-      h('span', { class: 'quota-fill', style: { width: `${getQuotaRatio(account)}%` } })
-    ])
-  ])
+const handlePageChange = (page: number) => {
+  void loadData(page)
+}
 
-const renderLastSignCell = (account: Account) =>
-  h('div', { class: 'sign-cell' }, [
-    h('span', { class: ['sign-badge', getLastSignTone(account)] }, getLastSignCell(account)),
-    h('span', { class: 'sign-caption' }, getLastSignDetail(account))
-  ])
+const handlePageSizeChange = (pageSize: number) => {
+  pagination.value.pageSize = pageSize
+  void loadData(1)
+}
 
-const renderHealthCell = (account: Account) =>
-  h('div', { class: 'health-cell' }, [
-    h('span', { class: ['health-badge', getHealthTone(account)] }, getHealthLabel(account)),
-    h('span', { class: 'health-caption' }, account.last_health_check ? `${formatRelativeTime(account.last_health_check)} 检查` : '尚未执行检查')
-  ])
+const getSortOrder = (columnKey: SortKey): DataTableSortOrder =>
+  sortState.value.columnKey === columnKey ? sortState.value.order : false
 
-const renderAccountExpand = (account: Account) =>
-  h('div', { class: 'account-expand' }, [
-    h('div', { class: 'expand-grid' }, [
-      h('div', { class: 'expand-card' }, [
-        h('span', { class: 'expand-label' }, '平台归属'),
-        h('strong', { class: 'expand-value' }, getPlatformName(account)),
-        h('small', { class: 'expand-note' }, '在账号详情页查看完整平台链路')
-      ]),
-      h('div', { class: 'expand-card' }, [
-        h('span', { class: 'expand-label' }, '本地分组'),
-        h('strong', { class: 'expand-value' }, getGroupName(account)),
-        h('small', { class: 'expand-note' }, `远端组: ${account.cached_user_group || '-'}`)
-      ]),
-      h('div', { class: 'expand-card' }, [
-        h('span', { class: 'expand-label' }, '额度更新时间'),
-        h('strong', { class: 'expand-value' }, account.quota_updated_at ? formatDateTime(account.quota_updated_at) : '暂无缓存'),
-        h('small', { class: 'expand-note' }, `推广码 ${account.cached_aff_code || '-'}`)
-      ]),
-      h('div', { class: 'expand-card' }, [
-        h('span', { class: 'expand-label' }, '创建时间'),
-        h('strong', { class: 'expand-value' }, formatDateTime(account.created_at)),
-        h('small', { class: 'expand-note' }, `最近更新 ${formatDateTime(account.updated_at)}`)
-      ])
-    ]),
-    h('div', { class: 'expand-narrative' }, [
-      h('div', { class: 'narrative-block' }, [
-        h('span', { class: 'narrative-kicker' }, '签到备注'),
-        h('p', getLastSignDetail(account))
-      ]),
-      h('div', { class: 'narrative-block' }, [
-        h('span', { class: 'narrative-kicker' }, '健康备注'),
-        h('p', getHealthDetail(account))
-      ])
-    ]),
-    h('div', { class: 'expand-actions' }, [
-      h(NButton, { size: 'small', quaternary: true, onClick: () => openAccountDetail(account) }, { icon: () => h(EyeOutline), default: () => '详情' }),
-      h(NButton, { size: 'small', quaternary: true, onClick: () => showEditModal(account) }, { icon: () => h(CreateOutline), default: () => '编辑' }),
-      h(NButton, { size: 'small', quaternary: true, onClick: () => showTokens(account) }, { icon: () => h(KeyOutline), default: () => 'Token' }),
-      h(NButton, { size: 'small', quaternary: true, disabled: !account.is_active, loading: signingId.value === account.id, onClick: () => handleSign(account) }, { icon: () => h(FlashOutline), default: () => '签到' }),
-      h(NButton, { size: 'small', quaternary: true, loading: checkingId.value === account.id, onClick: () => handleHealthCheck(account) }, { icon: () => h(PulseOutline), default: () => '检查' }),
-      h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => handleDeleteAccount(account) }, { icon: () => h(TrashOutline), default: () => '删除' })
-    ])
-  ])
+const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | null) => {
+  const nextSorter = Array.isArray(sorter) ? (sorter[0] ?? null) : sorter
 
-const renderActions = (account: Account) =>
-  h('div', { class: 'table-actions' }, [
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' }),
-    h(NButton, { size: 'small', quaternary: true, disabled: !account.is_active, loading: signingId.value === account.id, onClick: () => handleSign(account) }, { default: () => '签到' })
-  ])
+  if (!nextSorter?.columnKey || !nextSorter.order) {
+    sortState.value = { columnKey: null, order: false }
+    void loadData(1)
+    return
+  }
+
+  sortState.value = {
+    columnKey: String(nextSorter.columnKey) as SortKey,
+    order: nextSorter.order
+  }
+  void loadData(1)
+}
 
 const columns = computed<DataTableColumns<Account>>(() => [
-  { type: 'expand', expandable: () => true, renderExpand: renderAccountExpand },
-  { title: '账号', key: 'username', minWidth: 180, render: row => renderAccountNameCell(row) },
-  { title: '平台名', key: 'platform_name', minWidth: 180, render: row => renderPlatformCell(row) },
-  { title: '分组', key: 'group_name', minWidth: 140, render: row => renderGroupCell(row) },
-  { title: '额度', key: 'quota', minWidth: 260, render: row => renderQuotaCell(row) },
-  { title: '最近签到', key: 'last_sign', minWidth: 240, render: row => renderLastSignCell(row) },
-  { title: '健康状态', key: 'health_status', width: 150, render: row => renderHealthCell(row) },
-  { title: '操作', key: 'actions', width: 250, render: row => renderActions(row) }
+  {
+    type: 'selection',
+    width: 44,
+  },
+  {
+    title: '账号',
+    key: 'username',
+    minWidth: 200,
+    sorter: 'default',
+    sortOrder: getSortOrder('username'),
+    render: account =>
+      h('div', { class: 'account-cell' }, [
+        h('div', { class: 'account-avatar-mini', onClick: () => openAccountDetail(account) }, (account.username || 'U')[0].toUpperCase()),
+        h('div', { class: 'account-info' }, [
+          h('div', { class: 'account-name-row' }, [
+            h('div', { class: 'account-name', onClick: () => openAccountDetail(account) }, account.username || '-'),
+            account.note
+              ? h(
+                  NTooltip,
+                  null,
+                  {
+                    trigger: () =>
+                      h('span', { class: 'note-badge' }, [
+                        h(NIcon, { size: 12 }, { default: () => h(DocumentTextOutline) })
+                      ]),
+                    default: () => account.note
+                  }
+                )
+              : null
+          ]),
+          h('div', { class: 'account-sub' }, `UID ${getUserId(account)}`)
+        ])
+      ])
+  },
+  {
+    title: '平台',
+    key: 'platform',
+    minWidth: 140,
+    sorter: 'default',
+    sortOrder: getSortOrder('platform'),
+    render: account => getPlatformName(account)
+  },
+  {
+    title: '分组',
+    key: 'group',
+    minWidth: 100,
+    sorter: 'default',
+    sortOrder: getSortOrder('group'),
+    render: account => {
+      const group = getGroupInfo(account)
+      return group
+        ? h('span', { class: 'group-tag' }, group.name)
+        : h('span', { class: 'muted' }, '—')
+    }
+  },
+  {
+    title: '额度',
+    key: 'quota',
+    minWidth: 180,
+    sorter: 'default',
+    sortOrder: getSortOrder('quota'),
+    render: account =>
+      h('div', { class: 'quota-cell' }, [
+        h('div', { class: 'quota-main' }, [
+          isLowQuota(account)
+            ? h(
+                NTooltip,
+                null,
+                {
+                  trigger: () =>
+                    h('span', { class: 'quota-alert-icon' }, [
+                      h(NIcon, { size: 12 }, { default: () => h(AlertCircleOutline) })
+                    ]),
+                  default: () => `低于告警阈值 $${quotaWarningThreshold.value.toFixed(2)}`
+                }
+              )
+            : null,
+          h('span', { class: ['quota-value', isLowQuota(account) ? 'danger' : ''] }, formatQuota(account.cached_quota || 0)),
+          h('span', { class: 'quota-sub' }, `/${formatQuota((account.cached_quota || 0) + (account.cached_used_quota || 0))}`)
+        ]),
+        h('div', { class: 'quota-bar' }, [
+          h('div', { class: ['quota-bar-fill', isLowQuota(account) ? 'danger' : ''], style: { width: `${getQuotaRatio(account)}%` } })
+        ])
+      ])
+  },
+  {
+    title: '最近签到',
+    key: 'last_sign',
+    width: 140,
+    sorter: 'default',
+    sortOrder: getSortOrder('last_sign'),
+    render: account => {
+      if (!account.last_sign) return h('span', { class: 'muted' }, '未签到')
+      const tone = account.last_sign.success ? 'success' : 'error'
+      return h('div', { class: 'sign-cell' }, [
+        h('span', { class: `tag-dot ${tone}` }),
+        h('span', {}, formatRelativeTime(account.last_sign.time))
+      ])
+    }
+  },
+  {
+    title: '状态',
+    key: 'health',
+    width: 90,
+    sorter: 'default',
+    sortOrder: getSortOrder('health'),
+    render: account =>
+      h('span', { class: `tag ${getHealthTone(account)}` }, getHealthLabel(account))
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 240,
+    render: account =>
+      h('div', { class: 'actions' }, [
+        h(NButton, { size: 'tiny', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
+        h(NButton, { size: 'tiny', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
+        h(NButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' }),
+        h(NButton, { size: 'tiny', quaternary: true, disabled: !account.is_active, loading: signingId.value === account.id, onClick: () => handleSign(account) }, { default: () => '签到' }),
+        h(NButton, { size: 'tiny', quaternary: true, loading: checkingId.value === account.id, onClick: () => handleHealthCheck(account) }, { default: () => '检查' }),
+        h(
+          NPopconfirm,
+          {
+            onPositiveClick: () => handleDeleteAccount(account),
+            positiveText: '删除',
+            negativeText: '取消',
+          },
+          {
+            trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
+            default: () => `确定删除账号 "${account.username || '-'}" ？`
+          }
+        )
+      ])
+  }
 ])
 
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  await loadMeta()
+  await loadData(1)
 })
+
+watch(accounts, (list) => {
+  const validKeys = new Set(list.map(account => account.id))
+  checkedRowKeys.value = checkedRowKeys.value.filter(key => validKeys.has(key))
+}, { deep: true })
+
+watch([selectedPlatformId, selectedGroupId, selectedStatus], () => {
+  void loadData(1)
+})
+
+watch(searchKeyword, () => {
+  if (searchDebounceTimer !== null) {
+    window.clearTimeout(searchDebounceTimer)
+  }
+
+  searchDebounceTimer = window.setTimeout(() => {
+    searchDebounceTimer = null
+    void loadData(1)
+  }, 250)
+})
+
+useEventStream((event) => {
+  if (!['sign_completed', 'health_changed', 'account_changed'].includes(event.type)) return
+  if (eventRefreshTimer !== null) return
+  eventRefreshTimer = window.setTimeout(async () => {
+    eventRefreshTimer = null
+    await loadData(pagination.value.page)
+  }, 600)
+})
+
+onUnmounted(() => {
+  if (eventRefreshTimer !== null) {
+    window.clearTimeout(eventRefreshTimer)
+  }
+  if (searchDebounceTimer !== null) {
+    window.clearTimeout(searchDebounceTimer)
+  }
+})
+
+useViewRefresh(() => handleRefresh())
 </script>
 
 <style scoped>
 .accounts-page {
-  display: grid;
-  gap: var(--spacing-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
 }
 
-.accounts-hero,
-.filters-shell,
-.workspace-shell {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding-bottom: var(--spacing-3);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
-.accounts-hero {
-  padding: var(--spacing-6);
-}
-
-.accounts-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 132px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, rgba(52, 211, 153, 0.08) 100%);
-}
-
-.hero-copy,
-.hero-actions,
-.hero-band,
-.filters-head,
-.filter-grid,
-.scope-line,
-.workspace-head,
-.table-wrap,
-.empty-state {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-copy {
-  max-width: 720px;
-}
-
-.hero-kicker,
-.section-kicker {
-  display: inline-flex;
-  font-size: var(--text-xs);
+.page-title {
+  font-size: var(--text-xl);
   font-weight: var(--font-semibold);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  margin: 0;
+}
+
+.page-subtitle {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.head-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 360px;
+  min-width: 200px;
+}
+
+.filter-item {
+  width: 160px;
+}
+
+.status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.bulk-bar-info {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.bulk-bar-info strong {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+
+.bulk-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  justify-content: flex-end;
+}
+
+.bulk-select {
+  width: 144px;
+}
+
+.status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--spacing-2);
+  background: transparent;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.status-tab:hover {
+  border-color: var(--border-color);
+  background: var(--bg-card-hover);
+}
+
+.status-tab.active {
+  border-color: var(--primary-color);
+  background: var(--primary-color-light);
   color: var(--primary-color);
 }
 
-.hero-copy h1 {
-  margin: 10px 0 8px;
-  font-size: clamp(28px, 3.6vw, 40px);
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--text-primary);
-}
-
-.hero-copy p,
-.filters-head p,
-.workspace-copy p,
-.empty-state p {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.8;
-  color: var(--text-secondary);
-}
-
-.hero-actions,
-.workspace-summary,
-.table-actions,
-.expand-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-}
-
-.hero-actions {
-  margin-top: var(--spacing-5);
-}
-
-.hero-band {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-5);
-}
-
-.band-metric,
-.summary-chip,
-.scope-chip,
-.status-pill,
-.expand-card,
-.narrative-block {
-  border: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.band-metric {
-  padding: var(--spacing-4);
-  border-radius: var(--radius-xl);
-}
-
-.band-label,
-.filter-field label,
-.expand-label,
-.narrative-kicker {
-  display: block;
-  margin-bottom: 8px;
-  font-size: var(--text-xs);
+.status-tab b {
   font-weight: var(--font-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
-.band-metric strong {
-  display: block;
-  font-size: clamp(20px, 2.4vw, 28px);
-  line-height: 1.1;
   color: var(--text-primary);
 }
 
-.band-metric small,
-.identity-meta,
-.scope-caption,
-.quota-secondary,
-.sign-caption,
-.health-caption,
-.expand-note {
-  display: block;
-  margin-top: 6px;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  color: var(--text-secondary);
+.status-tab.active b {
+  color: var(--primary-color);
 }
 
-.filters-shell,
-.workspace-shell {
-  padding: var(--spacing-5);
-}
-
-.filters-head,
-.workspace-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--spacing-4);
-  align-items: end;
-}
-
-.filters-head h2,
-.workspace-copy h2 {
-  margin: 8px 0 6px;
-  font-size: clamp(24px, 2.8vw, 30px);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  color: var(--text-primary);
-}
-
-.section-kicker.soft {
-  color: var(--text-tertiary);
-}
-
-.status-rail {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-}
-
-.status-pill {
-  min-width: 96px;
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
-  display: grid;
-  gap: 4px;
-  text-align: left;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-}
-
-.status-pill:hover,
-.summary-chip:hover,
-.scope-chip:hover,
-.expand-card:hover {
-  box-shadow: var(--shadow-sm);
-}
-
-.status-pill strong {
-  font-size: 20px;
-  line-height: 1;
-  color: var(--text-primary);
-}
-
-.status-pill.active {
-  border-color: rgba(16, 185, 129, 0.25);
-  box-shadow: var(--shadow-md);
-}
-
-.status-pill.healthy.active {
-  background: var(--success-color-light);
-}
-
-.status-pill.unhealthy.active {
-  background: var(--error-color-light);
-}
-
-.status-pill.pending.active {
-  background: var(--warning-color-light);
-}
-
-.status-pill.disabled.active {
-  background: rgba(148, 163, 184, 0.14);
-}
-
-.pill-label {
-  font-size: var(--text-sm);
-}
-
-.filter-grid {
-  display: grid;
-  grid-template-columns: 1.4fr 0.7fr 0.7fr;
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-5);
-}
-
-.scope-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-4);
-}
-
-.scope-chip,
-.summary-chip {
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.scope-chip strong,
-.summary-chip strong {
-  color: var(--text-primary);
-}
-
-.summary-chip {
-  min-height: auto;
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  display: block;
-}
-
-.summary-chip span {
-  display: block;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.summary-chip strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.table-wrap {
-  margin-top: var(--spacing-5);
-  padding: 8px;
-  border-radius: var(--radius-xl);
+.accounts-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.accounts-table :deep(.n-data-table-wrapper) {
-  border-radius: var(--radius-lg);
+.table-wrap :deep(.n-data-table) {
+  border: none;
+  border-radius: 0;
 }
 
-.accounts-table :deep(.n-data-table-th) {
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-}
-
-.accounts-table :deep(.n-data-table-tr:hover .n-data-table-td) {
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
   background: var(--bg-card-hover);
 }
 
-.identity-cell,
-.scope-cell,
-.quota-cell,
-.sign-cell,
-.health-cell {
-  display: grid;
-  gap: 6px;
+.empty-state {
+  padding: var(--spacing-12) var(--spacing-5);
 }
 
-.identity-cell {
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.account-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--primary-gradient);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
+.empty-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
   justify-content: center;
-  font-size: 16px;
-  font-weight: var(--font-bold);
-  box-shadow: var(--shadow-sm);
+  margin-top: var(--spacing-2);
 }
 
-.account-mark.inactive {
-  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+/* Cell styles */
+.accounts-page :deep(.account-cell) {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
 }
 
-.identity-copy,
-.scope-cell {
+.accounts-page :deep(.account-avatar-mini) {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--primary-color-light);
+  color: var(--primary-color);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.accounts-page :deep(.account-info) {
   min-width: 0;
 }
 
-.identity-line {
+.accounts-page :deep(.account-name-row) {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.identity-name,
-.scope-title,
-.quota-primary,
-.expand-value {
+.accounts-page :deep(.account-name) {
   color: var(--text-primary);
-  font-size: var(--text-md);
-  line-height: 1.4;
-  word-break: break-word;
+  font-weight: var(--font-medium);
+  cursor: pointer;
 }
 
-.identity-display {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--primary-color-light);
+.accounts-page :deep(.account-name:hover) {
   color: var(--primary-color);
+}
+
+.accounts-page :deep(.account-sub) {
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
 }
 
-.identity-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.group-pill {
+.accounts-page :deep(.note-badge) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: fit-content;
-  min-height: 24px;
-  padding: 0 10px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  font-size: var(--text-xs);
-  color: var(--group-color);
-  background: color-mix(in srgb, var(--group-color) 14%, var(--bg-card));
-}
-
-.simple-cell {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-}
-
-.simple-name {
-  color: var(--text-primary);
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  line-height: 1.4;
-}
-
-.simple-text {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-.simple-text.muted {
+  background: var(--bg-secondary);
   color: var(--text-tertiary);
 }
 
-.quota-primary {
-  font-size: 18px;
-}
-
-.quota-rail {
-  position: relative;
-  width: 100%;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--border-color-light);
-}
-
-.quota-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: inherit;
-  background: var(--primary-gradient);
-}
-
-.sign-badge,
-.health-badge {
+.accounts-page :deep(.group-tag) {
   display: inline-flex;
   align-items: center;
-  width: fit-content;
-  min-height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-xs);
   font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
 }
 
-.sign-badge.healthy,
-.health-badge.healthy {
+.accounts-page :deep(.muted) {
+  color: var(--text-quaternary);
+}
+
+.accounts-page :deep(.quota-cell) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.accounts-page :deep(.quota-main) {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.accounts-page :deep(.quota-alert-icon) {
+  display: inline-flex;
+  align-items: center;
+  color: var(--error-color);
+  margin-right: 2px;
+}
+
+.accounts-page :deep(.quota-value) {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.accounts-page :deep(.quota-value.danger) {
+  color: var(--error-color);
+}
+
+.accounts-page :deep(.quota-sub) {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.accounts-page :deep(.quota-bar) {
+  height: 2px;
+  background: var(--border-color-light);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.accounts-page :deep(.quota-bar-fill) {
+  height: 100%;
+  background: var(--primary-color);
+  transition: width var(--transition-slow);
+}
+
+.accounts-page :deep(.quota-bar-fill.danger) {
+  background: var(--error-color);
+}
+
+.accounts-page :deep(.sign-cell) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.accounts-page :deep(.tag-dot) {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.accounts-page :deep(.tag-dot.success) {
+  background: var(--success-color);
+}
+
+.accounts-page :deep(.tag-dot.error) {
+  background: var(--error-color);
+}
+
+.accounts-page :deep(.tag) {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+}
+
+.accounts-page :deep(.tag.success) {
   background: var(--success-color-light);
   color: var(--success-color);
 }
 
-.sign-badge.unhealthy,
-.health-badge.unhealthy {
+.accounts-page :deep(.tag.error) {
   background: var(--error-color-light);
   color: var(--error-color);
 }
 
-.sign-badge.pending,
-.health-badge.pending {
+.accounts-page :deep(.tag.warning) {
   background: var(--warning-color-light);
   color: var(--warning-color);
 }
 
-.health-badge.disabled {
-  background: rgba(148, 163, 184, 0.14);
-  color: #64748b;
-}
-
-.account-expand {
-  padding: 12px 6px 6px;
-}
-
-.expand-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--spacing-3);
-}
-
-.expand-card,
-.narrative-block {
-  padding: var(--spacing-4);
-  border-radius: var(--radius-lg);
-}
-
-.narrative-block {
-  border-style: dashed;
-}
-
-.expand-narrative {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-3);
-}
-
-.narrative-block p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.7;
-}
-
-.accounts-table :deep(.account-expand) {
-  padding: 12px 6px 6px;
-}
-
-.accounts-table :deep(.expand-grid) {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--spacing-3);
-}
-
-.accounts-table :deep(.expand-card),
-.accounts-table :deep(.narrative-block) {
-  padding: var(--spacing-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.accounts-table :deep(.narrative-block) {
-  border-style: dashed;
-}
-
-.accounts-table :deep(.expand-label),
-.accounts-table :deep(.narrative-kicker) {
-  display: block;
-  margin-bottom: 8px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.accounts-page :deep(.tag.default) {
+  background: var(--bg-secondary);
   color: var(--text-tertiary);
 }
 
-.accounts-table :deep(.expand-value) {
-  color: var(--text-primary);
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  line-height: 1.4;
-  word-break: break-word;
-}
-
-.accounts-table :deep(.expand-note) {
-  display: block;
-  margin-top: 6px;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-.accounts-table :deep(.expand-narrative) {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-3);
-}
-
-.accounts-table :deep(.narrative-block p) {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.7;
-}
-
-.accounts-table :deep(.expand-actions) {
+.accounts-page :deep(.actions) {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-3);
+  gap: 2px;
 }
 
-.empty-state {
-  display: grid;
-  justify-items: center;
-  gap: var(--spacing-3);
-  padding: 56px 24px;
-  text-align: center;
+.accounts-page :deep(.account-row-warning td) {
+  background: rgba(217, 119, 6, 0.06);
 }
 
-.empty-state-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  background: var(--primary-gradient);
-  color: #fff;
-  font-size: 28px;
-  font-weight: var(--font-bold);
-  box-shadow: var(--shadow-md);
+.accounts-page :deep(.account-row-alert td) {
+  background: rgba(220, 38, 38, 0.06);
 }
 
-.empty-state h3 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--text-xl);
-}
-
-.toolbar-card {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  padding: var(--spacing-5);
-}
-
-.toolbar-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 72px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(52, 211, 153, 0.06) 100%);
-}
-
-.toolbar-top,
-.toolbar-filters,
-.toolbar-bottom {
-  position: relative;
-  z-index: 1;
-}
-
-.toolbar-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--spacing-4);
-  align-items: center;
-}
-
-.toolbar-copy h1 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: clamp(24px, 2.8vw, 30px);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-}
-
-.toolbar-copy p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.toolbar-filters {
-  display: grid;
-  grid-template-columns: 1.4fr 0.7fr 0.7fr;
-  gap: var(--spacing-3);
-  margin-top: var(--spacing-4);
-}
-
-.toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-}
-
-.toolbar-bottom {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--spacing-3);
-  align-items: start;
-  margin-top: var(--spacing-4);
-}
-
-.toolbar-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-2);
-}
-
-.metric-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  white-space: nowrap;
-}
-
-.status-rail.compact {
-  justify-content: flex-end;
-}
-
-.status-rail.compact .status-pill {
-  min-width: 78px;
-  padding: 10px 12px;
-}
-
-.workspace-head.compact {
-  align-items: center;
-}
-
-.workspace-head.compact .workspace-copy h2 {
-  margin: 0;
-}
-
-.rise-1,
-.rise-2,
-.rise-3 {
-  animation: rise-in 0.55s ease both;
-}
-
-.rise-2 {
-  animation-delay: 0.06s;
-}
-
-.rise-3 {
-  animation-delay: 0.12s;
-}
-
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (max-width: 1200px) {
-  .hero-band,
-  .expand-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (max-width: 900px) {
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .expand-narrative {
-    grid-template-columns: 1fr;
+  .search-input {
+    max-width: none;
   }
 
-  .accounts-table :deep(.expand-grid) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .bulk-bar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .accounts-table :deep(.expand-narrative) {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 980px) {
-  .toolbar-top,
-  .toolbar-bottom,
-  .filters-head,
-  .workspace-head,
-  .filter-grid,
-  .toolbar-filters {
-    grid-template-columns: 1fr;
-  }
-
-  .status-rail.compact,
-  .status-rail {
+  .bulk-bar-actions {
     justify-content: flex-start;
   }
 }
 
-@media (max-width: 768px) {
-  .hero-band {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-summary {
-    width: 100%;
-  }
-
-  .summary-chip {
-    flex: 1 1 0;
-  }
-}
-
 @media (max-width: 640px) {
-  .toolbar-actions,
-  .expand-actions,
-  .table-actions {
+  .filter-bar {
+    flex-direction: column;
+  }
+
+  .filter-item {
     width: 100%;
   }
 
-  .toolbar-actions :deep(.n-button),
-  .expand-actions :deep(.n-button),
-  .table-actions :deep(.n-button) {
-    flex: 1 1 calc(50% - 8px);
-    min-width: 0;
-  }
-
-  .status-pill,
-  .scope-chip,
-  .summary-chip {
+  .bulk-select {
     width: 100%;
-  }
-
-  .expand-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .identity-cell {
-    grid-template-columns: 1fr;
-    justify-items: start;
-  }
-
-  .accounts-table :deep(.expand-grid) {
-    grid-template-columns: 1fr;
   }
 }
 </style>
