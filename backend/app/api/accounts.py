@@ -18,6 +18,7 @@ from app.services import (
     anrouter_service,
     execute_with_session_refresh,
     has_login_credentials,
+    refresh_account_user_cache,
     resolve_session_cookie,
 )
 from app.services.audit import log_action
@@ -863,16 +864,9 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
     ensure_account_platform(account)
     platform_config = get_account_platform_config(account)
 
-    success, user_info = execute_with_session_refresh(
+    success, user_info = refresh_account_user_cache(
         db,
         account,
-        lambda session_cookie, user_id, current_platform: anrouter_service.get_user_info(
-            session_cookie,
-            user_id,
-            current_platform["base_url"],
-            user_api=current_platform["user_api"],
-            console_url=current_platform["console_url"]
-        ),
         platform_config=platform_config,
     )
 
@@ -884,20 +878,6 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
     request_count = user_info.get("request_count", 0)
     aff_history_quota = user_info.get("aff_history_quota", 0)
 
-    # 更新所有缓存字段
-    account.cached_quota = quota
-    account.cached_used_quota = used_quota
-    account.cached_request_count = request_count
-    account.cached_user_group = user_info.get("group", "default")
-    account.cached_aff_code = user_info.get("aff_code")
-    account.cached_aff_count = user_info.get("aff_count", 0)
-    account.cached_aff_history_quota = aff_history_quota
-    account.quota_updated_at = datetime.now()
-    # 同时更新用户名
-    if user_info.get("username"):
-        account.username = user_info.get("username")
-    if user_info.get("display_name"):
-        account.display_name = user_info.get("display_name")
     db.commit()
 
     # 获取本地分组信息
@@ -1125,36 +1105,15 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
     platform_config = get_account_platform_config(account)
 
     # 尝试获取用户信息来验证凭证
-    success, user_info = execute_with_session_refresh(
+    success, user_info = refresh_account_user_cache(
         db,
         account,
-        lambda session_cookie, user_id, current_platform: anrouter_service.get_user_info(
-            session_cookie,
-            user_id,
-            current_platform["base_url"],
-            user_api=current_platform["user_api"],
-            console_url=current_platform["console_url"]
-        ),
         platform_config=platform_config,
     )
 
     if success:
         account.health_status = "healthy"
         account.health_message = None
-        # 顺便更新用户名
-        if user_info.get("username"):
-            account.username = user_info.get("username")
-        if user_info.get("display_name"):
-            account.display_name = user_info.get("display_name")
-        # 更新所有缓存字段
-        account.cached_quota = user_info.get("quota", 0)
-        account.cached_used_quota = user_info.get("used_quota", 0)
-        account.cached_request_count = user_info.get("request_count", 0)
-        account.cached_user_group = user_info.get("group", "default")
-        account.cached_aff_code = user_info.get("aff_code")
-        account.cached_aff_count = user_info.get("aff_count", 0)
-        account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
-        account.quota_updated_at = now
     else:
         account.health_status = "unhealthy"
         account.health_message = user_info.get("message", "凭证验证失败")

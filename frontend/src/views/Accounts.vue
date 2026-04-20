@@ -132,7 +132,12 @@
     </div>
 
     <div class="accounts-card">
-      <div v-if="loading || accounts.length > 0" class="table-wrap">
+      <div v-if="initialLoading" class="loading-state" aria-busy="true" aria-label="正在加载账号">
+        <n-spin size="small" />
+        <div class="loading-text">正在加载账号...</div>
+      </div>
+
+      <div v-else-if="loading || accounts.length > 0" class="table-wrap">
         <n-data-table
           :columns="columns"
           :data="accounts"
@@ -150,7 +155,7 @@
         />
       </div>
 
-      <div v-else class="empty-state">
+      <div v-else-if="!loading" class="empty-state">
         <n-icon :size="32" color="var(--text-quaternary)"><PeopleOutline /></n-icon>
         <div class="empty-title">{{ hasActiveFilters ? '没有匹配的账号' : '还没有账号' }}</div>
         <div class="empty-desc">
@@ -251,7 +256,8 @@ const { formatQuota, formatRelativeTime } = useFormat()
 const accounts = ref<Account[]>([])
 const groups = ref<AccountGroup[]>([])
 const platforms = ref<Platform[]>([])
-const loading = ref(false)
+const initialLoading = ref(true)
+const loading = ref(true)
 const batchSigning = ref(false)
 const batchChecking = ref(false)
 const signingId = ref<number | null>(null)
@@ -990,8 +996,11 @@ const columns = computed<DataTableColumns<Account>>(() => [
 ])
 
 onMounted(async () => {
-  await loadMeta()
-  await loadData(1)
+  try {
+    await Promise.all([loadMeta(), loadData(1)])
+  } finally {
+    initialLoading.value = false
+  }
 })
 
 watch(accounts, (list) => {
@@ -1164,6 +1173,20 @@ useViewRefresh(() => handleRefresh())
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.loading-state {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  color: var(--text-tertiary);
+}
+
+.loading-text {
+  font-size: var(--text-sm);
 }
 
 .table-wrap :deep(.n-data-table) {
