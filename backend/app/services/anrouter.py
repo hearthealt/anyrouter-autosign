@@ -476,9 +476,16 @@ class AnyRouterService:
             if not session_cookie:
                 return False, {"message": "登录成功，但响应中未返回 session Cookie"}
 
+            user_info = data.get("data") if isinstance(data.get("data"), dict) else {}
+            user_id_value = user_info.get("id")
+            user_id_str = str(user_id_value) if user_id_value is not None else None
+
             return True, {
                 "message": data.get("message", "登录成功"),
                 "session_cookie": session_cookie,
+                "user_id": user_id_str,
+                "username": user_info.get("username"),
+                "display_name": user_info.get("display_name"),
                 "raw": data,
             }
 

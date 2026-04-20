@@ -5,6 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AnyRouter 管理平台</title>
+    <script>
+      // 内联主题初始化：防止 CSS 加载后才应用 data-theme 导致首屏白闪
+      (function () {
+        try {
+          var stored = localStorage.getItem('anyrouter-theme');
+          var mode = (stored === 'light' || stored === 'dark' || stored === 'auto') ? stored : 'auto';
+          var theme = mode === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : mode;
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.style.colorScheme = theme;
+          document.documentElement.style.backgroundColor = theme === 'dark' ? '#0b0c0e' : '#fafafa';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

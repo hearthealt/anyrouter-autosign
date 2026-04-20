@@ -1,7 +1,7 @@
 """
 Pydantic Schemas
 """
-from .account import AccountCreate, AccountUpdate, AccountResponse, AccountInfo, LastSign
+from .account import AccountCreate, AccountUpdate, AccountResponse, AccountInfo, LastSign, BatchImportRequest, BatchImportResultItem
 from .sign import SignResult, SignLogResponse, BatchSignResult, BatchSignResponse
 from .notify import (
     NotifyChannelCreate, NotifyChannelUpdate, NotifyChannelResponse,
@@ -13,6 +13,7 @@ from .platform import PlatformCreate, PlatformUpdate, PlatformResponse, Platform
 
 __all__ = [
     "AccountCreate", "AccountUpdate", "AccountResponse", "AccountInfo", "LastSign",
+    "BatchImportRequest", "BatchImportResultItem",
     "SignResult", "SignLogResponse", "BatchSignResult", "BatchSignResponse",
     "NotifyChannelCreate", "NotifyChannelUpdate", "NotifyChannelResponse",
     "AccountNotifyConfig", "AccountNotifyResponse", "AccountNotifyUpdate",

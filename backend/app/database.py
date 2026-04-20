@@ -36,12 +36,36 @@ def init_db():
     # 导入所有模型以确保表被创建
     from app.models import User, Account, AccountGroup, SignLog, NotifyChannel, AccountNotify, Setting, ApiToken, ApiEndpoint, Platform
 
+    _migrate_api_endpoint_schema()
     Base.metadata.create_all(bind=engine)
     _migrate_platform_schema()
     _migrate_account_login_schema()
+    _migrate_account_note_schema()
 
     # 初始化默认管理员
     _init_default_admin()
+
+
+def _migrate_api_endpoint_schema():
+    """将 api_endpoints 从全局单表迁移成按平台隔离。
+
+    旧表结构缺少 platform_id 且 endpoint_id 有 UNIQUE 约束。SQLite 无法
+    直接 DROP CONSTRAINT，且数据可以通过平台同步重建，所以直接丢弃旧表。
+    """
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("api_endpoints"):
+            return
+
+        columns = {column["name"] for column in inspector.get_columns("api_endpoints")}
+        if "platform_id" in columns:
+            return
+
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE api_endpoints"))
+        logger.info("已删除旧版 api_endpoints 表，将在平台同步时重建")
+    except Exception as e:
+        logger.error(f"迁移 api_endpoints 表失败: {e}")
 
 
 def _migrate_platform_schema():
@@ -152,6 +176,28 @@ def _migrate_account_login_schema():
     except Exception as e:
         db.rollback()
         logger.error(f"账号登录字段迁移失败: {e}")
+    finally:
+        db.close()
+
+
+def _migrate_account_note_schema():
+    """为旧数据库补充账号备注字段。"""
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("accounts"):
+            return
+
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+
+        if "note" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN note VARCHAR(255)"))
+            db.commit()
+            logger.info("已为 accounts 表添加 note 列")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"账号备注字段迁移失败: {e}")
     finally:
         db.close()
 

@@ -12,6 +12,7 @@ from apscheduler.triggers.date import DateTrigger
 from app.database import SessionLocal
 from app.models import Account, SignLog, Setting, NotifyChannel
 from app.services import anrouter_service, execute_with_session_refresh
+from app.services.events import publish_event
 from app.services.notify import NotifyFactory
 from app.utils import format_quota, get_account_platform_config
 
@@ -147,6 +148,7 @@ def auto_sign_job():
         fail_count = 0
         skip_count = 0
         retry_accounts = []
+        event_payloads = []
 
         for account in accounts:
             try:
@@ -190,6 +192,16 @@ def auto_sign_job():
                         "log_id": log.id,
                     })
 
+                event_payloads.append({
+                    "account_id": account.id,
+                    "username": account.username or "",
+                    "success": sign_success,
+                    "already_signed": already_signed,
+                    "message": log_message,
+                    "reward_quota": reward_quota,
+                    "reward_display": format_quota(reward_quota),
+                })
+
             except Exception as e:
                 logger.error(f"账号 {account.username} 签到异常: {e}")
                 fail_count += 1
@@ -199,8 +211,19 @@ def auto_sign_job():
                         "account_id": account.id,
                         "retry_count": 0
                     })
+                event_payloads.append({
+                    "account_id": account.id,
+                    "username": account.username or "",
+                    "success": False,
+                    "already_signed": False,
+                    "message": str(e),
+                    "reward_quota": 0,
+                    "reward_display": format_quota(0),
+                })
 
         db.commit()
+        for payload in event_payloads:
+            publish_event("sign_completed", payload)
         logger.info(f"自动签到完成: 成功 {success_count}, 已签 {skip_count}, 失败 {fail_count}")
 
         if retry_accounts and retry_enabled:
@@ -239,6 +262,7 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         success_count = 0
         fail_count = 0
         retry_accounts = []
+        event_payloads = []
 
         for item in accounts:
             account_id = item["account_id"]
@@ -309,6 +333,15 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                         True,
                         f"重试签到成功: {build_sign_message(message, reward_quota)}"
                     )
+                event_payloads.append({
+                    "account_id": account.id,
+                    "username": account.username or "",
+                    "success": sign_success,
+                    "already_signed": already_signed,
+                    "message": log_message,
+                    "reward_quota": reward_quota,
+                    "reward_display": format_quota(reward_quota),
+                })
 
             except Exception as e:
                 logger.error(f"账号 {account.username} 重试签到异常: {e}")
@@ -339,8 +372,19 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                         "retry_count": retry_count,
                         "log_id": log_id,
                     })
+                event_payloads.append({
+                    "account_id": account.id,
+                    "username": account.username or "",
+                    "success": False,
+                    "already_signed": False,
+                    "message": str(e),
+                    "reward_quota": 0,
+                    "reward_display": format_quota(0),
+                })
 
         db.commit()
+        for payload in event_payloads:
+            publish_event("sign_completed", payload)
         logger.info(f"重试签到完成: 成功 {success_count}, 失败 {fail_count}")
 
         if retry_accounts:
@@ -405,9 +449,11 @@ def health_check_job():
 
         healthy_count = 0
         unhealthy_count = 0
+        health_events = []
 
         for account in accounts:
             try:
+                previous_status = account.health_status or "unknown"
                 platform_config = get_account_platform_config(account)
 
                 success, user_info = execute_with_session_refresh(
@@ -447,15 +493,34 @@ def health_check_job():
                     logger.warning(f"账号 {account.username} 健康检查失败: {account.health_message}")
 
                 account.last_health_check = now
+                if previous_status != account.health_status:
+                    health_events.append({
+                        "account_id": account.id,
+                        "username": account.username or "",
+                        "health_status": account.health_status,
+                        "health_message": account.health_message,
+                        "previous_status": previous_status,
+                    })
 
             except Exception as e:
                 logger.error(f"账号 {account.username} 健康检查异常: {e}")
+                previous_status = account.health_status or "unknown"
                 account.health_status = "unhealthy"
                 account.health_message = str(e)
                 account.last_health_check = datetime.now()
                 unhealthy_count += 1
+                if previous_status != account.health_status:
+                    health_events.append({
+                        "account_id": account.id,
+                        "username": account.username or "",
+                        "health_status": account.health_status,
+                        "health_message": account.health_message,
+                        "previous_status": previous_status,
+                    })
 
         db.commit()
+        for payload in health_events:
+            publish_event("health_changed", payload)
         logger.info(f"健康检查完成: 健康 {healthy_count}, 异常 {unhealthy_count}")
 
         unhealthy_accounts = db.query(Account).filter(

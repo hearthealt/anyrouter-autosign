@@ -25,10 +25,10 @@ export interface PlatformBrief {
 
 export interface Account {
   id: number
-  anrouter_user_id?: number
   anyrouter_user_id?: number
   username: string
   display_name?: string
+  note?: string
   login_username?: string
   has_login_credentials?: boolean
   is_active: boolean
@@ -70,11 +70,36 @@ export type GroupColor = 'default' | 'blue' | 'green' | 'red' | 'orange' | 'purp
 
 export interface CreateAccountParams {
   session_cookie?: string
-  user_id: string
+  user_id?: string
+  login_username?: string
+  login_password?: string
+  note?: string
+  platform_id: number
+  group_id?: number
+}
+
+export interface BatchImportItem {
+  session_cookie?: string
+  user_id?: string
   login_username?: string
   login_password?: string
   platform_id: number
   group_id?: number
+}
+
+export interface BatchImportResultItem {
+  index: number
+  success: boolean
+  message: string
+  account_id?: number
+  username?: string
+}
+
+export interface BatchImportResponse {
+  total: number
+  success_count: number
+  fail_count: number
+  results: BatchImportResultItem[]
 }
 
 export interface UpdateAccountParams {
@@ -82,6 +107,7 @@ export interface UpdateAccountParams {
   session_cookie?: string
   login_username?: string
   login_password?: string
+  note?: string
   clear_login_credentials?: boolean
   is_active?: boolean
   platform_id?: number
@@ -189,6 +215,7 @@ export interface AccountNotify {
 // API 节点相关类型
 export interface ApiEndpoint {
   id: number
+  platform_id: number
   endpoint_id: number
   route: string
   url: string
@@ -263,6 +290,7 @@ export interface SystemSettings {
   sign_retry_interval: number
   anyrouter_proxy_enabled: boolean
   anyrouter_proxy_url: string
+  quota_warning_threshold: number
 }
 
 // 审计日志相关类型
@@ -326,6 +354,7 @@ export interface AddAccountForm {
   user_id: string
   login_username: string
   login_password: string
+  note: string
   clear_login_credentials: boolean
   platform_id: number | null
   group_id: number | null
@@ -337,11 +366,29 @@ export interface EditAccountForm {
   session_cookie: string
   login_username: string
   login_password: string
+  note: string
   clear_login_credentials: boolean
   is_active: boolean
   platform_id: number | null
   group_id: number | null
   notify_channel_ids: number[]
+}
+
+export interface ServerEvent {
+  id?: string
+  type: 'connected' | 'ping' | 'sign_completed' | 'health_changed' | 'account_changed'
+  timestamp?: string
+  account_id?: number
+  username?: string
+  action?: string
+  success?: boolean
+  already_signed?: boolean
+  message?: string
+  reward_quota?: number
+  reward_display?: string
+  health_status?: 'healthy' | 'unhealthy' | 'unknown'
+  health_message?: string
+  previous_status?: 'healthy' | 'unhealthy' | 'unknown'
 }
 
 export interface TokenForm {

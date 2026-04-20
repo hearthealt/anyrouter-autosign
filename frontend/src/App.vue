@@ -2,113 +2,108 @@
   <n-config-provider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
       <n-dialog-provider>
-        <!-- 登录页面 -->
         <template v-if="isLoginPage">
           <router-view />
         </template>
 
-        <!-- 主布局 -->
         <div v-else class="layout">
-          <!-- 移动端遮罩 -->
           <div class="mobile-overlay" :class="{ show: mobileMenuOpen }" @click="mobileMenuOpen = false"></div>
 
-          <!-- 侧边栏 -->
           <aside class="sidebar" :class="{ collapsed, 'mobile-open': mobileMenuOpen }">
-            <!-- Logo -->
-            <div class="sidebar-brand" @click="$router.push('/')">
-              <div class="brand-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" opacity="0.9"/>
+            <button type="button" class="sidebar-brand" aria-label="返回首页" @click="$router.push('/')">
+              <div class="brand-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor"/>
                   <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
               <span class="brand-text">AnyRouter</span>
-            </div>
+            </button>
 
-            <!-- 导航菜单 -->
-            <nav class="sidebar-nav">
-              <div
+            <nav class="sidebar-nav" aria-label="主导航">
+              <button
                 v-for="item in menuItems"
                 :key="item.path"
+                type="button"
                 class="nav-item"
                 :class="{ active: isActive(item.path) }"
+                :aria-current="isActive(item.path) ? 'page' : undefined"
                 @click="navigateTo(item.path)"
               >
-                <div class="nav-indicator"></div>
-                <div class="nav-icon">
-                  <n-icon :size="20"><component :is="item.icon" /></n-icon>
+                <div class="nav-icon" aria-hidden="true">
+                  <n-icon :size="16"><component :is="item.icon" /></n-icon>
                 </div>
                 <span class="nav-label">{{ item.label }}</span>
-              </div>
+              </button>
             </nav>
 
-            <!-- 底部操作 -->
             <div class="sidebar-footer">
-              <div class="nav-item" @click="toggleTheme">
-                <div class="nav-icon">
-                  <n-icon :size="20">
+              <button type="button" class="nav-item small" :aria-label="currentTheme === 'dark' ? '切换到浅色模式' : '切换到深色模式'" @click="toggleTheme">
+                <div class="nav-icon" aria-hidden="true">
+                  <n-icon :size="16">
                     <SunnyOutline v-if="currentTheme === 'dark'" />
                     <MoonOutline v-else />
                   </n-icon>
                 </div>
                 <span class="nav-label">{{ currentTheme === 'dark' ? '浅色' : '深色' }}</span>
-              </div>
-              <div class="nav-item collapse-btn" @click="collapsed = !collapsed">
-                <div class="nav-icon">
-                  <n-icon :size="20">
+              </button>
+              <button type="button" class="nav-item small collapse-btn" :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+                <div class="nav-icon" aria-hidden="true">
+                  <n-icon :size="16">
                     <ChevronBackOutline v-if="!collapsed" />
                     <ChevronForwardOutline v-else />
                   </n-icon>
                 </div>
                 <span class="nav-label">收起</span>
-              </div>
+              </button>
             </div>
           </aside>
 
-          <!-- 主区域 -->
           <div class="main" :class="{ expanded: collapsed }">
-            <!-- 顶部导航栏 -->
             <header class="header">
-              <!-- 移动端菜单按钮 -->
-              <n-button class="mobile-menu-btn" quaternary @click="mobileMenuOpen = true">
-                <template #icon><n-icon :size="22"><MenuOutline /></n-icon></template>
+              <n-button class="mobile-menu-btn" quaternary size="small" aria-label="打开导航菜单" @click="mobileMenuOpen = true">
+                <template #icon><n-icon :size="18"><MenuOutline /></n-icon></template>
               </n-button>
 
-              <!-- 面包屑导航 -->
               <div class="header-left">
-                <n-breadcrumb>
-                  <n-breadcrumb-item @click="$router.push('/')">
-                    <n-icon><HomeOutline /></n-icon>
-                  </n-breadcrumb-item>
-                  <n-breadcrumb-item v-for="crumb in breadcrumbs" :key="crumb.path">
-                    {{ crumb.label }}
-                  </n-breadcrumb-item>
-                </n-breadcrumb>
+                <span class="header-title">{{ pageTitle }}</span>
+                <span v-if="breadcrumbTail" class="header-crumb">
+                  <n-icon :size="12"><ChevronForwardOutline /></n-icon>
+                  {{ breadcrumbTail }}
+                </span>
               </div>
 
-              <!-- 全局搜索 -->
               <div class="header-center">
                 <n-popover
                   trigger="manual"
                   :show="searchResults.length > 0"
                   placement="bottom"
-                  :width="350"
+                  :width="360"
                   @update:show="(show: boolean) => !show && (searchResults = [])"
                 >
                   <template #trigger>
                     <n-input
                       v-model:value="searchKeyword"
-                      placeholder="搜索账号、日志..."
+                      placeholder="搜索账号、日志…   或按 ⌘K 打开命令面板"
                       clearable
-                      round
                       size="small"
                       class="global-search"
                       :loading="searchLoading"
                       @keyup.enter="handleGlobalSearch"
                     >
                       <template #prefix>
-                        <n-icon><SearchOutline /></n-icon>
+                        <n-icon :size="14"><SearchOutline /></n-icon>
+                      </template>
+                      <template #suffix>
+                        <button
+                          type="button"
+                          class="cpk-hint"
+                          aria-label="打开命令面板 (Ctrl/Cmd+K)"
+                          @click="showCommandPalette = true"
+                        >
+                          <kbd>{{ modKeyLabel }}</kbd><kbd>K</kbd>
+                        </button>
                       </template>
                     </n-input>
                   </template>
@@ -119,10 +114,9 @@
                       class="search-result-item"
                       @click="handleSearchResultClick(result)"
                     >
-                      <div class="search-result-badge">
-                        <span v-if="result.type === 'account'" class="badge-account">账号</span>
-                        <span v-else-if="result.type === 'log'" class="badge-log">日志</span>
-                      </div>
+                      <span class="search-result-badge" :class="result.type">
+                        {{ result.type === 'account' ? '账号' : '日志' }}
+                      </span>
                       <div class="search-result-content">
                         <div class="search-result-title">{{ result.title }}</div>
                         <div class="search-result-desc">{{ result.description }}</div>
@@ -132,165 +126,61 @@
                 </n-popover>
               </div>
 
-              <!-- 右侧操作 -->
               <div class="header-right">
-                <!--  -->
-                <n-popover trigger="click" placement="bottom-end" :width="320">
+                <n-tooltip>
                   <template #trigger>
-                    <n-badge :value="notifications.length" :max="99" :show="notifications.length > 0">
-                      <n-button quaternary circle size="small">
-                        <template #icon><n-icon :size="18"><NotificationsOutline /></n-icon></template>
-                      </n-button>
-                    </n-badge>
+                    <n-button quaternary size="small" class="icon-btn" aria-label="键盘快捷键帮助" @click="showShortcutsHelp = true">
+                      <template #icon><n-icon :size="16"><HelpCircleOutline /></n-icon></template>
+                    </n-button>
                   </template>
-                  <div class="notification-panel">
-                    <div class="notification-header">
-                      <span>通知中心</span>
-                      <n-button text size="tiny" @click="clearNotifications">清空</n-button>
-                    </div>
-                    <div class="notification-list" v-if="notifications.length > 0">
-                      <div v-for="(notif, index) in notifications" :key="notif.id || index" class="notification-item">
-                        <div class="notif-icon" :class="notif.type">
-                          <n-icon :size="14">
-                            <CheckmarkCircleOutline v-if="notif.type === 'success'" />
-                            <AlertCircleOutline v-else-if="notif.type === 'warning'" />
-                            <CloseCircleOutline v-else-if="notif.type === 'error'" />
-                            <InformationCircleOutline v-else />
-                          </n-icon>
-                        </div>
-                        <div class="notif-content">
-                          <div class="notif-title">{{ notif.title }}</div>
-                          <div class="notif-time">{{ notif.time }}</div>
-                        </div>
-                        <n-button
-                          text
-                          size="small"
-                          @click.stop="notifications.splice(index, 1)"
-                          class="notif-close"
-                        >
-                          <template #icon>
-                            <n-icon :size="14"><CloseOutline /></n-icon>
-                          </template>
-                        </n-button>
-                      </div>
-                    </div>
-                    <div class="notification-empty" v-else>
-                      <n-icon :size="32" color="var(--text-tertiary)"><NotificationsOffOutline /></n-icon>
-                      <span>暂无通知</span>
-                    </div>
-                  </div>
-                </n-popover>
+                  快捷键帮助 (Shift+?)
+                </n-tooltip>
 
-                <!-- 刷新按钮 -->
-                <n-button quaternary circle size="small" @click="refreshData">
-                  <template #icon><n-icon :size="18"><RefreshOutline /></n-icon></template>
+                <NotificationCenter />
+
+                <n-button quaternary size="small" class="icon-btn" aria-label="刷新数据" :loading="refreshBus.refreshing.value" @click="refreshData">
+                  <template #icon><n-icon :size="16"><RefreshOutline /></n-icon></template>
                 </n-button>
 
-                <!-- 用户菜单 -->
-                <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect">
+                <n-dropdown :options="userMenuOptions" @select="handleUserMenuSelect" trigger="click">
                   <n-button quaternary size="small" class="user-btn">
                     <div class="user-avatar">{{ (currentUser?.username || 'A')[0].toUpperCase() }}</div>
                     <span class="user-name">{{ currentUser?.username || 'admin' }}</span>
-                    <n-icon :size="14"><ChevronDownOutline /></n-icon>
+                    <n-icon :size="12"><ChevronDownOutline /></n-icon>
                   </n-button>
                 </n-dropdown>
               </div>
             </header>
 
-            <!-- 页面操作栏 -->
-            <div class="page-toolbar" v-if="showToolbar">
-              <h1 class="page-title">{{ pageTitle }}</h1>
-              <div class="toolbar-actions">
-                <slot name="toolbar-actions"></slot>
-              </div>
-            </div>
-
-            <!-- 内容区 -->
             <main class="content">
               <router-view />
             </main>
           </div>
 
-          <!-- 底部状态栏 -->
-          <footer class="footer">
-            <div class="footer-left">
-              <span class="footer-item">
-                <n-icon :size="14"><CodeOutline /></n-icon>
-                v{{ appVersion }}
-              </span>
-              <span class="footer-divider">|</span>
-              <span class="footer-item" :class="connectionStatus">
-                <span class="status-dot"></span>
-                {{ connectionStatus === 'connected' ? '已连接' : '未连接' }}
-              </span>
-            </div>
-            <div class="footer-right">
-              <span class="footer-item">
-                <n-icon :size="14"><TimeOutline /></n-icon>
-                最后同步: {{ lastSyncTime || '暂无' }}
-              </span>
-            </div>
-          </footer>
-
-        <!-- 移动端底部导航 -->
-        <nav class="mobile-tabbar">
-          <div
-            v-for="item in menuItems"
-            :key="item.path"
-            class="tabbar-item"
-            :class="{ active: isActive(item.path) }"
-            @click="navigateTo(item.path)"
-          >
-            <n-icon :size="22"><component :is="item.icon" /></n-icon>
-            <span>{{ item.label }}</span>
-          </div>
-        </nav>
+          <nav class="mobile-tabbar" aria-label="底部导航">
+            <button
+              v-for="item in menuItems"
+              :key="item.path"
+              type="button"
+              class="tabbar-item"
+              :class="{ active: isActive(item.path) }"
+              :aria-current="isActive(item.path) ? 'page' : undefined"
+              @click="navigateTo(item.path)"
+            >
+              <n-icon :size="18" aria-hidden="true"><component :is="item.icon" /></n-icon>
+              <span>{{ item.label }}</span>
+            </button>
+          </nav>
         </div>
-        <!-- 修改密码弹窗 -->
-        <n-modal v-model:show="showPasswordModal" :mask-closable="false">
-          <div class="password-modal">
-            <div class="modal-header">
-              <h3>修改密码</h3>
-              <n-button text @click="showPasswordModal = false">
-                <n-icon :size="20"><CloseOutline /></n-icon>
-              </n-button>
-            </div>
-            <div class="modal-body">
-              <n-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules">
-                <n-form-item label="原密码" path="old_password">
-                  <n-input
-                    v-model:value="passwordForm.old_password"
-                    type="password"
-                    show-password-on="click"
-                    placeholder="请输入原密码"
-                  />
-                </n-form-item>
-                <n-form-item label="新密码" path="new_password">
-                  <n-input
-                    v-model:value="passwordForm.new_password"
-                    type="password"
-                    show-password-on="click"
-                    placeholder="请输入新密码（至少6位）"
-                  />
-                </n-form-item>
-                <n-form-item label="确认密码" path="confirm_password">
-                  <n-input
-                    v-model:value="passwordForm.confirm_password"
-                    type="password"
-                    show-password-on="click"
-                    placeholder="请再次输入新密码"
-                  />
-                </n-form-item>
-              </n-form>
-            </div>
-            <div class="modal-footer">
-              <n-button @click="showPasswordModal = false">取消</n-button>
-              <n-button type="primary" @click="handleChangePassword" :loading="changingPassword">
-                确认修改
-              </n-button>
-            </div>
-          </div>
-        </n-modal>
+
+        <PasswordModal
+          v-model:show="showPasswordModal"
+          @changed="handlePasswordChanged"
+        />
+
+        <ShortcutsHelpModal v-model:show="showShortcutsHelp" />
+
+        <CommandPalette v-model:show="showCommandPalette" @request-refresh="refreshBus.trigger()" />
       </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
@@ -300,7 +190,7 @@
 import { ref, computed, onMounted, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NIcon, darkTheme } from 'naive-ui'
-import type { GlobalThemeOverrides, FormInst, FormRules } from 'naive-ui'
+import type { GlobalThemeOverrides } from 'naive-ui'
 import {
   GridOutline,
   PeopleOutline,
@@ -315,28 +205,26 @@ import {
   LogOutOutline,
   SunnyOutline,
   MoonOutline,
-  CloseOutline,
   MenuOutline,
-  HomeOutline,
   SearchOutline,
-  NotificationsOutline,
-  NotificationsOffOutline,
-  CheckmarkCircleOutline,
-  AlertCircleOutline,
-  CloseCircleOutline,
-  InformationCircleOutline,
-  CodeOutline,
+  HelpCircleOutline,
   ServerOutline
 } from '@vicons/ionicons5'
 import { authApi, accountApi, signApi } from './api'
+import type { Account, SignLog } from './types'
 import { removeToken, isLoggedIn } from './utils/auth'
 import { getActiveTheme, setThemeMode, type ThemeMode } from './utils'
+import { provideViewRefresh, useShortcuts } from './composables'
+import PasswordModal from './components/layout/PasswordModal.vue'
+import ShortcutsHelpModal from './components/layout/ShortcutsHelpModal.vue'
+import CommandPalette from './components/layout/CommandPalette.vue'
+import NotificationCenter from './components/layout/NotificationCenter.vue'
 
-// 声明全局 $notify 函数类型
-declare global {
-  interface Window {
-    $notify: (title: string, type?: 'success' | 'warning' | 'error' | 'info', duration?: number) => void
-  }
+interface GlobalSearchResult {
+  type: 'account' | 'log'
+  title: string
+  description: string
+  data: Account | SignLog
 }
 
 const route = useRoute()
@@ -346,61 +234,76 @@ const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
 const currentTheme = ref<'light' | 'dark'>(getActiveTheme())
 
-// 全局搜索
-const searchKeyword = ref('')
-const searchLoading = ref(false)
-const searchResults = ref<Array<{ type: 'account' | 'log'; title: string; description: string; data: any }>>([])
+const refreshBus = provideViewRefresh()
 
-// 通知中心
-const notifications = ref<Array<{ type: 'success' | 'warning' | 'error' | 'info'; title: string; time: string; id?: string }>>([])
+const showShortcutsHelp = ref(false)
+const showCommandPalette = ref(false)
 
-// 连接状态
-const connectionStatus = ref<'connected' | 'disconnected'>('connected')
-const lastSyncTime = ref<string>('')
-const appVersion = ref<string>('0.0.0')
-
-// 修改密码
-const showPasswordModal = ref(false)
-const changingPassword = ref(false)
-const passwordFormRef = ref<FormInst | null>(null)
-const passwordForm = ref({
-  old_password: '',
-  new_password: '',
-  confirm_password: ''
-})
-
-const passwordRules: FormRules = {
-  old_password: [
-    { required: true, message: '请输入原密码', trigger: 'blur' }
-  ],
-  new_password: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码长度至少6位', trigger: 'blur' }
-  ],
-  confirm_password: [
-    { required: true, message: '请确认新密码', trigger: 'blur' },
-    {
-      validator: (_rule: any, value: string) => {
-        return value === passwordForm.value.new_password
-      },
-      message: '两次输入的密码不一致',
-      trigger: 'blur'
-    }
-  ]
+const buildLocalDateParam = (value: string) => {
+  const date = new Date(value)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-// Naive UI theme
-const naiveTheme = computed(() => currentTheme.value === 'dark' ? darkTheme : null)
+const buildLogRouteQuery = (log: SignLog) => {
+  const signDate = buildLocalDateParam(log.sign_time)
+  return {
+    account_id: String(log.account_id),
+    success: String(log.success),
+    start_date: signDate,
+    end_date: signDate
+  }
+}
 
+useShortcuts([
+  {
+    key: 'mod+k',
+    description: '打开命令面板',
+    allowInInput: true,
+    handler: () => { showCommandPalette.value = true }
+  },
+  {
+    key: 'shift+?',
+    description: '显示快捷键帮助',
+    handler: () => { showShortcutsHelp.value = true }
+  },
+  {
+    key: 'r',
+    description: '刷新当前视图',
+    handler: () => { refreshBus.trigger() }
+  },
+  { keys: 'g d', description: '跳转 仪表盘', handler: () => { void router.push('/') } },
+  { keys: 'g a', description: '跳转 账号', handler: () => { void router.push('/accounts') } },
+  { keys: 'g l', description: '跳转 签到日志', handler: () => { void router.push('/logs') } },
+  { keys: 'g s', description: '跳转 统计', handler: () => { void router.push('/statistics') } },
+  { keys: 'g p', description: '跳转 平台', handler: () => { void router.push('/platforms') } },
+  { keys: 'g c', description: '跳转 设置', handler: () => { void router.push('/settings') } },
+])
+
+const searchKeyword = ref('')
+const searchLoading = ref(false)
+const searchResults = ref<GlobalSearchResult[]>([])
+
+const showPasswordModal = ref(false)
+
+const handlePasswordChanged = () => {
+  removeToken()
+  router.push('/login')
+}
+
+const naiveTheme = computed(() => currentTheme.value === 'dark' ? darkTheme : null)
 const isLoginPage = computed(() => route.path === '/login')
+const modKeyLabel = computed(() => /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl')
 
 const menuItems = [
   { path: '/', label: '仪表盘', icon: GridOutline },
-  { path: '/accounts', label: '账号管理', icon: PeopleOutline },
+  { path: '/accounts', label: '账号', icon: PeopleOutline },
   { path: '/logs', label: '签到日志', icon: TimeOutline },
-  { path: '/statistics', label: '统计报表', icon: StatsChartOutline },
-  { path: '/platforms', label: '平台管理', icon: ServerOutline },
-  { path: '/settings', label: '系统设置', icon: SettingsOutline },
+  { path: '/statistics', label: '统计', icon: StatsChartOutline },
+  { path: '/platforms', label: '平台', icon: ServerOutline },
+  { path: '/settings', label: '设置', icon: SettingsOutline },
 ]
 
 const userMenuOptions = [
@@ -409,10 +312,7 @@ const userMenuOptions = [
     key: 'change-password',
     icon: () => h(NIcon, null, { default: () => h(LockClosedOutline) })
   },
-  {
-    type: 'divider',
-    key: 'd1'
-  },
+  { type: 'divider', key: 'd1' },
   {
     label: '退出登录',
     key: 'logout',
@@ -420,47 +320,27 @@ const userMenuOptions = [
   }
 ]
 
-// 面包屑
-const breadcrumbs = computed(() => {
-  const crumbs: Array<{ path: string; label: string }> = []
-  const titles: Record<string, string> = {
-    '/': '仪表盘',
-    '/accounts': '账号管理',
-    '/logs': '签到日志',
-    '/statistics': '统计报表',
-    '/platforms': '平台管理',
-    '/settings': '系统设置'
-  }
-
-  if (route.path === '/') {
-    crumbs.push({ path: '/', label: '仪表盘' })
-  } else if (route.path.startsWith('/account/')) {
-    crumbs.push({ path: '/accounts', label: '账号管理' })
-    crumbs.push({ path: route.path, label: '账号详情' })
-  } else if (titles[route.path]) {
-    crumbs.push({ path: route.path, label: titles[route.path] })
-  }
-
-  return crumbs
-})
-
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/': '仪表盘',
-    '/accounts': '账号管理',
+    '/accounts': '账号',
     '/logs': '签到日志',
-    '/statistics': '统计报表',
-    '/platforms': '平台管理',
-    '/settings': '系统设置'
+    '/statistics': '统计',
+    '/platforms': '平台',
+    '/settings': '设置'
   }
-  if (route.path.startsWith('/account/')) return '账号详情'
-  return titles[route.path] || '仪表盘'
+  if (route.path.startsWith('/account/')) return '账号'
+  return titles[route.path] || ''
 })
 
-const showToolbar = computed(() => false) // 可根据需要显示
+const breadcrumbTail = computed(() => {
+  if (route.path.startsWith('/account/')) return '详情'
+  return ''
+})
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/'
+  if (path === '/accounts') return route.path === '/accounts' || route.path.startsWith('/account/')
   return route.path.startsWith(path)
 }
 
@@ -470,8 +350,7 @@ const navigateTo = (path: string) => {
 }
 
 const refreshData = () => {
-  lastSyncTime.value = new Date().toLocaleTimeString()
-  window.location.reload()
+  refreshBus.trigger()
 }
 
 const toggleTheme = () => {
@@ -493,7 +372,6 @@ const handleGlobalSearch = async () => {
   try {
     const keyword_lower = keyword.toLowerCase()
 
-    // 搜索账号
     try {
       const accountRes: any = await accountApi.getList()
       if (accountRes.data) {
@@ -516,20 +394,19 @@ const handleGlobalSearch = async () => {
       console.error('Search accounts failed:', e)
     }
 
-    // 搜索签到日志
     try {
       const logsRes: any = await signApi.getAllLogs({ size: 50 })
-      if (logsRes.data?.data) {
-        logsRes.data.data.forEach((log: any) => {
+      if (logsRes.data?.items) {
+        logsRes.data.items.forEach((log: SignLog) => {
           if (
             log.account?.username?.toLowerCase().includes(keyword_lower) ||
-            log.user_id?.toString().includes(keyword) ||
-            log.error_msg?.toLowerCase().includes(keyword_lower)
+            log.account_id?.toString().includes(keyword) ||
+            log.message?.toLowerCase().includes(keyword_lower)
           ) {
             searchResults.value.push({
               type: 'log',
               title: `${log.account?.username || '未知账号'} - ${log.success ? '成功' : '失败'}`,
-              description: `时间: ${new Date(log.created_at).toLocaleString()}`,
+              description: `时间: ${new Date(log.sign_time).toLocaleString()}`,
               data: log
             })
           }
@@ -549,44 +426,19 @@ const handleGlobalSearch = async () => {
   }
 }
 
-// 搜索结果导航
-const handleSearchResultClick = (result: any) => {
+const handleSearchResultClick = (result: GlobalSearchResult) => {
   searchKeyword.value = ''
   searchResults.value = []
 
   if (result.type === 'account') {
-    router.push(`/account/${result.data.id}`)
+    router.push(`/account/${(result.data as Account).id}`)
   } else if (result.type === 'log') {
-    router.push('/logs')
+    router.push({
+      path: '/logs',
+      query: buildLogRouteQuery(result.data as SignLog)
+    })
   }
 }
-
-const clearNotifications = () => {
-  notifications.value = []
-}
-
-// 添加通知的函数
-const addNotification = (title: string, type: 'success' | 'warning' | 'error' | 'info' = 'info', duration = 5000) => {
-  const id = `notif-${Date.now()}-${Math.random()}`
-  const notif = {
-    id,
-    title,
-    type,
-    time: new Date().toLocaleTimeString()
-  }
-
-  notifications.value.push(notif)
-
-  // 自动移除通知
-  if (duration > 0) {
-    setTimeout(() => {
-      notifications.value = notifications.value.filter(n => n.id !== id)
-    }, duration)
-  }
-}
-
-// 全局通知函数 - 提供给其他组件使用
-window.$notify = addNotification as any
 
 const handleUserMenuSelect = (key: string) => {
   if (key === 'logout') {
@@ -594,32 +446,7 @@ const handleUserMenuSelect = (key: string) => {
     window.$notify('已退出登录', 'success')
     router.push('/login')
   } else if (key === 'change-password') {
-    passwordForm.value = { old_password: '', new_password: '', confirm_password: '' }
     showPasswordModal.value = true
-  }
-}
-
-const handleChangePassword = async () => {
-  try {
-    await passwordFormRef.value?.validate()
-  } catch {
-    return
-  }
-
-  changingPassword.value = true
-  try {
-    await authApi.changePassword({
-      old_password: passwordForm.value.old_password,
-      new_password: passwordForm.value.new_password
-    })
-    window.$notify('密码修改成功，请重新登录', 'success')
-    showPasswordModal.value = false
-    removeToken()
-    router.push('/login')
-  } catch (e: any) {
-    window.$notify(e.message || '修改失败', 'error')
-  } finally {
-    changingPassword.value = false
   }
 }
 
@@ -635,27 +462,8 @@ const loadCurrentUser = async () => {
   }
 }
 
-// 更新最后同步时间
-const updateSyncTime = () => {
-  lastSyncTime.value = new Date().toLocaleTimeString()
-}
-
-// 加载应用版本
-const loadAppVersion = async () => {
-  try {
-    const res: any = await authApi.getMe()
-    if (res.data?.app_version) {
-      appVersion.value = res.data.app_version
-    }
-  } catch (e) {
-    console.error('Failed to load app version:', e)
-  }
-}
-
 onMounted(() => {
   loadCurrentUser()
-  loadAppVersion()
-  updateSyncTime()
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
     const stored = localStorage.getItem('anyrouter-theme')
@@ -667,10 +475,14 @@ onMounted(() => {
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#10b981',
-    primaryColorHover: '#059669',
-    primaryColorPressed: '#047857',
-    borderRadius: '8px'
+    primaryColor: '#5e6ad2',
+    primaryColorHover: '#4f5ac7',
+    primaryColorPressed: '#4048b1',
+    borderRadius: '6px',
+    fontSize: '13px'
+  },
+  Button: {
+    fontWeight: '500'
   }
 }
 </script>
@@ -678,114 +490,123 @@ const themeOverrides: GlobalThemeOverrides = {
 <style scoped>
 .layout {
   display: flex;
-  flex-direction: column;
   min-height: 100vh;
   background: var(--bg-color);
 }
 
-/* 侧边栏 */
+/* Sidebar */
 .sidebar {
-  width: var(--sidebar-width);
-  background: var(--bg-card);
-  border-right: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
+  width: var(--sidebar-width);
   z-index: 100;
-  transition: width 0.3s ease;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color-light);
+  transition: width var(--transition-normal), transform var(--transition-normal);
 }
 
 .sidebar.collapsed {
   width: var(--sidebar-collapsed-width);
 }
 
-/* Logo 区域 */
 .sidebar-brand {
-  height: var(--header-height);
   display: flex;
   align-items: center;
-  padding: 0 var(--spacing-5);
-  gap: var(--spacing-3);
-  cursor: pointer;
-  transition: padding 0.3s ease;
-  flex-shrink: 0;
+  gap: var(--spacing-2);
+  width: 100%;
+  height: var(--header-height);
+  padding: 0 var(--spacing-4);
   border-bottom: 1px solid var(--border-color-light);
+  cursor: pointer;
+  color: var(--text-primary);
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font: inherit;
+  text-align: left;
+}
+
+.sidebar-brand:focus-visible,
+.nav-item:focus-visible,
+.tabbar-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
 }
 
 .sidebar.collapsed .sidebar-brand {
-  padding: 0 var(--spacing-4);
   justify-content: center;
+  padding: 0;
 }
 
 .brand-icon {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  background: var(--primary-gradient);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: var(--shadow-md);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.sidebar-brand:hover .brand-icon {
-  transform: scale(1.05);
-  box-shadow: var(--shadow-lg);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-color);
+  color: var(--text-inverse);
 }
 
 .brand-text {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
-  letter-spacing: -0.3px;
   white-space: nowrap;
-  opacity: 1;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .sidebar.collapsed .brand-text {
-  opacity: 0;
-  pointer-events: none;
   width: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
-/* 导航区域 */
 .sidebar-nav {
   flex: 1;
-  padding: var(--spacing-4) var(--spacing-3);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   overflow-y: auto;
-  overflow-x: hidden;
-  transition: padding 0.3s ease;
-}
-
-.sidebar.collapsed .sidebar-nav {
-  padding: var(--spacing-4) var(--spacing-2);
+  padding: var(--spacing-2);
 }
 
 .nav-item {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  padding: 0 var(--spacing-4);
-  height: 44px;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  margin-bottom: var(--spacing-1);
+  gap: var(--spacing-2);
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--spacing-2);
   color: var(--text-secondary);
-  transition: background 0.2s ease, color 0.2s ease, padding 0.3s ease;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+}
+
+.nav-item.small {
+  height: 28px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
 .sidebar.collapsed .nav-item {
-  padding: 0;
   justify-content: center;
+  padding: 0;
 }
 
 .nav-item:hover {
@@ -798,137 +619,124 @@ const themeOverrides: GlobalThemeOverrides = {
   color: var(--primary-color);
 }
 
-/* 左侧指示器 */
-.nav-indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 0;
-  background: var(--primary-gradient);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  transition: height 0.2s ease;
-}
-
-.nav-item.active .nav-indicator {
-  height: 20px;
-}
-
-.sidebar.collapsed .nav-indicator {
-  display: none;
-}
-
 .nav-icon {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  min-width: 16px;
+  color: inherit;
 }
 
 .nav-label {
-  font-size: var(--text-md);
-  font-weight: var(--font-medium);
   white-space: nowrap;
-  opacity: 1;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .sidebar.collapsed .nav-label {
-  opacity: 0;
-  pointer-events: none;
   width: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
-/* 底部区域 */
 .sidebar-footer {
-  padding: var(--spacing-3);
-  border-top: 1px solid var(--border-color-light);
-  flex-shrink: 0;
-  transition: padding 0.3s ease;
-}
-
-.sidebar.collapsed .sidebar-footer {
-  padding: var(--spacing-2);
-}
-
-.sidebar-footer .nav-item {
-  margin-bottom: var(--spacing-1);
-}
-
-.sidebar-footer .nav-item:last-child {
-  margin-bottom: 0;
-}
-
-.collapse-btn .nav-icon {
-  transition: transform 0.3s ease;
-}
-
-.sidebar.collapsed .collapse-btn .nav-icon {
-  transform: rotate(180deg);
-}
-
-/* 主区域 */
-.main {
-  flex: 1;
-  margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  transition: margin-left 0.3s ease;
+  gap: 1px;
+  padding: var(--spacing-2);
+  border-top: 1px solid var(--border-color-light);
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+  transition: margin-left var(--transition-normal);
 }
 
 .main.expanded {
   margin-left: var(--sidebar-collapsed-width);
 }
 
-/* 顶部栏 */
 .header {
-  height: var(--header-height);
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-6);
   position: sticky;
   top: 0;
   z-index: 50;
-  gap: var(--spacing-4);
+  display: grid;
+  grid-template-columns: auto minmax(240px, 360px) auto;
+  align-items: center;
+  gap: var(--spacing-3);
+  height: var(--header-height);
+  padding: 0 var(--spacing-5);
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-4);
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+
+.header-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.header-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
 }
 
 .header-center {
-  flex: 1;
-  max-width: 400px;
-  margin: 0 var(--spacing-4);
+  display: flex;
+  justify-content: center;
 }
 
 .global-search {
   width: 100%;
+  max-width: 360px;
 }
 
-/* 搜索结果 */
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0 !important;
+  color: var(--text-secondary);
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+}
+
 .search-results {
-  padding: 0;
-  max-height: 400px;
+  max-height: 340px;
   overflow-y: auto;
 }
 
 .search-result-item {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
+  padding: var(--spacing-3);
   border-bottom: 1px solid var(--border-color-light);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--transition-fast);
 }
 
 .search-result-item:hover {
@@ -940,78 +748,55 @@ const themeOverrides: GlobalThemeOverrides = {
 }
 
 .search-result-badge {
-  flex-shrink: 0;
-  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: var(--font-medium);
+  color: var(--text-inverse);
 }
 
-.badge-account {
-  display: inline-block;
-  padding: 2px 8px;
+.search-result-badge.account {
   background: var(--primary-color);
-  color: white;
-  border-radius: 4px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
 }
 
-.badge-log {
-  display: inline-block;
-  padding: 2px 8px;
+.search-result-badge.log {
   background: var(--info-color);
-  color: white;
-  border-radius: 4px;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.search-result-content {
-  flex: 1;
-  min-width: 0;
 }
 
 .search-result-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 
 .search-result-desc {
-  font-size: var(--text-xs);
+  margin-top: 2px;
   color: var(--text-tertiary);
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--text-xs);
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-/* 用户按钮 */
 .user-btn {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-  padding: var(--spacing-1) var(--spacing-3) !important;
+  height: 28px;
+  padding: 0 var(--spacing-2) !important;
+  color: var(--text-secondary);
 }
 
 .user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--primary-gradient);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-sm);
-  font-weight: var(--font-bold);
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--primary-color);
+  color: var(--text-inverse);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
 }
 
 .user-name {
@@ -1020,238 +805,50 @@ const themeOverrides: GlobalThemeOverrides = {
   color: var(--text-primary);
 }
 
-/* 通知面板 */
-.notification-panel {
-  padding: 0;
-}
-
-.notification-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.notification-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.notification-item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.notification-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.notification-item:last-child {
-  border-bottom: none;
-}
-
-.notif-close {
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.notification-item:hover .notif-close {
-  opacity: 1;
-}
-
-.notif-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.notif-icon.success {
-  background: var(--success-color-light);
-  color: var(--success-color);
-}
-
-.notif-icon.warning {
-  background: var(--warning-color-light);
-  color: var(--warning-color);
-}
-
-.notif-icon.error {
-  background: var(--error-color-light);
-  color: var(--error-color);
-}
-
-.notif-icon.info {
-  background: var(--info-color-light);
-  color: var(--info-color);
-}
-
-.notif-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.notif-title {
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-
-.notif-time {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.notification-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-8);
-  gap: var(--spacing-2);
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-}
-
-/* 页面工具栏 */
-.page-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-4) var(--spacing-6);
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: var(--spacing-2);
-}
-
-/* 内容区 */
 .content {
   flex: 1;
-  padding: var(--spacing-6);
-  background: var(--bg-color);
+  width: 100%;
+  padding: var(--spacing-5) var(--spacing-6);
 }
 
-/* 底部状态栏 */
-.footer {
-  height: 36px;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border-color-light);
-  display: flex;
+.cpk-hint {
+  display: inline-flex;
+  gap: 2px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-6);
-  font-size: var(--text-xs);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.cpk-hint kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--text-tertiary);
-  margin-left: var(--sidebar-width);
-  transition: margin-left 0.3s ease;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-xs);
 }
 
-.footer-left,
-.footer-right {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
+.cpk-hint:hover kbd {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-.footer-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-1);
-}
-
-.footer-item.connected .status-dot {
-  background: var(--success-color);
-}
-
-.footer-item.disconnected .status-dot {
-  background: var(--error-color);
-}
-
-.footer-divider {
-  color: var(--border-color);
-}
-
-/* 侧边栏折叠时，footer 的 margin 也随之调整 */
-.layout > .sidebar.collapsed ~ .footer {
-  margin-left: var(--sidebar-collapsed-width);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--success-color);
-}
-
-/* 修改密码弹窗 */
-.password-modal {
-  width: 400px;
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-
-.password-modal .modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-4) var(--spacing-5);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.password-modal .modal-header h3 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.password-modal .modal-body {
-  padding: var(--spacing-5);
-}
-
-.password-modal .modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-  padding: var(--spacing-4) var(--spacing-5);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-card-hover);
-}
-
-/* 移动端遮罩 */
 .mobile-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 99;
+  background: rgba(11, 12, 14, 0.5);
   opacity: 0;
-  transition: opacity 0.3s ease;
   pointer-events: none;
+  transition: opacity var(--transition-normal);
+  z-index: 90;
 }
 
 .mobile-overlay.show {
@@ -1259,94 +856,66 @@ const themeOverrides: GlobalThemeOverrides = {
   pointer-events: auto;
 }
 
-/* 移动端菜单按钮 */
 .mobile-menu-btn {
   display: none;
-  margin-right: var(--spacing-2);
 }
 
-/* 移动端底部导航 */
 .mobile-tabbar {
   display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--tabbar-height);
-  background: var(--bg-card);
-  border-top: 1px solid var(--border-color);
-  z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.tabbar-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: color 0.2s;
+@media (max-width: 900px) {
+  .header {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .header-center {
+    display: none;
+  }
 }
 
-.tabbar-item.active {
-  color: var(--primary-color);
-}
-
-/* 移动端响应式 */
 @media (max-width: 768px) {
-  .mobile-overlay {
+  .toast-stack {
+    right: 12px;
+    left: 12px;
+    bottom: calc(var(--tabbar-height) + 16px);
+    max-width: none;
+  }
+
+  .toast-item {
+    min-width: 0;
+  }
+
+  .mobile-overlay,
+  .mobile-menu-btn,
+  .mobile-tabbar {
     display: block;
   }
 
-  .mobile-menu-btn {
-    display: flex;
-  }
-
-  .mobile-tabbar {
-    display: flex;
-  }
-
   .sidebar {
-    position: fixed;
-    left: calc(-1 * var(--sidebar-width));
-    width: var(--sidebar-width);
-    transition: left 0.3s ease;
-    z-index: 101;
+    transform: translateX(-100%);
+    width: min(240px, 80vw);
   }
 
   .sidebar.mobile-open {
-    left: 0;
+    transform: translateX(0);
   }
 
   .sidebar.collapsed {
-    width: var(--sidebar-width);
-    left: calc(-1 * var(--sidebar-width));
-  }
-
-  .sidebar.collapsed.mobile-open {
-    left: 0;
+    width: min(240px, 80vw);
   }
 
   .sidebar.collapsed .brand-text,
   .sidebar.collapsed .nav-label {
-    opacity: 1;
-    pointer-events: auto;
     width: auto;
+    opacity: 1;
   }
 
   .sidebar-footer .collapse-btn {
     display: none;
   }
 
-  .main {
-    margin-left: 0;
-    padding-bottom: calc(var(--tabbar-height) + 10px);
-  }
-
+  .main,
   .main.expanded {
     margin-left: 0;
   }
@@ -1355,26 +924,56 @@ const themeOverrides: GlobalThemeOverrides = {
     padding: 0 var(--spacing-4);
   }
 
-  .header-center {
-    display: none;
-  }
-
   .user-name {
     display: none;
   }
 
   .content {
-    padding: var(--spacing-4);
+    padding: var(--spacing-4) var(--spacing-4) calc(var(--tabbar-height) + 16px);
   }
 
-  .footer {
-    display: none;
+  .mobile-tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 95;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: center;
+    height: var(--tabbar-height);
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-color-light);
+  }
+
+  .tabbar-item {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    padding: 0;
+  }
+
+  .tabbar-item.active {
+    color: var(--primary-color);
   }
 }
 
-@media (max-width: 480px) {
-  .header-left {
+@media (max-width: 520px) {
+  .header-left .header-crumb {
     display: none;
+  }
+
+  .mobile-tabbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 6px;
+    height: auto;
+    padding: var(--spacing-2) 0;
   }
 }
 </style>

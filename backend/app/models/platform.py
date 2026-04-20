@@ -32,3 +32,4 @@ class Platform(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     accounts = relationship("Account", back_populates="platform")
+    api_endpoints = relationship("ApiEndpoint", back_populates="platform", cascade="all, delete-orphan")

@@ -1,13 +1,10 @@
 <template>
-  <div class="trend-section" v-if="hasTrend">
-    <div class="section-header">
-      <h3 class="section-title">近7天签到趋势</h3>
-      <div class="trend-legend">
-        <span class="legend-item"><span class="dot success"></span>成功</span>
-        <span class="legend-item"><span class="dot fail"></span>失败</span>
-      </div>
-    </div>
+  <div class="trend-shell" v-if="hasTrend">
     <div ref="chartRef" class="trend-chart-container"></div>
+    <div class="trend-legend">
+      <span class="legend-item"><span class="dot success"></span>成功</span>
+      <span class="legend-item"><span class="dot fail"></span>失败</span>
+    </div>
   </div>
 </template>
 
@@ -30,22 +27,22 @@ const hasTrend = ref(false)
 const getChartTheme = () => {
   return props.isDark ? {
     backgroundColor: 'transparent',
-    textColor: 'rgba(255, 255, 255, 0.85)',
-    axisLineColor: 'rgba(255, 255, 255, 0.15)',
-    splitLineColor: 'rgba(255, 255, 255, 0.08)',
-    tooltipBg: 'rgba(30, 30, 46, 0.95)',
-    tooltipBorder: 'rgba(255, 255, 255, 0.1)',
-    successColor: '#00d4a0',
-    failColor: '#ff6b6b'
+    textColor: 'rgba(255, 255, 255, 0.7)',
+    axisLineColor: 'rgba(255, 255, 255, 0.1)',
+    splitLineColor: 'rgba(255, 255, 255, 0.06)',
+    tooltipBg: '#16181c',
+    tooltipBorder: '#2a2d33',
+    successColor: '#22c55e',
+    failColor: '#ef4444'
   } : {
     backgroundColor: 'transparent',
-    textColor: 'rgba(0, 0, 0, 0.65)',
-    axisLineColor: 'rgba(0, 0, 0, 0.15)',
-    splitLineColor: 'rgba(0, 0, 0, 0.06)',
-    tooltipBg: 'rgba(255, 255, 255, 0.98)',
-    tooltipBorder: 'rgba(0, 0, 0, 0.08)',
-    successColor: '#10b981',
-    failColor: '#ef4444'
+    textColor: 'rgba(11, 12, 14, 0.6)',
+    axisLineColor: 'rgba(11, 12, 14, 0.1)',
+    splitLineColor: 'rgba(11, 12, 14, 0.05)',
+    tooltipBg: '#ffffff',
+    tooltipBorder: '#e3e5e8',
+    successColor: '#16a34a',
+    failColor: '#dc2626'
   }
 }
 
@@ -138,10 +135,7 @@ const updateChart = () => {
         barMaxWidth: 24,
         data: data.map(d => d.success),
         itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#34d399' },
-            { offset: 1, color: theme.successColor }
-          ]),
+          color: theme.successColor,
           borderRadius: [0, 0, 0, 0]
         }
       },
@@ -153,10 +147,7 @@ const updateChart = () => {
         barMaxWidth: 24,
         data: data.map(d => d.fail),
         itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: '#f87171' },
-            { offset: 1, color: theme.failColor }
-          ]),
+          color: theme.failColor,
           borderRadius: [3, 3, 0, 0]
         }
       }
@@ -202,44 +193,33 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.trend-section {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: var(--spacing-6);
-  padding: var(--spacing-4) var(--spacing-5);
-}
-
-.section-header {
+.trend-shell {
+  height: 100%;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin: 0;
+  flex-direction: column;
+  gap: var(--spacing-2);
 }
 
 .trend-legend {
   display: flex;
+  justify-content: center;
   gap: var(--spacing-3);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  padding-top: var(--spacing-2);
+  border-top: 1px solid var(--border-color-light);
 }
 
 .legend-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-1);
+  gap: 4px;
 }
 
 .legend-item .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
 }
 
 .legend-item .dot.success {
@@ -251,14 +231,8 @@ onUnmounted(() => {
 }
 
 .trend-chart-container {
+  flex: 1;
   width: 100%;
-  height: 120px;
-  margin-top: var(--spacing-3);
-}
-
-@media (max-width: 600px) {
-  .trend-section {
-    display: none;
-  }
+  min-height: 220px;
 }
 </style>

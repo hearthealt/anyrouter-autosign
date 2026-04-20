@@ -1,13 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { isLoggedIn } from '../utils/auth'
-import Dashboard from '../views/Dashboard.vue'
-import Accounts from '../views/Accounts.vue'
-import Settings from '../views/Settings.vue'
-import AccountDetail from '../views/AccountDetail.vue'
-import SignLogs from '../views/SignLogs.vue'
-import Statistics from '../views/Statistics.vue'
-import Platforms from '../views/Platforms.vue'
-import Login from '../views/Login.vue'
+
+const Login = () => import('../views/Login.vue')
+const Dashboard = () => import('../views/Dashboard.vue')
+const Accounts = () => import('../views/Accounts.vue')
+const AccountDetail = () => import('../views/AccountDetail.vue')
+const SignLogs = () => import('../views/SignLogs.vue')
+const Statistics = () => import('../views/Statistics.vue')
+const Platforms = () => import('../views/Platforms.vue')
+const Settings = () => import('../views/Settings.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -63,12 +64,11 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
 router.beforeEach((to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth !== false
 
   if (requiresAuth && !isLoggedIn()) {
-    next('/login')
+    next({ path: '/login', query: to.path !== '/' ? { redirect: to.fullPath } : undefined })
   } else if (to.path === '/login' && isLoggedIn()) {
     next('/')
   } else {

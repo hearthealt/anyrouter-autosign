@@ -21,6 +21,7 @@ class Account(Base):
     anrouter_user_id = synonym("anyrouter_user_id")
     username = Column(String(100), nullable=True)
     display_name = Column(String(100), nullable=True)
+    note = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
