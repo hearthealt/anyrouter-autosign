@@ -9,6 +9,7 @@ from .account_session import (
     refresh_account_session,
     resolve_session_cookie,
 )
+from .account_cache import apply_account_user_info, refresh_account_user_cache
 from .notify import NotifyFactory, NotifyBase
 
 anyrouter_service = anrouter_service
@@ -24,4 +25,6 @@ __all__ = [
     "is_auth_failure_message",
     "refresh_account_session",
     "resolve_session_cookie",
+    "apply_account_user_info",
+    "refresh_account_user_cache",
 ]

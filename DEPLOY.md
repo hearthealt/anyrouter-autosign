@@ -136,6 +136,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    location /api/v1/events {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
 }
 ```
 
@@ -189,6 +201,11 @@ ENVIRONMENT=production gunicorn app.main:app \
   --bind 0.0.0.0:8000
 ```
 
+说明：
+
+- `requirements.txt` 已包含 `uvicorn[standard]`，但不包含 `gunicorn`
+- 如果你使用 Gunicorn 作为生产入口，需要额外安装 `gunicorn`
+
 #### 使用 systemd 服务
 
 创建 `/etc/systemd/system/anyrouter-admin.service`：
@@ -234,6 +251,11 @@ npm run build
 
 构建产物在 `frontend/dist/` 目录，部署到 Web 服务器即可。
 
+代码升级说明：
+
+- 后端改动只需要重启后端服务即可生效
+- 前端界面改动（例如账号页首屏加载态）需要重新执行 `npm run build` 并发布新的 `frontend/dist/`
+
 ---
 
 ## Nginx 配置
@@ -257,6 +279,18 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/v1/events {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
     }
 
     location /docs {
@@ -300,8 +334,26 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    location /api/v1/events {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+    }
 }
 ```
+
+SSE 说明：
+
+- `/api/v1/events` 使用的是 SSE 长连接，不是 WebSocket
+- 不要为该路径额外添加 `Upgrade` / `Connection: upgrade` 头
+- 如果你把 HTTPS 请求直接打到后端的 HTTP 端口，或把 SSE 当成 WebSocket 代理，后端日志里可能出现 `Invalid HTTP request received` 或 `Unsupported upgrade request`
 
 ---
 
@@ -313,7 +365,8 @@ server {
 - `ENVIRONMENT=development` 时，后端读取 `backend/.env.local`
 - `ENVIRONMENT=production` 时，后端读取 `backend/.env.production`
 - 系统环境变量优先于文件中的同名配置
-- 示例模板见 `backend/.env.local.example`、`backend/.env.production.example`、`backend/.env.example`
+- 当前仓库保留 `backend/.env.production.example` 作为生产示例
+- 开发环境请自行创建 `backend/.env.local`，字段可参考 `backend/.env.production.example`
 
 ### 常用环境变量
 
@@ -396,12 +449,32 @@ mkdir data
 - 检查后端服务是否正常运行
 - 查看日志确认调度器状态
 
-### 5. 前端无法访问后端
+### 5. 签到成功后额度没有立即更新
+
+- 新版本会在单账号签到、批量签到、自动签到和重试签到完成后自动同步账号缓存额度
+- 如果你刚升级后端但页面仍显示旧额度，先确认后端服务已重启
+- 如果账号页仍出现旧的前端行为，请重新构建并发布前端静态资源
+- 如果同步仍失败，检查后端日志中是否存在获取用户信息失败、`session_cookie` 失效或目标平台接口异常
+
+### 6. 账号页先显示“没有账号”再出现数据
+
+- 新版本账号页首屏会优先显示加载状态，不会在请求返回前先闪空状态
+- 如果线上仍出现旧表现，通常是前端静态资源还没有重新构建或浏览器缓存了旧文件
+- 重新执行前端构建并发布 `frontend/dist/` 后再刷新页面
+
+### 7. 后端日志出现 `Invalid HTTP request received` 或 `Unsupported upgrade request`
+
+- 先确认浏览器和反向代理访问的是 Nginx 的 80/443，而不是直接访问后端 HTTP 端口
+- 确认 `/api/v1/events` 按 SSE 转发，不要加 WebSocket Upgrade 头
+- 如果后端端口直接暴露公网，被扫描器探测时也可能出现这类日志
+- 一般不影响业务接口本身，但建议把后端只监听在内网地址，再由 Nginx 对外提供访问
+
+### 8. 前端无法访问后端
 
 - 开发环境：检查 `frontend/vite.config.ts`，如果你使用的是 JS 配置文件则检查 `frontend/vite.config.js`
 - 生产环境：检查 Nginx 反向代理配置
 
-### 6. 跨域问题
+### 9. 跨域问题
 
 后端已配置 CORS 允许所有来源，如需限制，修改 `backend/app/main.py`：
 

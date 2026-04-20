@@ -11,7 +11,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from app.database import SessionLocal
 from app.models import Account, SignLog, Setting, NotifyChannel
-from app.services import anrouter_service, execute_with_session_refresh
+from app.services import anrouter_service, execute_with_session_refresh, refresh_account_user_cache
 from app.services.events import publish_event
 from app.services.notify import NotifyFactory
 from app.utils import format_quota, get_account_platform_config
@@ -92,6 +92,19 @@ def execute_sign(db, account) -> dict:
         ),
         platform_config=platform_config,
     )
+
+    if request_success:
+        cache_success, cache_result = refresh_account_user_cache(
+            db,
+            account,
+            platform_config=platform_config,
+        )
+        if not cache_success:
+            logger.warning(
+                "签到后刷新账号缓存失败: account_id=%s, message=%s",
+                account.id,
+                cache_result.get("message", "未知错误"),
+            )
 
     if not request_success:
         return {

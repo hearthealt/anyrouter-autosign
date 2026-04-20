@@ -2,6 +2,7 @@
 签到 API
 """
 import json
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import asc, desc
@@ -12,11 +13,12 @@ from app.models import Account, SignLog, NotifyChannel, AccountNotify
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
-from app.services import anrouter_service, execute_with_session_refresh, NotifyFactory
+from app.services import anrouter_service, execute_with_session_refresh, NotifyFactory, refresh_account_user_cache
 from app.services.events import publish_event
 from app.utils import format_quota, get_account_platform_config
 
 router = APIRouter(tags=["签到"])
+logger = logging.getLogger(__name__)
 
 
 def send_notifications(db: Session, account: Account, title: str, content: str):
@@ -65,6 +67,31 @@ def perform_sign_request(db: Session, account: Account, platform_config: dict):
     )
 
 
+def refresh_account_cache_after_sign(
+    db: Session,
+    account: Account,
+    platform_config: dict,
+    request_success: bool,
+) -> None:
+    """签到请求成功返回后，顺便刷新账号缓存额度。"""
+    if not request_success:
+        return
+
+    cache_success, cache_result = refresh_account_user_cache(
+        db,
+        account,
+        platform_config=platform_config,
+    )
+    if cache_success:
+        return
+
+    logger.warning(
+        "签到后刷新账号缓存失败: account_id=%s, message=%s",
+        account.id,
+        cache_result.get("message", "未知错误"),
+    )
+
+
 @router.post("/accounts/{account_id}/sign", response_model=ApiResponse)
 def sign_account(account_id: int, db: Session = Depends(get_db)):
     """单账号签到"""
@@ -84,12 +111,14 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     platform_config = get_account_platform_config(account)
 
     # 执行签到
-    success, result = perform_sign_request(db, account, platform_config)
+    request_success, result = perform_sign_request(db, account, platform_config)
 
-    sign_success = success and result.get("success", False)
+    sign_success = request_success and result.get("success", False)
     message = result.get("message", "")
     reward_quota = result.get("reward_quota", 0)
     already_signed = bool(result.get("already_signed", False))
+
+    refresh_account_cache_after_sign(db, account, platform_config, request_success)
 
     if already_signed:
         log_message = "今日已签到"
@@ -174,11 +203,13 @@ def batch_sign(db: Session = Depends(get_db)):
     for account in accounts:
         platform_config = get_account_platform_config(account)
 
-        success, result = perform_sign_request(db, account, platform_config)
-        sign_success = success and result.get("success", False)
+        request_success, result = perform_sign_request(db, account, platform_config)
+        sign_success = request_success and result.get("success", False)
         message = result.get("message", "")
         reward_quota = result.get("reward_quota", 0)
         already_signed = bool(result.get("already_signed", False))
+
+        refresh_account_cache_after_sign(db, account, platform_config, request_success)
 
         if already_signed:
             log_message = "今日已签到"
