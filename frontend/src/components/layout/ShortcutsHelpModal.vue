@@ -26,27 +26,27 @@
         <div class="shortcut-section">
           <div class="section-title">跳转（按 <kbd>G</kbd> 后再按下一键）</div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">仪表盘</span>
+            <span class="shortcut-desc">总览面板</span>
             <div class="keys"><kbd>G</kbd><kbd>D</kbd></div>
           </div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">账号</span>
+            <span class="shortcut-desc">账号管理</span>
             <div class="keys"><kbd>G</kbd><kbd>A</kbd></div>
           </div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">签到日志</span>
+            <span class="shortcut-desc">签到记录</span>
             <div class="keys"><kbd>G</kbd><kbd>L</kbd></div>
           </div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">统计</span>
+            <span class="shortcut-desc">数据统计</span>
             <div class="keys"><kbd>G</kbd><kbd>S</kbd></div>
           </div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">平台</span>
+            <span class="shortcut-desc">平台管理</span>
             <div class="keys"><kbd>G</kbd><kbd>P</kbd></div>
           </div>
           <div class="shortcut-row">
-            <span class="shortcut-desc">设置</span>
+            <span class="shortcut-desc">系统设置</span>
             <div class="keys"><kbd>G</kbd><kbd>C</kbd></div>
           </div>
         </div>

@@ -179,6 +179,8 @@ export interface SignLog {
   id: number
   account_id: number
   account?: Account
+  platform?: PlatformBrief
+  platform_name?: string
   sign_time: string
   success: boolean
   message?: string

@@ -9,7 +9,7 @@ from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, SignLog, NotifyChannel, AccountNotify
+from app.models import Account, Platform, SignLog, NotifyChannel, AccountNotify
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
@@ -290,7 +290,11 @@ def get_all_sign_logs(
             q = q.filter(SignLog.sign_time < datetime.fromisoformat(end_date + " 23:59:59"))
         return q
 
-    query = db.query(SignLog, Account).join(Account, Account.id == SignLog.account_id)
+    query = db.query(SignLog, Account, Platform).join(
+        Account, Account.id == SignLog.account_id
+    ).outerjoin(
+        Platform, Platform.id == Account.platform_id
+    )
     if account_id:
         query = query.filter(SignLog.account_id == account_id)
     if success is not None:
@@ -313,6 +317,8 @@ def get_all_sign_logs(
 
     if sort_by == "username":
         sort_column = Account.username
+    elif sort_by == "platform":
+        sort_column = Platform.name
     elif sort_by == "status":
         sort_column = SignLog.status
     elif sort_by == "reward":
@@ -337,9 +343,15 @@ def get_all_sign_logs(
             "reward_quota": log.reward_quota,
             "reward_display": format_quota(log.reward_quota),
             "retry_count": log.retry_count,
-            "status": log.status
+            "status": log.status,
+            "platform": {
+                "id": platform.id,
+                "name": platform.name,
+                "base_url": platform.base_url,
+            } if platform else None,
+            "platform_name": platform.name if platform else None,
         }
-        for log, account in logs
+        for log, account, platform in logs
     ]
 
     return ApiResponse(success=True, data={
