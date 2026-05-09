@@ -37,6 +37,9 @@ class BatchSignResult(BaseModel):
     username: str
     success: bool
     message: str
+    reward_quota: int = 0
+    reward_display: str = "$0.00"
+    status: str = "failed"
 
 
 class BatchSignResponse(BaseModel):

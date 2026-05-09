@@ -10,6 +10,7 @@ class PlatformCreate(BaseModel):
     """创建平台请求"""
     name: str
     base_url: str
+    sign_mode: str = "api"
     sign_api: str = "/api/user/sign_in"
     checkin_api: str = "/api/user/checkin"
     user_api: str = "/api/user/self"
@@ -24,6 +25,7 @@ class PlatformUpdate(BaseModel):
     """更新平台请求"""
     name: Optional[str] = None
     base_url: Optional[str] = None
+    sign_mode: Optional[str] = None
     sign_api: Optional[str] = None
     checkin_api: Optional[str] = None
     user_api: Optional[str] = None
@@ -49,6 +51,7 @@ class PlatformResponse(BaseModel):
     id: int
     name: str
     base_url: str
+    sign_mode: str = "api"
     sign_api: str = "/api/user/sign_in"
     checkin_api: str = "/api/user/checkin"
     user_api: str = "/api/user/self"

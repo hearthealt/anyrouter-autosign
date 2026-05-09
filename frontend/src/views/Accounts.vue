@@ -245,7 +245,7 @@ import {
 import { AccountModal, BatchImportModal, TokensModal } from '../components'
 import { accountApi, groupsApi, notifyApi, platformApi, settingsApi, signApi } from '../api'
 import { useEventStream, useFormat, useViewRefresh } from '../composables'
-import type { Account, AccountGroup, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
+import type { Account, AccountGroup, AccountProxyMode, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
 
 type StatusFilter = 'healthy' | 'unhealthy' | 'pending' | 'disabled'
 type SortKey = 'username' | 'platform' | 'group' | 'quota' | 'last_sign' | 'health'
@@ -548,6 +548,8 @@ const handleAccountSubmit = async (data: {
   login_username: string
   login_password: string
   note: string
+  proxy_mode: AccountProxyMode
+  proxy_url: string
   clear_login_credentials: boolean
   is_active?: boolean
   platform_id: number | null
@@ -579,6 +581,16 @@ const handleAccountSubmit = async (data: {
       if (data.platform_id) {
         updateData.platform_id = data.platform_id
       }
+      const previousProxyMode = editingAccount.value.proxy_mode || 'global'
+      if (data.proxy_mode !== previousProxyMode) {
+        updateData.proxy_mode = data.proxy_mode
+      }
+      if (data.proxy_mode === 'custom' && data.proxy_url.trim()) {
+        updateData.proxy_mode = 'custom'
+        updateData.proxy_url = data.proxy_url.trim()
+      } else if (data.proxy_mode !== 'custom' && previousProxyMode === 'custom') {
+        updateData.proxy_url = ''
+      }
 
       await accountApi.update(editingAccount.value.id, updateData)
 
@@ -598,6 +610,8 @@ const handleAccountSubmit = async (data: {
         login_username: data.login_username.trim() || undefined,
         login_password: data.login_password || undefined,
         note: data.note.trim() || undefined,
+        proxy_mode: data.proxy_mode,
+        proxy_url: data.proxy_mode === 'custom' ? data.proxy_url.trim() || undefined : undefined,
         platform_id: data.platform_id as number,
         group_id: data.group_id || undefined
       })

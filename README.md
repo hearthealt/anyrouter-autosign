@@ -8,7 +8,7 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 
 ### 平台管理
 - 支持新增、编辑、删除多个平台
-- 可为每个平台单独配置 `base_url`、`sign_api`、`checkin_api`、`user_api`、`models_api`、`groups_api`、`token_api`、`status_api`、`console_url`
+- 可为每个平台单独配置签到方式，以及 `base_url`、`sign_api`、`checkin_api`、`user_api`、`models_api`、`groups_api`、`token_api`、`status_api`、`console_url`
 - 支持同步和查看平台 API 节点
 - 首个创建的平台会自动设为默认平台
 - 删除默认平台后，会自动将最早创建的剩余平台提升为默认平台
@@ -30,6 +30,7 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 - 兼容两类签到额度来源
 - 旧平台可直接使用签到接口返回的奖励额度
 - 新平台可通过 `checkin_api` 查询月度签到记录，并从 `quota_awarded` 中提取当天签到额度
+- 登录即签到平台可在平台配置中将签到方式设为“登录即签到”，系统会在每次签到时强制登录一次，并按登录响应或登录前后余额差值记录奖励
 - 单账号签到、批量签到、自动签到和重试签到后会自动同步最新额度缓存，无需手动刷新账号页才能看到剩余额度和已用额度变化
 - 仪表盘支持汇总总额度、今日签到结果、请求数等数据
 
@@ -126,6 +127,7 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 | `base_url` | 平台自定义 | 平台根地址 |
 | `sign_api` | `/api/user/sign_in` | 执行签到 |
 | `checkin_api` | `/api/user/checkin` | 查询月签到记录和奖励 |
+| `sign_mode` | `api` | `api` 表示调用签到接口，`login` 表示登录即签到 |
 | `user_api` | `/api/user/self` | 获取账号详情 |
 | `models_api` | `/api/user/models` | 获取模型列表 |
 | `groups_api` | `/api/user/self/groups` | 获取平台分组 |

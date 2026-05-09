@@ -12,6 +12,10 @@ DEFAULT_MODELS_API = "/api/user/models"
 DEFAULT_GROUPS_API = "/api/user/self/groups"
 DEFAULT_TOKEN_API = "/api/token/"
 DEFAULT_STATUS_API = "/api/status"
+DEFAULT_SIGN_MODE = "api"
+SIGN_MODE_API = "api"
+SIGN_MODE_LOGIN = "login"
+VALID_SIGN_MODES = {SIGN_MODE_API, SIGN_MODE_LOGIN}
 
 
 def _normalize_base_url(value: str) -> str:
@@ -28,12 +32,19 @@ def _normalize_path(value: str, default: str) -> str:
     return path
 
 
+def normalize_sign_mode(value: str) -> str:
+    """标准化平台签到模式。"""
+    mode = (value or DEFAULT_SIGN_MODE).strip().lower()
+    return mode if mode in VALID_SIGN_MODES else DEFAULT_SIGN_MODE
+
+
 def get_platform_config(platform: Any) -> Dict[str, str]:
     """获取平台请求配置。"""
     if platform is None:
         raise ValueError("平台不存在")
     return {
         "base_url": _normalize_base_url(getattr(platform, "base_url", DEFAULT_BASE_URL)),
+        "sign_mode": normalize_sign_mode(getattr(platform, "sign_mode", DEFAULT_SIGN_MODE)),
         "sign_api": _normalize_path(getattr(platform, "sign_api", DEFAULT_SIGN_API), DEFAULT_SIGN_API),
         "checkin_api": _normalize_path(getattr(platform, "checkin_api", DEFAULT_CHECKIN_API), DEFAULT_CHECKIN_API),
         "user_api": _normalize_path(getattr(platform, "user_api", DEFAULT_USER_API), DEFAULT_USER_API),

@@ -11,7 +11,12 @@ from apscheduler.triggers.date import DateTrigger
 
 from app.database import SessionLocal
 from app.models import Account, SignLog, Setting, NotifyChannel
-from app.services import anrouter_service, execute_with_session_refresh, refresh_account_user_cache
+from app.services import (
+    anrouter_service,
+    execute_sign_request,
+    execute_with_session_refresh,
+    refresh_account_cache_after_sign,
+)
 from app.services.events import publish_event
 from app.services.notify import NotifyFactory
 from app.utils import format_quota, get_account_platform_config
@@ -79,32 +84,27 @@ def send_sign_notification(db, account, success: bool, sign_message: str):
 def execute_sign(db, account) -> dict:
     """执行单个账号签到并返回统一结果。"""
     platform_config = get_account_platform_config(account)
-    request_success, result = execute_with_session_refresh(
+    if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
+        return {
+            "success": False,
+            "already_signed": False,
+            "message": "账号缺少 user_id",
+            "reward_quota": 0,
+            "skipped": True,
+        }
+
+    request_success, result = execute_sign_request(
         db,
         account,
-        lambda session_cookie, user_id, current_platform: anrouter_service.sign_in(
-            session_cookie,
-            user_id,
-            current_platform["base_url"],
-            sign_api=current_platform["sign_api"],
-            checkin_api=current_platform["checkin_api"],
-            console_url=current_platform["console_url"]
-        ),
         platform_config=platform_config,
     )
 
-    if request_success:
-        cache_success, cache_result = refresh_account_user_cache(
-            db,
-            account,
-            platform_config=platform_config,
-        )
-        if not cache_success:
-            logger.warning(
-                "签到后刷新账号缓存失败: account_id=%s, message=%s",
-                account.id,
-                cache_result.get("message", "未知错误"),
-            )
+    refresh_account_cache_after_sign(
+        db,
+        account,
+        platform_config=platform_config,
+        request_success=request_success,
+    )
 
     if not request_success:
         return {
@@ -145,7 +145,6 @@ def auto_sign_job():
 
         accounts = db.query(Account).filter(
             Account.is_active == True,
-            Account.anrouter_user_id.isnot(None),
             Account.platform_id.isnot(None)
         ).all()
 
@@ -166,6 +165,8 @@ def auto_sign_job():
         for account in accounts:
             try:
                 result = execute_sign(db, account)
+                if result.get("skipped"):
+                    continue
                 sign_success = result["success"]
                 already_signed = result["already_signed"]
                 message = result["message"]
@@ -287,11 +288,13 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                 Account.is_active == True
             ).first()
 
-            if not account or not account.anrouter_user_id or not account.platform_id:
+            if not account or not account.platform_id:
                 continue
 
             try:
                 result = execute_sign(db, account)
+                if result.get("skipped"):
+                    continue
                 sign_success = result["success"]
                 already_signed = result["already_signed"]
                 message = result["message"]
@@ -477,7 +480,9 @@ def health_check_job():
                         user_id,
                         current_platform["base_url"],
                         user_api=current_platform["user_api"],
-                        console_url=current_platform["console_url"]
+                        console_url=current_platform["console_url"],
+                        proxy_mode=account.proxy_mode,
+                        proxy_url=account.proxy_url,
                     ),
                     platform_config=platform_config,
                 )

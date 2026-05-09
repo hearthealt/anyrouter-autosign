@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import Account
 from app.services.anrouter import anrouter_service
 from app.utils.platform import get_account_platform_config
+from app.utils.proxy import DEFAULT_ACCOUNT_PROXY_MODE
 
 
 AccountExecutor = Callable[[str, str, Dict[str, str]], Tuple[bool, Dict[str, Any]]]
@@ -79,6 +80,8 @@ def resolve_session_cookie(
     login_username: Optional[str],
     login_password: Optional[str],
     prefer_login: bool = False,
+    proxy_mode: str = DEFAULT_ACCOUNT_PROXY_MODE,
+    proxy_url: Optional[str] = None,
 ) -> Tuple[bool, Dict[str, Any]]:
     """优先使用现有 session，或通过账号密码登录换取新的 session。"""
     cleaned_session = normalize_optional_str(session_cookie)
@@ -90,6 +93,8 @@ def resolve_session_cookie(
             base_url=base_url,
             username=cleaned_login_username or "",
             password=cleaned_login_password or "",
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
 
     if cleaned_session:
@@ -100,6 +105,8 @@ def resolve_session_cookie(
             base_url=base_url,
             username=cleaned_login_username or "",
             password=cleaned_login_password or "",
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
 
     return False, {"message": "请填写 Session Cookie，或配置登录账号和密码"}
@@ -123,6 +130,8 @@ def refresh_account_session(
         login_username=account.login_username,
         login_password=account.login_password,
         prefer_login=True,
+        proxy_mode=account.proxy_mode or DEFAULT_ACCOUNT_PROXY_MODE,
+        proxy_url=account.proxy_url,
     )
     if not success:
         return False, result
@@ -132,14 +141,71 @@ def refresh_account_session(
         return False, {"message": "登录成功，但未获取到新的 Session Cookie"}
 
     account.session_cookie = new_session_cookie
+    refreshed_user_id = normalize_optional_str(result.get("user_id"))
+    if refreshed_user_id:
+        try:
+            account.anrouter_user_id = int(refreshed_user_id)
+        except (TypeError, ValueError):
+            pass
+    if result.get("username"):
+        account.username = result.get("username")
+    if result.get("display_name"):
+        account.display_name = result.get("display_name")
     account.updated_at = datetime.now()
     db.commit()
     db.refresh(account)
 
     return True, {
         "session_cookie": new_session_cookie,
+        "user_id": refreshed_user_id,
         "message": "Session 已自动刷新",
     }
+
+
+def login_account_session(
+    db: Session,
+    account: Account,
+    platform_config: Optional[Dict[str, str]] = None,
+) -> Tuple[bool, Dict[str, Any]]:
+    """强制使用账号密码登录，并同步账号 session/user_id 基础信息。"""
+    if not has_login_credentials(account):
+        return False, {"message": "该平台需要通过登录签到，请先为账号配置登录账号和密码"}
+
+    if platform_config is None:
+        platform_config = get_account_platform_config(account)
+
+    success, result = resolve_session_cookie(
+        base_url=platform_config["base_url"],
+        session_cookie=None,
+        login_username=account.login_username,
+        login_password=account.login_password,
+        prefer_login=True,
+        proxy_mode=account.proxy_mode or DEFAULT_ACCOUNT_PROXY_MODE,
+        proxy_url=account.proxy_url,
+    )
+    if not success:
+        return False, result
+
+    new_session_cookie = normalize_optional_str(result.get("session_cookie"))
+    if not new_session_cookie:
+        return False, {"message": "登录成功，但未获取到新的 Session Cookie"}
+
+    account.session_cookie = new_session_cookie
+    user_id = normalize_optional_str(result.get("user_id"))
+    if user_id:
+        try:
+            account.anrouter_user_id = int(user_id)
+        except (TypeError, ValueError):
+            return False, {"message": "登录成功但 User ID 无效，请手动检查账号"}
+    if result.get("username"):
+        account.username = result.get("username")
+    if result.get("display_name"):
+        account.display_name = result.get("display_name")
+    account.updated_at = datetime.now()
+    db.commit()
+    db.refresh(account)
+
+    return True, result
 
 
 def execute_with_session_refresh(

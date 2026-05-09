@@ -116,6 +116,15 @@
                 <span class="info-value">{{ account?.platform?.name || '—' }}</span>
               </div>
               <div class="info-row">
+                <span class="info-label">访问出口</span>
+                <span class="info-value">
+                  {{ getProxyModeLabel(account?.proxy_mode) }}
+                  <span v-if="account?.proxy_mode === 'custom' && account?.proxy_url_masked" class="muted">
+                    · {{ account.proxy_url_masked }}
+                  </span>
+                </span>
+              </div>
+              <div class="info-row">
                 <span class="info-label">登录账号</span>
                 <span class="info-value">{{ account?.login_username || '—' }}</span>
               </div>
@@ -323,6 +332,22 @@
                 clearable
               />
             </div>
+            <div class="field">
+              <label>访问出口</label>
+              <n-select
+                v-model:value="editForm.proxy_mode"
+                :options="proxyModeOptions"
+                size="small"
+              />
+            </div>
+            <div v-if="editForm.proxy_mode === 'custom'" class="field field-full">
+              <label>代理地址</label>
+              <n-input
+                v-model:value="editForm.proxy_url"
+                size="small"
+                placeholder="http://user:pass@host:port"
+              />
+            </div>
             <div class="field field-full">
               <label>推送渠道</label>
               <n-select
@@ -358,6 +383,7 @@ import {
 import { accountApi, signApi, groupsApi, notifyApi, platformApi } from '../api'
 import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
 import { useEventStream, useViewRefresh } from '../composables'
+import type { AccountProxyMode } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -380,6 +406,8 @@ const editForm = ref({
   login_username: '',
   login_password: '',
   note: '',
+  proxy_mode: 'global' as AccountProxyMode,
+  proxy_url: '',
   clear_login_credentials: false,
   is_active: true,
   platform_id: null as number | null,
@@ -393,6 +421,17 @@ const loadingChannels = ref(false)
 const platformOptions = ref<{ label: string; value: number }[]>([])
 const loadingPlatforms = ref(false)
 const miniTrend = ref<Array<{ date: string; short: string; tone: 'success' | 'error' | 'empty'; label: string; height: number }>>([])
+const proxyModeOptions: Array<{ label: string; value: AccountProxyMode }> = [
+  { label: '跟随全局代理', value: 'global' },
+  { label: '直连服务器出口', value: 'direct' },
+  { label: '自定义代理', value: 'custom' }
+]
+
+const getProxyModeLabel = (mode?: AccountProxyMode) => {
+  if (mode === 'direct') return '直连服务器出口'
+  if (mode === 'custom') return '自定义代理'
+  return '跟随全局代理'
+}
 
 const getAffBaseUrl = () => account.value?.platform?.base_url || ''
 const getAffLink = () => `${getAffBaseUrl()}/register?aff=${accountInfo.value?.aff_code || ''}`
@@ -483,6 +522,8 @@ const loadAccount = async () => {
     editForm.value.group_id = res.data.group_id || null
     editForm.value.login_username = res.data.login_username || ''
     editForm.value.note = res.data.note || ''
+    editForm.value.proxy_mode = res.data.proxy_mode || 'global'
+    editForm.value.proxy_url = ''
     editForm.value.clear_login_credentials = false
   } catch (e: any) {
     window.$notify(e.message, 'error')
@@ -556,6 +597,12 @@ const handleUpdate = async () => {
       window.$notify('请选择平台', 'warning')
       return
     }
+    const currentProxyMode = account.value?.proxy_mode || 'global'
+    const canKeepExistingCustomProxy = currentProxyMode === 'custom' && editForm.value.proxy_mode === 'custom'
+    if (editForm.value.proxy_mode === 'custom' && !editForm.value.proxy_url.trim() && !canKeepExistingCustomProxy) {
+      window.$notify('自定义代理模式需要填写代理地址', 'warning')
+      return
+    }
     const data: any = { is_active: editForm.value.is_active }
     if (editForm.value.user_id.trim()) data.user_id = editForm.value.user_id.trim()
     if (editForm.value.session_cookie.trim()) data.session_cookie = editForm.value.session_cookie.trim()
@@ -575,6 +622,16 @@ const handleUpdate = async () => {
     }
     if (editForm.value.platform_id !== account.value?.platform?.id) {
       data.platform_id = editForm.value.platform_id
+    }
+    const previousProxyMode = account.value?.proxy_mode || 'global'
+    if (editForm.value.proxy_mode !== previousProxyMode) {
+      data.proxy_mode = editForm.value.proxy_mode
+    }
+    if (editForm.value.proxy_mode === 'custom' && editForm.value.proxy_url.trim()) {
+      data.proxy_mode = 'custom'
+      data.proxy_url = editForm.value.proxy_url.trim()
+    } else if (editForm.value.proxy_mode !== 'custom' && previousProxyMode === 'custom') {
+      data.proxy_url = ''
     }
 
     await accountApi.update(accountId, data)
@@ -673,6 +730,8 @@ const openEditModal = async () => {
   editForm.value.login_username = account.value?.login_username || ''
   editForm.value.login_password = ''
   editForm.value.note = account.value?.note || ''
+  editForm.value.proxy_mode = account.value?.proxy_mode || 'global'
+  editForm.value.proxy_url = ''
   editForm.value.clear_login_credentials = false
   editForm.value.is_active = account.value?.is_active ?? true
   editForm.value.platform_id = account.value?.platform?.id || null

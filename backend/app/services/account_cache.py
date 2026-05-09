@@ -48,7 +48,9 @@ def refresh_account_user_cache(
             user_id,
             current_platform["base_url"],
             user_api=current_platform["user_api"],
-            console_url=current_platform["console_url"]
+            console_url=current_platform["console_url"],
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )

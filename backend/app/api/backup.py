@@ -14,9 +14,22 @@ from app.models import Account, SignLog, Setting, NotifyChannel, AccountNotify, 
 from app.schemas import ApiResponse
 from app.services.audit import log_action
 from app.api.deps import get_current_user
-from app.utils.platform import DEFAULT_CHECKIN_API
+from app.utils.platform import DEFAULT_CHECKIN_API, DEFAULT_SIGN_MODE, normalize_sign_mode
+from app.utils.proxy import normalize_proxy_mode, normalize_proxy_url, validate_proxy_url
 
 router = APIRouter(prefix="/backup", tags=["备份恢复"])
+
+
+def clean_imported_proxy(proxy_mode: Optional[str], proxy_url: Optional[str]) -> tuple[str, Optional[str]]:
+    """清理备份中的账号级代理配置。"""
+    mode = normalize_proxy_mode(proxy_mode)
+    cleaned_proxy_url = normalize_proxy_url(proxy_url)
+    if mode == "custom":
+        if not cleaned_proxy_url:
+            raise HTTPException(status_code=400, detail="备份中的自定义代理账号缺少代理地址")
+        validate_proxy_url(cleaned_proxy_url)
+        return mode, cleaned_proxy_url
+    return mode, None
 
 
 @router.get("/export", response_class=StreamingResponse)
@@ -48,6 +61,7 @@ def export_backup(
             "id": platform.id,
             "name": platform.name,
             "base_url": platform.base_url,
+            "sign_mode": platform.sign_mode or DEFAULT_SIGN_MODE,
             "sign_api": platform.sign_api,
             "checkin_api": platform.checkin_api or DEFAULT_CHECKIN_API,
             "user_api": platform.user_api,
@@ -72,6 +86,9 @@ def export_backup(
             "platform_id": acc.platform_id,
             "username": acc.username,
             "display_name": acc.display_name,
+            "note": acc.note,
+            "proxy_mode": acc.proxy_mode or "global",
+            "proxy_url": acc.proxy_url,
             "is_active": acc.is_active,
             "health_status": acc.health_status,
             "created_at": acc.created_at.isoformat() if acc.created_at else None,
@@ -200,6 +217,7 @@ async def import_backup(
                 if existing:
                     if overwrite:
                         existing.base_url = p["base_url"]
+                        existing.sign_mode = normalize_sign_mode(p.get("sign_mode", DEFAULT_SIGN_MODE))
                         existing.sign_api = p.get("sign_api")
                         existing.checkin_api = p.get("checkin_api") or DEFAULT_CHECKIN_API
                         existing.user_api = p.get("user_api")
@@ -215,6 +233,7 @@ async def import_backup(
                     new_platform = Platform(
                         name=p["name"],
                         base_url=p["base_url"],
+                        sign_mode=normalize_sign_mode(p.get("sign_mode", DEFAULT_SIGN_MODE)),
                         sign_api=p.get("sign_api"),
                         checkin_api=p.get("checkin_api") or DEFAULT_CHECKIN_API,
                         user_api=p.get("user_api"),
@@ -282,6 +301,8 @@ async def import_backup(
                 if imported_platform_id is None or mapped_platform_id is None:
                     raise HTTPException(status_code=400, detail="备份中的账号缺少平台信息，请使用新版本备份文件")
 
+                proxy_mode, proxy_url = clean_imported_proxy(acc.get("proxy_mode"), acc.get("proxy_url"))
+
                 # 检查是否存在相同平台下的同 user_id 账号
                 existing = None
                 if imported_user_id:
@@ -297,6 +318,9 @@ async def import_backup(
                         existing.platform_id = mapped_platform_id
                         existing.username = acc.get("username")
                         existing.display_name = acc.get("display_name")
+                        existing.note = acc.get("note")
+                        existing.proxy_mode = proxy_mode
+                        existing.proxy_url = proxy_url
                         existing.is_active = acc.get("is_active", True)
                         account_id_map[old_id] = existing.id
                         imported_counts["accounts"] += 1
@@ -311,6 +335,9 @@ async def import_backup(
                         platform_id=mapped_platform_id,
                         username=acc.get("username"),
                         display_name=acc.get("display_name"),
+                        note=acc.get("note"),
+                        proxy_mode=proxy_mode,
+                        proxy_url=proxy_url,
                         is_active=acc.get("is_active", True),
                         health_status=acc.get("health_status", "unknown"),
                     )

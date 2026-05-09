@@ -116,6 +116,24 @@
             />
           </div>
 
+          <div class="field">
+            <label class="field-label">访问出口</label>
+            <n-select
+              v-model:value="form.proxy_mode"
+              :options="proxyModeOptions"
+              size="small"
+            />
+          </div>
+
+          <div v-if="form.proxy_mode === 'custom'" class="field field-full">
+            <label class="field-label">代理地址</label>
+            <n-input
+              v-model:value="form.proxy_url"
+              size="small"
+              placeholder="http://user:pass@host:port"
+            />
+          </div>
+
           <div class="field field-full">
             <label class="field-label">备注</label>
             <n-input
@@ -168,7 +186,7 @@
 import { computed, ref, watch } from 'vue'
 import { CloseOutline, InformationCircleOutline } from '@vicons/ionicons5'
 import { notifyApi, platformApi } from '../../api'
-import type { Account, AccountGroup, NotifyChannel, Platform, SelectOption } from '../../types'
+import type { Account, AccountGroup, AccountProxyMode, NotifyChannel, Platform, SelectOption } from '../../types'
 
 const props = defineProps<{
   show: boolean
@@ -184,6 +202,8 @@ const emit = defineEmits<{
     login_username: string
     login_password: string
     note: string
+    proxy_mode: AccountProxyMode
+    proxy_url: string
     clear_login_credentials: boolean
     is_active?: boolean
     platform_id: number | null
@@ -205,6 +225,8 @@ const form = ref({
   login_username: '',
   login_password: '',
   note: '',
+  proxy_mode: 'global' as AccountProxyMode,
+  proxy_url: '',
   clear_login_credentials: false,
   is_active: true,
   platform_id: null as number | null,
@@ -217,6 +239,11 @@ const loadingChannels = ref(false)
 const loadingPlatforms = ref(false)
 const channelOptions = ref<SelectOption<number>[]>([])
 const platformOptions = ref<SelectOption<number>[]>([])
+const proxyModeOptions: SelectOption<AccountProxyMode>[] = [
+  { label: '跟随全局代理', value: 'global' },
+  { label: '直连服务器出口', value: 'direct' },
+  { label: '自定义代理', value: 'custom' }
+]
 
 const groupOptions = computed(() =>
   props.groups.map(group => ({ label: group.name, value: group.id }))
@@ -229,6 +256,8 @@ const resetForm = () => {
     login_username: '',
     login_password: '',
     note: '',
+    proxy_mode: 'global',
+    proxy_url: '',
     clear_login_credentials: false,
     is_active: true,
     platform_id: null,
@@ -249,6 +278,8 @@ const applyAccountToForm = (account?: Account | null) => {
     login_username: account.login_username || '',
     login_password: '',
     note: account.note || '',
+    proxy_mode: account.proxy_mode || 'global',
+    proxy_url: '',
     clear_login_credentials: false,
     is_active: account.is_active,
     platform_id: account.platform?.id || null,
@@ -326,6 +357,14 @@ const close = () => {
 const handleSubmit = () => {
   if (!form.value.platform_id) {
     window.$notify('请选择平台', 'warning')
+    return
+  }
+
+  const currentProxyMode = props.account?.proxy_mode || 'global'
+  const canKeepExistingCustomProxy = isEdit.value && currentProxyMode === 'custom' && form.value.proxy_mode === 'custom'
+
+  if (form.value.proxy_mode === 'custom' && !form.value.proxy_url.trim() && !canKeepExistingCustomProxy) {
+    window.$notify('自定义代理模式需要填写代理地址', 'warning')
     return
   }
 

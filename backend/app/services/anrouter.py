@@ -268,8 +268,8 @@ class AnyRouterService:
                 return AnyRouterService._safe_int(record.get("quota_awarded"), 0)
         return None
 
-    def _get_proxy_config(self) -> Dict[str, str]:
-        """读取出站代理配置。"""
+    def _get_global_proxy_config(self) -> Dict[str, str]:
+        """读取全局出站代理配置。"""
         proxy_enabled = settings.anyrouter_proxy_enabled
         proxy_url = (settings.anyrouter_proxy_url or "").strip()
         db = None
@@ -315,7 +315,25 @@ class AnyRouterService:
             "https": proxy_url
         }
 
-    def _get_session(self) -> requests.Session:
+    @staticmethod
+    def _build_proxy_config(proxy_url: str) -> Dict[str, str]:
+        """把代理地址转换为 requests 需要的配置。"""
+        return {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+
+    def _get_proxy_config(self, proxy_mode: str = "global", proxy_url: Optional[str] = None) -> Dict[str, str]:
+        """按账号代理模式解析本次请求的出站代理。"""
+        mode = (proxy_mode or "global").strip().lower()
+        if mode == "direct":
+            return {}
+        if mode == "custom":
+            cleaned_proxy_url = (proxy_url or "").strip()
+            return self._build_proxy_config(cleaned_proxy_url) if cleaned_proxy_url else {}
+        return self._get_global_proxy_config()
+
+    def _get_session(self, proxy_mode: str = "global", proxy_url: Optional[str] = None) -> requests.Session:
         """
         获取新的 Session 实例
         避免在多线程环境下复用 Session 导致的 SSL 连接问题
@@ -333,7 +351,7 @@ class AnyRouterService:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("https://", adapter)
         session.mount("http://", adapter)
-        proxy_config = self._get_proxy_config()
+        proxy_config = self._get_proxy_config(proxy_mode=proxy_mode, proxy_url=proxy_url)
         if proxy_config:
             session.proxies.update(proxy_config)
         return session
@@ -374,7 +392,9 @@ class AnyRouterService:
         user_id: str,
         base_url: str,
         console_url: str = None,
-        session: requests.Session = None
+        session: requests.Session = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None
     ) -> Dict[str, str]:
         """获取 Cookies 并处理反爬虫挑战"""
         if console_url is None:
@@ -382,7 +402,7 @@ class AnyRouterService:
         cookies = {"session": session_cookie}
         headers = self._get_headers(user_id, base_url, console_url)
         if session is None:
-            session = self._get_session()
+            session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
 
         try:
             response = session.get(
@@ -414,6 +434,8 @@ class AnyRouterService:
         login_api: str = None,
         login_page: str = None,
         turnstile: str = "",
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """使用账号密码登录并提取新的 session cookie。"""
         if login_api is None:
@@ -421,7 +443,7 @@ class AnyRouterService:
         if login_page is None:
             login_page = self.DEFAULT_LOGIN_PAGE
 
-        session = self._get_session()
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
         page_headers = self._get_base_headers(base_url, login_page)
         login_headers = self._get_base_headers(base_url, login_page)
         login_headers["content-type"] = "application/json"
@@ -486,6 +508,8 @@ class AnyRouterService:
                 "user_id": user_id_str,
                 "username": user_info.get("username"),
                 "display_name": user_info.get("display_name"),
+                "checked_in": user_info.get("checked_in"),
+                "quota": self._safe_int(user_info.get("quota"), 0),
                 "raw": data,
             }
 
@@ -502,15 +526,25 @@ class AnyRouterService:
         user_id: str,
         base_url: str,
         user_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         获取用户信息
         """
         if user_api is None:
             user_api = DEFAULT_USER_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:
@@ -554,13 +588,23 @@ class AnyRouterService:
         base_url: str,
         month: str,
         checkin_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """获取指定月份的签到记录。"""
         if checkin_api is None:
             checkin_api = DEFAULT_CHECKIN_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:
@@ -603,7 +647,9 @@ class AnyRouterService:
         base_url: str,
         sign_api: str = None,
         checkin_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         执行签到
@@ -616,8 +662,16 @@ class AnyRouterService:
             if attempt > 0:
                 time.sleep(settings.retry_interval)
 
-            session = self._get_session()
-            cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+            session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+            cookies = self._get_cookies_with_challenge(
+                session_cookie,
+                user_id,
+                base_url,
+                console_url,
+                session=session,
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
+            )
             headers = self._get_headers(user_id, base_url, console_url)
 
             try:
@@ -666,7 +720,9 @@ class AnyRouterService:
                             base_url=base_url,
                             month=target_month,
                             checkin_api=checkin_api,
-                            console_url=console_url
+                            console_url=console_url,
+                            proxy_mode=proxy_mode,
+                            proxy_url=proxy_url,
                         )
                         if checkin_success:
                             reward_quota = self._find_checkin_reward(
@@ -698,15 +754,25 @@ class AnyRouterService:
         user_id: str,
         base_url: str,
         token_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         获取 API Token 列表
         """
         if token_api is None:
             token_api = DEFAULT_TOKEN_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:
@@ -749,15 +815,25 @@ class AnyRouterService:
         user_id: str,
         base_url: str,
         models_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         获取可用模型列表
         """
         if models_api is None:
             models_api = DEFAULT_MODELS_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:
@@ -800,15 +876,25 @@ class AnyRouterService:
         user_id: str,
         base_url: str,
         groups_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         获取账号分组列表
         """
         if groups_api is None:
             groups_api = DEFAULT_GROUPS_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:
@@ -855,13 +941,23 @@ class AnyRouterService:
         console_url: str = None,
         method: str = "post",
         success_msg: str = "操作成功",
-        fail_msg: str = "操作失败"
+        fail_msg: str = "操作失败",
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """令牌相关请求的通用方法"""
         if token_api is None:
             token_api = DEFAULT_TOKEN_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
         headers["content-type"] = "application/json"
 
@@ -916,7 +1012,9 @@ class AnyRouterService:
         allow_ips: str = "",
         group: str = "default",
         token_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """创建访问令牌"""
         payload = {
@@ -933,7 +1031,9 @@ class AnyRouterService:
             session_cookie, user_id, base_url, payload,
             token_api=token_api,
             console_url=console_url,
-            method="post", success_msg="创建成功", fail_msg="创建令牌失败"
+            method="post", success_msg="创建成功", fail_msg="创建令牌失败",
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
 
     def update_token(
@@ -943,14 +1043,18 @@ class AnyRouterService:
         base_url: str,
         token_data: Dict[str, Any],
         token_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """更新访问令牌"""
         return self._token_request(
             session_cookie, user_id, base_url, token_data,
             token_api=token_api,
             console_url=console_url,
-            method="put", success_msg="更新成功", fail_msg="更新令牌失败"
+            method="put", success_msg="更新成功", fail_msg="更新令牌失败",
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
 
     def delete_token(
@@ -960,15 +1064,25 @@ class AnyRouterService:
         base_url: str,
         token_id: int,
         token_api: str = None,
-        console_url: str = None
+        console_url: str = None,
+        proxy_mode: str = "global",
+        proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         删除访问令牌
         """
         if token_api is None:
             token_api = DEFAULT_TOKEN_API
-        session = self._get_session()
-        cookies = self._get_cookies_with_challenge(session_cookie, user_id, base_url, console_url)
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        cookies = self._get_cookies_with_challenge(
+            session_cookie,
+            user_id,
+            base_url,
+            console_url,
+            session=session,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
         headers = self._get_headers(user_id, base_url, console_url)
 
         try:

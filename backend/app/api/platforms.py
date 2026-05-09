@@ -10,6 +10,7 @@ from app.schemas import ApiResponse
 from app.schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.utils.platform import normalize_sign_mode
 
 router = APIRouter(prefix="/platforms", tags=["平台管理"])
 
@@ -26,6 +27,7 @@ def get_platforms(db: Session = Depends(get_db)):
             id=p.id,
             name=p.name,
             base_url=p.base_url,
+            sign_mode=p.sign_mode or "api",
             sign_api=p.sign_api,
             checkin_api=p.checkin_api,
             user_api=p.user_api,
@@ -60,6 +62,7 @@ def create_platform(
     platform = Platform(
         name=data.name,
         base_url=data.base_url,
+        sign_mode=normalize_sign_mode(data.sign_mode),
         sign_api=data.sign_api,
         checkin_api=data.checkin_api,
         user_api=data.user_api,
@@ -82,6 +85,7 @@ def create_platform(
             id=platform.id,
             name=platform.name,
             base_url=platform.base_url,
+            sign_mode=platform.sign_mode or "api",
             sign_api=platform.sign_api,
             checkin_api=platform.checkin_api,
             user_api=platform.user_api,
@@ -114,6 +118,7 @@ def get_platform(platform_id: int, db: Session = Depends(get_db)):
             id=platform.id,
             name=platform.name,
             base_url=platform.base_url,
+            sign_mode=platform.sign_mode or "api",
             sign_api=platform.sign_api,
             checkin_api=platform.checkin_api,
             user_api=platform.user_api,
@@ -155,6 +160,8 @@ def update_platform(
 
     if data.base_url is not None:
         platform.base_url = data.base_url
+    if data.sign_mode is not None:
+        platform.sign_mode = normalize_sign_mode(data.sign_mode)
     if data.sign_api is not None:
         platform.sign_api = data.sign_api
     if data.checkin_api is not None:

@@ -3,7 +3,6 @@
 """
 import json
 from datetime import datetime
-from urllib.parse import urlsplit, urlunsplit
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,7 @@ from app.schemas import ApiResponse, SettingsResponse, SettingsUpdate
 from app.services.scheduler import update_sign_schedule, update_health_check_schedule
 from app.services.audit import log_action
 from app.api.deps import get_current_user
+from app.utils.proxy import mask_proxy_url, validate_proxy_url
 
 router = APIRouter(prefix="/settings", tags=["系统设置"])
 
@@ -55,34 +55,6 @@ def set_setting(db: Session, key: str, value):
             value=json.dumps(value) if not isinstance(value, str) else value
         )
         db.add(setting)
-
-
-def validate_proxy_url(proxy_url: str):
-    """验证代理地址格式，仅支持 HTTP/HTTPS 代理。"""
-    parsed = urlsplit(proxy_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="代理地址格式无效，请填写 HTTP/HTTPS 代理地址")
-
-
-def mask_proxy_url(proxy_url: str) -> str:
-    """脱敏代理地址中的认证信息，避免写入审计日志。"""
-    parsed = urlsplit(proxy_url)
-    if not parsed.username or parsed.password is None:
-        return proxy_url
-
-    host = parsed.hostname or ""
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    if parsed.port:
-        host = f"{host}:{parsed.port}"
-
-    return urlunsplit((
-        parsed.scheme,
-        f"{parsed.username}:***@{host}",
-        parsed.path,
-        parsed.query,
-        parsed.fragment
-    ))
 
 
 @router.get("", response_model=ApiResponse)

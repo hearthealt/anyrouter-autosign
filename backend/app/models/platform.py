@@ -18,6 +18,7 @@ class Platform(Base):
     base_url = Column(String(255), nullable=False)
 
     # API 路径（各平台结构一致时使用默认值即可）
+    sign_mode = Column(String(20), default="api")  # api, login
     sign_api = Column(String(255), default="/api/user/sign_in")
     checkin_api = Column(String(255), default="/api/user/checkin")
     user_api = Column(String(255), default="/api/user/self")

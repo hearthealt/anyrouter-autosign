@@ -76,6 +76,13 @@
               <n-form-item label="Base URL" path="base_url">
                 <n-input v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
               </n-form-item>
+              <n-form-item label="签到方式" path="sign_mode">
+                <n-select
+                  v-model:value="formData.sign_mode"
+                  size="small"
+                  :options="signModeOptions"
+                />
+              </n-form-item>
             </div>
 
             <div class="form-section-title">接口路径</div>
@@ -148,6 +155,7 @@ type PlatformEndpointKey =
 interface PlatformForm {
   name: string
   base_url: string
+  sign_mode: 'api' | 'login'
   sign_api: string
   checkin_api: string
   user_api: string
@@ -161,6 +169,7 @@ interface PlatformForm {
 const createDefaultFormData = (): PlatformForm => ({
   name: '',
   base_url: '',
+  sign_mode: 'api',
   sign_api: '/api/user/sign_in',
   checkin_api: '/api/user/checkin',
   user_api: '/api/user/self',
@@ -174,6 +183,11 @@ const createDefaultFormData = (): PlatformForm => ({
 const endpointKeys: PlatformEndpointKey[] = [
   'sign_api', 'checkin_api', 'user_api', 'status_api',
   'models_api', 'groups_api', 'token_api', 'console_url'
+]
+
+const signModeOptions = [
+  { label: '调用签到接口', value: 'api' },
+  { label: '登录即签到', value: 'login' }
 ]
 
 const platforms = ref<Platform[]>([])
@@ -214,6 +228,9 @@ const getConfiguredPathCount = (platform: Platform) =>
     return count + (value ? 1 : 0)
   }, 0)
 
+const getSignModeLabel = (platform: Platform) =>
+  platform.sign_mode === 'login' ? '登录即签到' : '接口签到'
+
 const formatDateTime = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -224,13 +241,16 @@ const columns = computed<DataTableColumns<Platform>>(() => [
   {
     title: '平台',
     key: 'name',
-    minWidth: 180,
+    minWidth: 260,
     render: row =>
       h('div', { class: 'platform-cell' }, [
-        h('span', { class: 'platform-name' }, row.name),
-        row.is_default
-          ? h('span', { class: 'tag primary' }, '默认')
-          : null
+        h('span', { class: 'platform-name', title: row.name }, row.name),
+        h('span', { class: 'platform-tags' }, [
+          h('span', { class: row.sign_mode === 'login' ? 'tag warning' : 'tag' }, getSignModeLabel(row)),
+          row.is_default
+            ? h('span', { class: 'tag primary' }, '默认')
+            : h('span', { class: 'tag ghost' }, '普通')
+        ])
       ])
   },
   {
@@ -238,7 +258,16 @@ const columns = computed<DataTableColumns<Platform>>(() => [
     key: 'base_url',
     minWidth: 280,
     ellipsis: { tooltip: true },
-    render: row => h('code', { class: 'mono' }, row.base_url)
+    render: row => h(
+      'a',
+      {
+        class: 'mono link-url',
+        href: row.base_url,
+        target: '_blank',
+        rel: 'noopener noreferrer'
+      },
+      row.base_url
+    )
   },
   {
     title: '账号',
@@ -306,6 +335,7 @@ const editPlatform = (platform: Platform) => {
   formData.value = {
     name: platform.name,
     base_url: platform.base_url,
+    sign_mode: platform.sign_mode || 'api',
     sign_api: platform.sign_api || '/api/user/sign_in',
     checkin_api: platform.checkin_api || '/api/user/checkin',
     user_api: platform.user_api || '/api/user/self',
@@ -430,24 +460,41 @@ useViewRefresh(loadPlatforms)
 }
 
 .platforms-page :deep(.platform-cell) {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: var(--spacing-3);
+  width: 100%;
+  min-width: 0;
 }
 
 .platforms-page :deep(.platform-name) {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-primary);
   font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platforms-page :deep(.platform-tags) {
+  display: inline-grid;
+  grid-template-columns: 70px 36px;
+  gap: 6px;
+  justify-content: end;
 }
 
 .platforms-page :deep(.tag) {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   height: 18px;
   padding: 0 6px;
   border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: var(--font-medium);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
 }
 
 .platforms-page :deep(.tag.primary) {
@@ -455,10 +502,29 @@ useViewRefresh(loadPlatforms)
   color: var(--primary-color);
 }
 
+.platforms-page :deep(.tag.warning) {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.platforms-page :deep(.tag.ghost) {
+  background: transparent;
+  color: transparent;
+}
+
 .platforms-page :deep(.mono) {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-secondary);
+}
+
+.platforms-page :deep(.link-url) {
+  text-decoration: none;
+}
+
+.platforms-page :deep(.link-url:hover) {
+  color: var(--primary-color);
+  text-decoration: underline;
 }
 
 .platforms-page :deep(.actions) {

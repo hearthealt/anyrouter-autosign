@@ -28,6 +28,10 @@ from app.utils import (
     format_quota_percent,
     get_platform_config,
     get_account_platform_config,
+    mask_proxy_url,
+    normalize_proxy_mode,
+    normalize_proxy_url,
+    validate_proxy_url,
 )
 from app.api.deps import get_current_user
 
@@ -136,6 +140,18 @@ def clean_optional_note(value: Optional[str]) -> Optional[str]:
     return cleaned[:255]
 
 
+def clean_account_proxy(proxy_mode: Optional[str], proxy_url: Optional[str]) -> Tuple[str, Optional[str]]:
+    """校验并清理账号级代理配置。"""
+    mode = normalize_proxy_mode(proxy_mode)
+    cleaned_proxy_url = normalize_proxy_url(proxy_url)
+    if mode == "custom":
+        if not cleaned_proxy_url:
+            raise HTTPException(status_code=400, detail="自定义代理模式必须填写代理地址")
+        validate_proxy_url(cleaned_proxy_url)
+        return mode, cleaned_proxy_url
+    return mode, None
+
+
 def build_account_response(db: Session, account: Account) -> AccountResponse:
     """统一构造账号响应。"""
     total_quota = account.cached_quota + account.cached_used_quota
@@ -146,6 +162,9 @@ def build_account_response(db: Session, account: Account) -> AccountResponse:
         note=account.note,
         login_username=account.login_username,
         has_login_credentials=has_login_credentials(account),
+        proxy_mode=account.proxy_mode or "global",
+        proxy_url=None,
+        proxy_url_masked=mask_proxy_url(account.proxy_url) if account.proxy_url else None,
         anrouter_user_id=account.anrouter_user_id,
         anyrouter_user_id=account.anyrouter_user_id,
         is_active=account.is_active,
@@ -367,6 +386,7 @@ def create_account(
     login_username = clean_optional_str(data.login_username)
     login_password = clean_optional_secret(data.login_password)
     note = clean_optional_note(data.note)
+    proxy_mode, proxy_url = clean_account_proxy(data.proxy_mode, data.proxy_url)
 
     if bool(login_username) != bool(login_password):
         raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
@@ -381,6 +401,8 @@ def create_account(
         login_username=login_username,
         login_password=login_password,
         prefer_login=prefer_login,
+        proxy_mode=proxy_mode,
+        proxy_url=proxy_url,
     )
     if not resolved:
         raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
@@ -396,7 +418,9 @@ def create_account(
         user_id,
         platform_config["base_url"],
         user_api=platform_config["user_api"],
-        console_url=platform_config["console_url"]
+        console_url=platform_config["console_url"],
+        proxy_mode=proxy_mode,
+        proxy_url=proxy_url,
     )
 
     if not success:
@@ -414,6 +438,8 @@ def create_account(
         login_username=login_username,
         login_password=login_password,
         note=note,
+        proxy_mode=proxy_mode,
+        proxy_url=proxy_url,
         anrouter_user_id=int(user_id),
         username=user_info.get("username"),
         display_name=user_info.get("display_name"),
@@ -493,6 +519,7 @@ def batch_import_accounts(
             login_username = clean_optional_str(item.login_username)
             login_password = clean_optional_secret(item.login_password)
             note = clean_optional_note(item.note)
+            proxy_mode, proxy_url = clean_account_proxy(item.proxy_mode, item.proxy_url)
 
             if bool(login_username) != bool(login_password):
                 results.append(BatchImportResultItem(
@@ -513,6 +540,8 @@ def batch_import_accounts(
                 login_username=login_username,
                 login_password=login_password,
                 prefer_login=prefer_login,
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
             )
             if not resolved:
                 results.append(BatchImportResultItem(
@@ -534,7 +563,9 @@ def batch_import_accounts(
                 user_id,
                 platform_config["base_url"],
                 user_api=platform_config["user_api"],
-                console_url=platform_config["console_url"]
+                console_url=platform_config["console_url"],
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
             )
             if not ok:
                 results.append(BatchImportResultItem(
@@ -556,6 +587,8 @@ def batch_import_accounts(
                 login_username=login_username,
                 login_password=login_password,
                 note=note,
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
                 anrouter_user_id=int(user_id),
                 username=user_info.get("username"),
                 display_name=user_info.get("display_name"),
@@ -686,6 +719,16 @@ def update_account(
     if data.note is not None:
         next_note = clean_optional_note(data.note)
 
+    proxy_updated = data.proxy_mode is not None or data.proxy_url is not None
+    target_proxy_mode = account.proxy_mode or "global"
+    target_proxy_url = account.proxy_url
+    if proxy_updated:
+        target_proxy_mode = data.proxy_mode if data.proxy_mode is not None else target_proxy_mode
+        target_proxy_url = data.proxy_url if data.proxy_url is not None else target_proxy_url
+        if target_proxy_mode == "custom" and data.proxy_url == "" and account.proxy_url:
+            target_proxy_url = account.proxy_url
+        target_proxy_mode, target_proxy_url = clean_account_proxy(target_proxy_mode, target_proxy_url)
+
     if target_user_id and (data.user_id is not None or data.platform_id is not None):
         existing = find_existing_account(
             db,
@@ -706,8 +749,9 @@ def update_account(
         data.login_password is not None,
         data.clear_login_credentials is not None,
     ])
+    remote_validation_needed = credentials_updated or data.platform_id is not None or proxy_updated
 
-    if credentials_updated:
+    if remote_validation_needed:
         # 使用新的 user_id 或现有的
         user_id = target_user_id
         if not user_id:
@@ -724,6 +768,8 @@ def update_account(
             login_username=target_login_username,
             login_password=target_login_password,
             prefer_login=prefer_login,
+            proxy_mode=target_proxy_mode,
+            proxy_url=target_proxy_url,
         )
         if not resolved:
             raise HTTPException(status_code=400, detail=session_result.get("message", "凭证验证失败"))
@@ -736,14 +782,17 @@ def update_account(
             user_id,
             platform_config["base_url"],
             user_api=platform_config["user_api"],
-            console_url=platform_config["console_url"]
+            console_url=platform_config["console_url"],
+            proxy_mode=target_proxy_mode,
+            proxy_url=target_proxy_url,
         )
         if not success:
             raise HTTPException(status_code=400, detail=user_info.get("message", "凭证验证失败"))
 
-        account.session_cookie = session_cookie
-        account.login_username = target_login_username
-        account.login_password = target_login_password
+        if credentials_updated or data.platform_id is not None:
+            account.session_cookie = session_cookie
+            account.login_username = target_login_username
+            account.login_password = target_login_password
         account.anrouter_user_id = int(user_id)
         account.username = user_info.get("username")
         account.display_name = user_info.get("display_name")
@@ -756,7 +805,18 @@ def update_account(
         account.cached_aff_count = user_info.get("aff_count", 0)
         account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
         account.quota_updated_at = datetime.now()
-        changes["credentials"] = "已更新"
+        if credentials_updated:
+            changes["credentials"] = "已更新"
+
+    if proxy_updated:
+        previous_proxy_mode = account.proxy_mode or "global"
+        previous_proxy_url = account.proxy_url
+        if previous_proxy_mode != target_proxy_mode:
+            changes["proxy_mode"] = f"{previous_proxy_mode} -> {target_proxy_mode}"
+        if previous_proxy_url != target_proxy_url:
+            changes["proxy_url"] = "已更新"
+        account.proxy_mode = target_proxy_mode
+        account.proxy_url = target_proxy_url
 
     if data.is_active is not None:
         if account.is_active != data.is_active:
@@ -973,7 +1033,9 @@ def sync_account_tokens(db: Session, account: Account) -> int:
             user_id,
             current_platform["base_url"],
             token_api=current_platform["token_api"],
-            console_url=current_platform["console_url"]
+            console_url=current_platform["console_url"],
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )
@@ -1205,7 +1267,9 @@ def create_account_token(account_id: int, data: CreateTokenRequest, db: Session 
             allow_ips=data.allow_ips,
             group=data.group,
             token_api=current_platform["token_api"],
-            console_url=current_platform["console_url"]
+            console_url=current_platform["console_url"],
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )
@@ -1244,7 +1308,9 @@ def get_account_models(account_id: int, db: Session = Depends(get_db)):
             user_id,
             current_platform["base_url"],
             models_api=current_platform["models_api"],
-            console_url=current_platform["console_url"]
+            console_url=current_platform["console_url"],
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )
@@ -1280,7 +1346,9 @@ def get_account_groups(account_id: int, db: Session = Depends(get_db)):
             user_id,
             current_platform["base_url"],
             groups_api=current_platform["groups_api"],
-            console_url=current_platform["console_url"]
+            console_url=current_platform["console_url"],
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )
@@ -1318,7 +1386,9 @@ def delete_account_token(account_id: int, token_id: int, db: Session = Depends(g
             base_url=current_platform["base_url"],
             token_api=current_platform["token_api"],
             console_url=current_platform["console_url"],
-            token_id=token_id
+            token_id=token_id,
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )
@@ -1366,7 +1436,9 @@ def update_account_token(account_id: int, token_id: int, data: dict, db: Session
             base_url=current_platform["base_url"],
             token_api=current_platform["token_api"],
             console_url=current_platform["console_url"],
-            token_data=data
+            token_data=data,
+            proxy_mode=account.proxy_mode,
+            proxy_url=account.proxy_url,
         ),
         platform_config=platform_config,
     )

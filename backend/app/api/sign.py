@@ -13,7 +13,8 @@ from app.models import Account, SignLog, NotifyChannel, AccountNotify
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
-from app.services import anrouter_service, execute_with_session_refresh, NotifyFactory, refresh_account_user_cache
+from app.services import NotifyFactory, execute_sign_request
+from app.services.signing import refresh_account_cache_after_sign as refresh_cache_after_sign
 from app.services.events import publish_event
 from app.utils import format_quota, get_account_platform_config
 
@@ -52,19 +53,7 @@ def build_success_notification_content(reward_quota: int) -> str:
 
 def perform_sign_request(db: Session, account: Account, platform_config: dict):
     """执行签到请求，必要时自动刷新 session 后重试。"""
-    return execute_with_session_refresh(
-        db,
-        account,
-        lambda session_cookie, user_id, current_platform: anrouter_service.sign_in(
-            session_cookie,
-            user_id,
-            current_platform["base_url"],
-            sign_api=current_platform["sign_api"],
-            checkin_api=current_platform["checkin_api"],
-            console_url=current_platform["console_url"]
-        ),
-        platform_config=platform_config,
-    )
+    return execute_sign_request(db, account, platform_config=platform_config)
 
 
 def refresh_account_cache_after_sign(
@@ -74,22 +63,7 @@ def refresh_account_cache_after_sign(
     request_success: bool,
 ) -> None:
     """签到请求成功返回后，顺便刷新账号缓存额度。"""
-    if not request_success:
-        return
-
-    cache_success, cache_result = refresh_account_user_cache(
-        db,
-        account,
-        platform_config=platform_config,
-    )
-    if cache_success:
-        return
-
-    logger.warning(
-        "签到后刷新账号缓存失败: account_id=%s, message=%s",
-        account.id,
-        cache_result.get("message", "未知错误"),
-    )
+    refresh_cache_after_sign(db, account, platform_config, request_success)
 
 
 @router.post("/accounts/{account_id}/sign", response_model=ApiResponse)
@@ -103,12 +77,12 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     if not account.is_active:
         raise HTTPException(status_code=400, detail="账号已禁用")
 
-    if not account.anrouter_user_id:
-        raise HTTPException(status_code=400, detail="账号缺少 user_id")
     if not account.platform_id or not account.platform:
         raise HTTPException(status_code=400, detail="账号未配置平台")
 
     platform_config = get_account_platform_config(account)
+    if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
+        raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
     # 执行签到
     request_success, result = perform_sign_request(db, account, platform_config)
@@ -191,7 +165,6 @@ def batch_sign(db: Session = Depends(get_db)):
     """批量签到所有启用账号"""
     accounts = db.query(Account).filter(
         Account.is_active == True,
-        Account.anrouter_user_id.isnot(None),
         Account.platform_id.isnot(None)
     ).all()
 
@@ -202,6 +175,8 @@ def batch_sign(db: Session = Depends(get_db)):
 
     for account in accounts:
         platform_config = get_account_platform_config(account)
+        if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
+            continue
 
         request_success, result = perform_sign_request(db, account, platform_config)
         sign_success = request_success and result.get("success", False)
@@ -255,22 +230,25 @@ def batch_sign(db: Session = Depends(get_db)):
             account_id=account.id,
             username=account.username or "",
             success=sign_success,
-            message=result_message
+            message=result_message,
+            reward_quota=reward_quota,
+            reward_display=format_quota(reward_quota),
+            status=log_status
         ))
 
     db.commit()
 
-    for account, result_item in zip(accounts, results):
+    for result_item in results:
         publish_event(
             "sign_completed",
             {
-                "account_id": account.id,
-                "username": account.username or "",
+                "account_id": result_item.account_id,
+                "username": result_item.username,
                 "success": result_item.success,
-                "already_signed": result_item.message == "今日已签到",
+                "already_signed": result_item.status == "already_signed",
                 "message": result_item.message,
-                "reward_quota": 0,
-                "reward_display": format_quota(0),
+                "reward_quota": result_item.reward_quota,
+                "reward_display": result_item.reward_display,
             }
         )
 
@@ -278,7 +256,7 @@ def batch_sign(db: Session = Depends(get_db)):
         success=True,
         message=f"批量签到完成：成功 {success_count}，已签到 {already_signed_count}，失败 {fail_count}",
         data=BatchSignResponse(
-            total=len(accounts),
+            total=len(results),
             success_count=success_count,
             fail_count=fail_count,
             already_signed_count=already_signed_count,

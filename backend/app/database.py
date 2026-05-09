@@ -41,6 +41,7 @@ def init_db():
     _migrate_platform_schema()
     _migrate_account_login_schema()
     _migrate_account_note_schema()
+    _migrate_account_proxy_schema()
 
     # 初始化默认管理员
     _init_default_admin()
@@ -77,6 +78,7 @@ def _migrate_platform_schema():
         DEFAULT_CONSOLE_URL,
         DEFAULT_GROUPS_API,
         DEFAULT_MODELS_API,
+        DEFAULT_SIGN_MODE,
         DEFAULT_SIGN_API,
         DEFAULT_STATUS_API,
         DEFAULT_TOKEN_API,
@@ -97,6 +99,19 @@ def _migrate_platform_schema():
 
         if inspector.has_table("platforms"):
             platform_columns = {column["name"] for column in inspector.get_columns("platforms")}
+            if "sign_mode" not in platform_columns:
+                db.execute(text("ALTER TABLE platforms ADD COLUMN sign_mode VARCHAR(20)"))
+                db.commit()
+                logger.info("已为 platforms 表添加 sign_mode 列")
+
+            result = db.execute(
+                text("UPDATE platforms SET sign_mode = :sign_mode WHERE sign_mode IS NULL OR sign_mode = ''"),
+                {"sign_mode": DEFAULT_SIGN_MODE}
+            )
+            if result.rowcount:
+                db.commit()
+                logger.info(f"已为 {result.rowcount} 个平台回填 sign_mode")
+
             if "checkin_api" not in platform_columns:
                 db.execute(text("ALTER TABLE platforms ADD COLUMN checkin_api VARCHAR(255)"))
                 db.commit()
@@ -117,6 +132,7 @@ def _migrate_platform_schema():
                 anyrouter_platform = Platform(
                     name="AnyRouter",
                     base_url=DEFAULT_BASE_URL,
+                    sign_mode=DEFAULT_SIGN_MODE,
                     sign_api=DEFAULT_SIGN_API,
                     checkin_api=DEFAULT_CHECKIN_API,
                     user_api=DEFAULT_USER_API,
@@ -198,6 +214,40 @@ def _migrate_account_note_schema():
     except Exception as e:
         db.rollback()
         logger.error(f"账号备注字段迁移失败: {e}")
+    finally:
+        db.close()
+
+
+def _migrate_account_proxy_schema():
+    """为旧数据库补充账号级代理字段。"""
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("accounts"):
+            return
+
+        account_columns = {column["name"] for column in inspector.get_columns("accounts")}
+
+        if "proxy_mode" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN proxy_mode VARCHAR(20)"))
+            db.commit()
+            logger.info("已为 accounts 表添加 proxy_mode 列")
+
+        if "proxy_url" not in account_columns:
+            db.execute(text("ALTER TABLE accounts ADD COLUMN proxy_url TEXT"))
+            db.commit()
+            logger.info("已为 accounts 表添加 proxy_url 列")
+
+        result = db.execute(
+            text("UPDATE accounts SET proxy_mode = 'global' WHERE proxy_mode IS NULL OR proxy_mode = ''")
+        )
+        if result.rowcount:
+            db.commit()
+            logger.info(f"已为 {result.rowcount} 个账号回填默认代理模式")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"账号代理字段迁移失败: {e}")
     finally:
         db.close()
 

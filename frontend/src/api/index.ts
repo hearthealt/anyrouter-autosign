@@ -58,7 +58,7 @@ export const authApi = {
 // 平台 API
 export const platformApi = {
   getList: () => api.get('/platforms'),
-  create: (data: { name: string; base_url: string; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string }) => api.post('/platforms', data),
+  create: (data: { name: string; base_url: string; sign_mode?: 'api' | 'login'; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string }) => api.post('/platforms', data),
   get: (id: number) => api.get(`/platforms/${id}`),
   update: (id: number, data: any) => api.put(`/platforms/${id}`, data),
   delete: (id: number) => api.delete(`/platforms/${id}`)
@@ -76,13 +76,16 @@ export const accountApi = {
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   }) => api.get('/accounts', { params }),
-  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; proxy_mode?: 'global' | 'direct' | 'custom'; proxy_url?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
   batchImport: (data: {
     items: Array<{
       session_cookie?: string
       user_id?: string
       login_username?: string
       login_password?: string
+      note?: string
+      proxy_mode?: 'global' | 'direct' | 'custom'
+      proxy_url?: string
       platform_id: number
       group_id?: number
     }>

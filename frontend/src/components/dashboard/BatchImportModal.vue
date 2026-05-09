@@ -17,6 +17,7 @@
           <span>
             字段支持 <code>platform_id</code> / <code>platform</code>、
             <code>group_id</code> / <code>group</code>，账号凭证字段与单个添加账号保持一致。
+            访问出口字段支持 <code>proxy_mode</code>、<code>proxy_url</code>。
           </span>
         </div>
 
@@ -68,7 +69,8 @@
                   <div class="upload-title">CSV 表头</div>
                   <div class="upload-desc">
                     <code>platform_id</code>, <code>platform</code>, <code>group_id</code>, <code>group</code>,
-                    <code>user_id</code>, <code>session_cookie</code>, <code>login_username</code>, <code>login_password</code>
+                    <code>user_id</code>, <code>session_cookie</code>, <code>login_username</code>, <code>login_password</code>,
+                    <code>proxy_mode</code>, <code>proxy_url</code>
                   </div>
                 </div>
                 <n-upload
@@ -155,6 +157,7 @@ import type {
   BatchImportItem,
   BatchImportResponse,
   BatchImportResultItem,
+  AccountProxyMode,
   Platform,
   SelectOption,
 } from '../../types'
@@ -210,6 +213,15 @@ const normalizeOptionalString = (value: unknown): string | undefined => {
   if (value == null) return undefined
   const normalized = String(value).trim()
   return normalized || undefined
+}
+
+const normalizeProxyMode = (value: unknown, index: number): AccountProxyMode => {
+  const normalized = normalizeOptionalString(value)?.toLowerCase()
+  if (!normalized) return 'global'
+  if (normalized === 'global' || normalized === 'direct' || normalized === 'custom') {
+    return normalized
+  }
+  throw new Error(`第 ${index + 1} 条的 proxy_mode 无效`)
 }
 
 const resolveNamedPlatform = (name: string) =>
@@ -270,14 +282,25 @@ const resolveGroupId = (row: Record<string, unknown>, index: number): number | u
 }
 
 const buildImportItems = (rows: Array<Record<string, unknown>>): BatchImportItem[] => {
-  return rows.map((raw, index) => ({
-    platform_id: resolvePlatformId(raw, index),
-    group_id: resolveGroupId(raw, index),
-    user_id: normalizeOptionalString(raw.user_id ?? raw.userId),
-    session_cookie: normalizeOptionalString(raw.session_cookie ?? raw.sessionCookie),
-    login_username: normalizeOptionalString(raw.login_username ?? raw.loginUsername),
-    login_password: normalizeOptionalString(raw.login_password ?? raw.loginPassword),
-  }))
+  return rows.map((raw, index) => {
+    const proxyMode = normalizeProxyMode(raw.proxy_mode ?? raw.proxyMode, index)
+    const proxyUrl = normalizeOptionalString(raw.proxy_url ?? raw.proxyUrl)
+    if (proxyMode === 'custom' && !proxyUrl) {
+      throw new Error(`第 ${index + 1} 条使用 custom 代理时必须填写 proxy_url`)
+    }
+
+    return {
+      platform_id: resolvePlatformId(raw, index),
+      group_id: resolveGroupId(raw, index),
+      user_id: normalizeOptionalString(raw.user_id ?? raw.userId),
+      session_cookie: normalizeOptionalString(raw.session_cookie ?? raw.sessionCookie),
+      login_username: normalizeOptionalString(raw.login_username ?? raw.loginUsername),
+      login_password: normalizeOptionalString(raw.login_password ?? raw.loginPassword),
+      note: normalizeOptionalString(raw.note),
+      proxy_mode: proxyMode,
+      proxy_url: proxyMode === 'custom' ? proxyUrl : undefined,
+    }
+  })
 }
 
 const parseJsonRows = (): Array<Record<string, unknown>> => {
@@ -388,12 +411,15 @@ const fillExample = () => {
         platform: defaultPlatform?.name || 'AnyRouter',
         group: firstGroup?.name,
         login_username: 'demo@example.com',
-        login_password: 'secret-password'
+        login_password: 'secret-password',
+        proxy_mode: 'direct'
       },
       {
         platform_id: defaultPlatform?.id || 1,
         user_id: '123456',
-        session_cookie: 'your-session-cookie'
+        session_cookie: 'your-session-cookie',
+        proxy_mode: 'custom',
+        proxy_url: 'http://user:pass@cn-proxy.example.com:8080'
       }
     ],
     null,

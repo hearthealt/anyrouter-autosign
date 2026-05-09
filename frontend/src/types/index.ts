@@ -3,6 +3,7 @@ export interface Platform {
   id: number
   name: string
   base_url: string
+  sign_mode?: 'api' | 'login'
   sign_api?: string
   checkin_api?: string
   user_api?: string
@@ -31,6 +32,9 @@ export interface Account {
   note?: string
   login_username?: string
   has_login_credentials?: boolean
+  proxy_mode?: AccountProxyMode
+  proxy_url?: string
+  proxy_url_masked?: string
   is_active: boolean
   platform?: PlatformBrief
   health_status: 'healthy' | 'unhealthy' | 'unknown'
@@ -74,15 +78,22 @@ export interface CreateAccountParams {
   login_username?: string
   login_password?: string
   note?: string
+  proxy_mode?: AccountProxyMode
+  proxy_url?: string
   platform_id: number
   group_id?: number
 }
+
+export type AccountProxyMode = 'global' | 'direct' | 'custom'
 
 export interface BatchImportItem {
   session_cookie?: string
   user_id?: string
   login_username?: string
   login_password?: string
+  note?: string
+  proxy_mode?: AccountProxyMode
+  proxy_url?: string
   platform_id: number
   group_id?: number
 }
@@ -108,6 +119,8 @@ export interface UpdateAccountParams {
   login_username?: string
   login_password?: string
   note?: string
+  proxy_mode?: AccountProxyMode
+  proxy_url?: string
   clear_login_credentials?: boolean
   is_active?: boolean
   platform_id?: number
@@ -355,6 +368,8 @@ export interface AddAccountForm {
   login_username: string
   login_password: string
   note: string
+  proxy_mode: AccountProxyMode
+  proxy_url: string
   clear_login_credentials: boolean
   platform_id: number | null
   group_id: number | null
@@ -367,6 +382,8 @@ export interface EditAccountForm {
   login_username: string
   login_password: string
   note: string
+  proxy_mode: AccountProxyMode
+  proxy_url: string
   clear_login_credentials: boolean
   is_active: boolean
   platform_id: number | null
