@@ -274,12 +274,12 @@ useShortcuts([
     description: '刷新当前视图',
     handler: () => { refreshBus.trigger() }
   },
-  { keys: 'g d', description: '跳转 仪表盘', handler: () => { void router.push('/') } },
-  { keys: 'g a', description: '跳转 账号', handler: () => { void router.push('/accounts') } },
-  { keys: 'g l', description: '跳转 签到日志', handler: () => { void router.push('/logs') } },
-  { keys: 'g s', description: '跳转 统计', handler: () => { void router.push('/statistics') } },
-  { keys: 'g p', description: '跳转 平台', handler: () => { void router.push('/platforms') } },
-  { keys: 'g c', description: '跳转 设置', handler: () => { void router.push('/settings') } },
+  { keys: 'g d', description: '跳转 总览面板', handler: () => { void router.push('/') } },
+  { keys: 'g a', description: '跳转 账号管理', handler: () => { void router.push('/accounts') } },
+  { keys: 'g l', description: '跳转 签到记录', handler: () => { void router.push('/logs') } },
+  { keys: 'g s', description: '跳转 数据统计', handler: () => { void router.push('/statistics') } },
+  { keys: 'g p', description: '跳转 平台管理', handler: () => { void router.push('/platforms') } },
+  { keys: 'g c', description: '跳转 系统设置', handler: () => { void router.push('/settings') } },
 ])
 
 const searchKeyword = ref('')
@@ -298,12 +298,12 @@ const isLoginPage = computed(() => route.path === '/login')
 const modKeyLabel = computed(() => /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl')
 
 const menuItems = [
-  { path: '/', label: '仪表盘', icon: GridOutline },
-  { path: '/accounts', label: '账号', icon: PeopleOutline },
-  { path: '/logs', label: '签到日志', icon: TimeOutline },
-  { path: '/statistics', label: '统计', icon: StatsChartOutline },
-  { path: '/platforms', label: '平台', icon: ServerOutline },
-  { path: '/settings', label: '设置', icon: SettingsOutline },
+  { path: '/', label: '总览面板', icon: GridOutline },
+  { path: '/accounts', label: '账号管理', icon: PeopleOutline },
+  { path: '/logs', label: '签到记录', icon: TimeOutline },
+  { path: '/statistics', label: '数据统计', icon: StatsChartOutline },
+  { path: '/platforms', label: '平台管理', icon: ServerOutline },
+  { path: '/settings', label: '系统设置', icon: SettingsOutline },
 ]
 
 const userMenuOptions = [
@@ -322,14 +322,14 @@ const userMenuOptions = [
 
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
-    '/': '仪表盘',
-    '/accounts': '账号',
-    '/logs': '签到日志',
-    '/statistics': '统计',
-    '/platforms': '平台',
-    '/settings': '设置'
+    '/': '总览面板',
+    '/accounts': '账号管理',
+    '/logs': '签到记录',
+    '/statistics': '数据统计',
+    '/platforms': '平台管理',
+    '/settings': '系统设置'
   }
-  if (route.path.startsWith('/account/')) return '账号'
+  if (route.path.startsWith('/account/')) return '账号管理'
   return titles[route.path] || ''
 })
 
@@ -894,7 +894,7 @@ const themeOverrides: GlobalThemeOverrides = {
 
   .sidebar {
     transform: translateX(-100%);
-    width: min(240px, 80vw);
+    width: min(var(--sidebar-width), 80vw);
   }
 
   .sidebar.mobile-open {
@@ -902,7 +902,7 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 
   .sidebar.collapsed {
-    width: min(240px, 80vw);
+    width: min(var(--sidebar-width), 80vw);
   }
 
   .sidebar.collapsed .brand-text,

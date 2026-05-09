@@ -131,7 +131,9 @@ const pagination = ref({
   showSizePicker: true,
   pageSizes: [10, 20, 50, 100]
 })
-const sortState = ref<{ columnKey: 'username' | 'status' | 'reward' | 'sign_time'; order: DataTableSortOrder }>({
+type LogSortKey = 'username' | 'platform' | 'status' | 'reward' | 'sign_time'
+
+const sortState = ref<{ columnKey: LogSortKey; order: DataTableSortOrder }>({
   columnKey: 'sign_time',
   order: 'descend'
 })
@@ -218,23 +220,37 @@ const getRewardDisplay = (row: any) => {
   return `+${row.reward_display || row.reward_quota}`
 }
 
-const getSortOrder = (columnKey: 'username' | 'status' | 'reward' | 'sign_time'): DataTableSortOrder =>
+const getPlatformName = (row: any) => row.platform?.name || row.platform_name || '未配置平台'
+
+const getSortOrder = (columnKey: LogSortKey): DataTableSortOrder =>
   sortState.value.columnKey === columnKey ? sortState.value.order : false
 
 const columns = computed<DataTableColumns<any>>(() => [
   {
     title: '账号',
     key: 'username',
-    minWidth: 160,
+    minWidth: 80,
     ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('username'),
-    render: row => row.username || `账号${row.account_id ?? '-'}`
+    render: row => h('div', { class: 'log-account-cell' }, [
+      h('span', { class: 'log-account-name' }, row.username || `账号${row.account_id ?? '-'}`),
+      h('span', { class: 'log-account-meta' }, `ID ${row.account_id ?? '-'}`)
+    ])
+  },
+  {
+    title: '平台',
+    key: 'platform',
+    minWidth: 150,
+    ellipsis: { tooltip: true },
+    sorter: 'default',
+    sortOrder: getSortOrder('platform'),
+    render: row => getPlatformName(row)
   },
   {
     title: '状态',
     key: 'status',
-    width: 90,
+    width: 100,
     align: 'center',
     sorter: 'default',
     sortOrder: getSortOrder('status'),
@@ -253,7 +269,7 @@ const columns = computed<DataTableColumns<any>>(() => [
   {
     title: '奖励',
     key: 'reward',
-    width: 100,
+    width: 120,
     align: 'right',
     sorter: 'default',
     sortOrder: getSortOrder('reward'),
@@ -345,7 +361,7 @@ const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | 
   }
 
   sortState.value = {
-    columnKey: String(nextSorter.columnKey) as 'username' | 'status' | 'reward' | 'sign_time',
+    columnKey: String(nextSorter.columnKey) as LogSortKey,
     order: nextSorter.order
   }
   loadLogs(1)
@@ -455,6 +471,28 @@ useViewRefresh(() => loadLogs(pagination.value.page))
   font-weight: var(--font-semibold);
   color: var(--primary-color);
   font-family: var(--font-mono);
+}
+
+.sign-logs-page :deep(.log-account-cell) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sign-logs-page :deep(.log-account-name) {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sign-logs-page :deep(.log-account-meta) {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
 }
 
 @media (max-width: 900px) {

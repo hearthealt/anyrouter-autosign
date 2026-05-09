@@ -6,7 +6,7 @@
         <p class="page-subtitle">{{ platforms.length }} 个平台 · 默认 {{ defaultPlatform?.name || '未设置' }} · 关联 {{ totalAccounts }} 账号</p>
       </div>
       <div class="head-actions">
-        <n-button size="small" :loading="loading" @click="loadPlatforms">
+        <n-button size="small" :loading="loading" @click="loadPlatforms(pagination.page)">
           <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
         </n-button>
@@ -24,16 +24,21 @@
         clearable
         placeholder="搜索平台名称或 Base URL"
         class="search-input"
+        @keyup.enter="loadPlatforms(1)"
+        @clear="loadPlatforms(1)"
       >
         <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
       </n-input>
+      <n-button size="small" :loading="loading" @click="loadPlatforms(1)">
+        查询
+      </n-button>
     </div>
 
     <div class="platforms-card">
-      <div v-if="loading || filteredPlatforms.length > 0" class="table-wrap">
+      <div v-if="loading || platforms.length > 0" class="table-wrap">
         <n-data-table
           :columns="columns"
-          :data="filteredPlatforms"
+          :data="platforms"
           :row-key="getPlatformRowKey"
           :loading="loading"
           :pagination="false"
@@ -50,6 +55,19 @@
           <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
           创建平台
         </n-button>
+      </div>
+
+      <div v-if="pagination.itemCount > 0" class="pagination-wrap">
+        <n-pagination
+          v-model:page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :item-count="pagination.itemCount"
+          :page-sizes="pagination.pageSizes"
+          show-size-picker
+          size="small"
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+        />
       </div>
     </div>
 
@@ -128,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { NButton, NPopconfirm, type DataTableColumns } from 'naive-ui'
 import {
   AddOutline,
@@ -197,6 +215,12 @@ const modalVisible = ref(false)
 const editingPlatform = ref<Platform | null>(null)
 const saving = ref(false)
 const formData = ref<PlatformForm>(createDefaultFormData())
+const pagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  pageSizes: [10, 20, 50, 100]
+})
 
 const defaultPlatform = computed(
   () => platforms.value.find(platform => platform.is_default) ?? null
@@ -204,16 +228,6 @@ const defaultPlatform = computed(
 const totalAccounts = computed(() =>
   platforms.value.reduce((sum, platform) => sum + (platform.accounts_count ?? 0), 0)
 )
-
-const filteredPlatforms = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return platforms.value
-  return platforms.value.filter(platform =>
-    [platform.name, platform.base_url]
-      .filter(Boolean)
-      .some(value => String(value).toLowerCase().includes(keyword))
-  )
-})
 
 const getPlatformRowKey = (platform: Platform) => platform.id
 
@@ -312,16 +326,37 @@ const columns = computed<DataTableColumns<Platform>>(() => [
   }
 ])
 
-const loadPlatforms = async () => {
+const loadPlatforms = async (page = pagination.value.page) => {
   loading.value = true
   try {
-    const res: any = await platformApi.getList()
-    platforms.value = (res.data || []) as Platform[]
+    const params: { page: number; size: number; keyword?: string } = {
+      page,
+      size: pagination.value.pageSize
+    }
+    const keyword = searchKeyword.value.trim()
+    if (keyword) {
+      params.keyword = keyword
+    }
+
+    const res: any = await platformApi.getList(params)
+    const data = res.data || {}
+    platforms.value = (data.items || []) as Platform[]
+    pagination.value.itemCount = data.total || 0
+    pagination.value.page = data.page || page
   } catch (e: any) {
     window.$notify(e.message || '加载平台失败', 'error')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  loadPlatforms(page)
+}
+
+const handlePageSizeChange = (pageSize: number) => {
+  pagination.value.pageSize = pageSize
+  loadPlatforms(1)
 }
 
 const showCreateModal = () => {
@@ -376,7 +411,7 @@ const handleSave = async () => {
     }
 
     modalVisible.value = false
-    await loadPlatforms()
+    await loadPlatforms(pagination.value.page)
   } catch (e: any) {
     window.$notify(e.message || '操作失败', 'error')
   } finally {
@@ -388,17 +423,23 @@ const deletePlatform = async (platform: Platform) => {
   try {
     await platformApi.delete(platform.id)
     window.$notify('平台删除成功', 'success')
-    await loadPlatforms()
+    await loadPlatforms(pagination.value.page)
   } catch (e: any) {
     window.$notify(e.message || '删除失败', 'error')
   }
 }
 
 onMounted(() => {
-  loadPlatforms()
+  loadPlatforms(1)
 })
 
-useViewRefresh(loadPlatforms)
+watch(searchKeyword, value => {
+  if (!value) {
+    loadPlatforms(1)
+  }
+})
+
+useViewRefresh(() => loadPlatforms(pagination.value.page))
 </script>
 
 <style scoped>
@@ -437,6 +478,7 @@ useViewRefresh(loadPlatforms)
 .filter-bar {
   display: flex;
   gap: var(--spacing-2);
+  flex-wrap: wrap;
 }
 
 .search-input {
@@ -453,6 +495,14 @@ useViewRefresh(loadPlatforms)
 .table-wrap :deep(.n-data-table) {
   border: none;
   border-radius: 0;
+}
+
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-card-hover);
 }
 
 .empty-state {

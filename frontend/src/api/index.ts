@@ -57,7 +57,7 @@ export const authApi = {
 
 // 平台 API
 export const platformApi = {
-  getList: () => api.get('/platforms'),
+  getList: (params?: { page?: number; size?: number; keyword?: string }) => api.get('/platforms', { params }),
   create: (data: { name: string; base_url: string; sign_mode?: 'api' | 'login'; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string }) => api.post('/platforms', data),
   get: (id: number) => api.get(`/platforms/${id}`),
   update: (id: number, data: any) => api.put(`/platforms/${id}`, data),

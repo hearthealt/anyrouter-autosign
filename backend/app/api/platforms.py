@@ -1,7 +1,10 @@
 """
 平台管理 API
 """
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,9 +19,29 @@ router = APIRouter(prefix="/platforms", tags=["平台管理"])
 
 
 @router.get("", response_model=ApiResponse)
-def get_platforms(db: Session = Depends(get_db)):
+def get_platforms(
+    page: Optional[int] = None,
+    size: Optional[int] = None,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """获取平台列表"""
-    platforms = db.query(Platform).order_by(Platform.created_at.desc()).all()
+    query = db.query(Platform)
+    cleaned_keyword = (keyword or "").strip()
+    if cleaned_keyword:
+        like_pattern = f"%{cleaned_keyword}%"
+        query = query.filter(or_(
+            Platform.name.ilike(like_pattern),
+            Platform.base_url.ilike(like_pattern),
+        ))
+
+    total = query.count()
+    resolved_page = max(page or 1, 1)
+    resolved_size = min(max(size or 10, 1), 100)
+    platforms_query = query.order_by(Platform.created_at.desc(), Platform.id.desc())
+    if page is not None or size is not None or cleaned_keyword:
+        platforms_query = platforms_query.offset((resolved_page - 1) * resolved_size).limit(resolved_size)
+    platforms = platforms_query.all()
 
     result = []
     for p in platforms:
@@ -42,7 +65,15 @@ def get_platforms(db: Session = Depends(get_db)):
             updated_at=p.updated_at
         ))
 
-    return ApiResponse(success=True, data=result)
+    if page is None and size is None and not cleaned_keyword:
+        return ApiResponse(success=True, data=result)
+
+    return ApiResponse(success=True, data={
+        "items": result,
+        "total": total,
+        "page": resolved_page,
+        "size": resolved_size,
+    })
 
 
 @router.post("", response_model=ApiResponse)
