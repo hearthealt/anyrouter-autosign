@@ -125,6 +125,11 @@ def _migrate_platform_schema():
                 db.commit()
                 logger.info(f"已为 {result.rowcount} 个平台回填 checkin_api")
 
+            if "captcha_api" not in platform_columns:
+                db.execute(text("ALTER TABLE platforms ADD COLUMN captcha_api VARCHAR(255)"))
+                db.commit()
+                logger.info("已为 platforms 表添加 captcha_api 列")
+
         default_platform = db.query(Platform).filter(Platform.is_default == True).first()
         if default_platform is None:
             anyrouter_platform = db.query(Platform).filter(Platform.base_url == DEFAULT_BASE_URL).first()
@@ -141,6 +146,7 @@ def _migrate_platform_schema():
                     groups_api=DEFAULT_GROUPS_API,
                     token_api=DEFAULT_TOKEN_API,
                     status_api=DEFAULT_STATUS_API,
+                    captcha_api="",
                     is_default=True,
                 )
                 db.add(anyrouter_platform)

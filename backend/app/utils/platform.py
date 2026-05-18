@@ -12,6 +12,7 @@ DEFAULT_MODELS_API = "/api/user/models"
 DEFAULT_GROUPS_API = "/api/user/self/groups"
 DEFAULT_TOKEN_API = "/api/token/"
 DEFAULT_STATUS_API = "/api/status"
+DEFAULT_CAPTCHA_API = ""
 DEFAULT_SIGN_MODE = "api"
 SIGN_MODE_API = "api"
 SIGN_MODE_LOGIN = "login"
@@ -30,6 +31,10 @@ def _normalize_path(value: str, default: str) -> str:
     if path != "/":
         path = path.rstrip("/")
     return path
+
+
+def _normalize_optional_str(value: str, default: str = "") -> str:
+    return (value or default).strip()
 
 
 def normalize_sign_mode(value: str) -> str:
@@ -53,6 +58,7 @@ def get_platform_config(platform: Any) -> Dict[str, str]:
         "groups_api": _normalize_path(getattr(platform, "groups_api", DEFAULT_GROUPS_API), DEFAULT_GROUPS_API),
         "token_api": _normalize_path(getattr(platform, "token_api", DEFAULT_TOKEN_API), DEFAULT_TOKEN_API),
         "status_api": _normalize_path(getattr(platform, "status_api", DEFAULT_STATUS_API), DEFAULT_STATUS_API),
+        "captcha_api": _normalize_optional_str(getattr(platform, "captcha_api", DEFAULT_CAPTCHA_API)),
     }
 
 

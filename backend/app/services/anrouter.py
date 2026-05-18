@@ -2,10 +2,12 @@
 AnyRouter API 服务
 """
 from datetime import datetime
+import base64
 import re
 import json
 import time
 import logging
+import uuid
 from typing import Optional, Tuple, Dict, Any
 
 import requests
@@ -23,6 +25,15 @@ from app.utils.platform import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _mask_log_value(value: Any, keep: int = 4) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if len(text) <= keep * 2:
+        return "*" * len(text)
+    return f"{text[:keep]}...{text[-keep:]}"
 
 
 class AntiCrawlerSolver:
@@ -145,6 +156,25 @@ class AnyRouterService:
             or "already signed" in normalized_message
             or "already checked in" in normalized_message
         )
+
+    @staticmethod
+    def _requires_captcha_message(message: str) -> bool:
+        """判断响应文案是否表示签到需要验证码。"""
+        normalized_message = (message or "").strip().lower()
+        if not normalized_message:
+            return False
+
+        captcha_keywords = (
+            "captcha",
+            "verification code",
+            "verify code",
+            "验证码",
+            "验证失败",
+            "请完成验证",
+            "请先验证",
+            "答案错误",
+        )
+        return any(keyword in normalized_message for keyword in captcha_keywords)
 
     @staticmethod
     def _normalize_user_info_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -365,6 +395,454 @@ class AnyRouterService:
         headers["referer"] = f"{base_url}{console_url}"
         return headers
 
+    @staticmethod
+    def _get_origin(base_url: str) -> str:
+        """从平台根地址生成 Origin 头。"""
+        return (base_url or "").rstrip("/")
+
+    @staticmethod
+    def _extract_captcha_data(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """兼容不同验证码接口返回结构。"""
+        raw_data = payload.get("data")
+        data = raw_data if isinstance(raw_data, dict) else payload
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _get_captcha_id(captcha_data: Dict[str, Any]) -> Optional[str]:
+        """从验证码响应中提取 captcha_id。"""
+        for key in ("captcha_id", "captchaId", "id"):
+            value = captcha_data.get(key)
+            if value:
+                return str(value)
+        return None
+
+    @staticmethod
+    def _normalize_captcha_answer(raw_answer: Any) -> Optional[str]:
+        """清洗 OCR 输出。"""
+        if raw_answer is None:
+            return None
+        answer = str(raw_answer).strip()
+        if not answer:
+            return None
+        return answer
+
+    @staticmethod
+    def _find_value_by_keys(data: Any, keys: set[str]) -> Optional[str]:
+        """递归查找验证码图片字段。"""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if key.lower() in keys and isinstance(value, str) and value:
+                    return str(value)
+            for value in data.values():
+                found = AnyRouterService._find_value_by_keys(value, keys)
+                if found:
+                    return found
+        elif isinstance(data, list):
+            for item in data:
+                found = AnyRouterService._find_value_by_keys(item, keys)
+                if found:
+                    return found
+        return None
+
+    def _extract_captcha_image_bytes(self, captcha_data: Dict[str, Any], session: requests.Session = None) -> Optional[bytes]:
+        """从验证码响应中提取图片字节。"""
+        image_value = self._find_value_by_keys(
+            captcha_data,
+            {
+                "captcha",
+                "captcha_image",
+                "captchaimage",
+                "image",
+                "image_base64",
+                "imagebase64",
+                "img",
+                "img_base64",
+                "imgbase64",
+                "pic",
+                "picture",
+                "data",
+            },
+        )
+        if not image_value:
+            return None
+
+        image_text = image_value.strip()
+        if image_text.startswith("data:image/"):
+            _, _, image_text = image_text.partition(",")
+
+        if image_text.startswith("http://") or image_text.startswith("https://"):
+            http_session = session or requests.Session()
+            response = http_session.get(image_text, timeout=settings.request_timeout)
+            response.raise_for_status()
+            return response.content
+
+        try:
+            padded_image_text = image_text + "=" * (-len(image_text) % 4)
+            return base64.b64decode(padded_image_text, validate=False)
+        except Exception:
+            return None
+
+    def _solve_captcha_with_builtin_ocr(
+        self,
+        captcha_data: Dict[str, Any],
+        session: requests.Session = None,
+        trace_id: str = "",
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """使用内置 OCR 识别图片验证码。"""
+        image_bytes = self._extract_captcha_image_bytes(captcha_data, session=session)
+        if not image_bytes:
+            logger.warning("验证码签到[%s] OCR 图片提取失败: data_keys=%s", trace_id, list(captcha_data.keys()))
+            return False, {"message": "验证码响应中未找到可识别的图片字段"}
+        logger.info("验证码签到[%s] OCR 图片提取成功: image_bytes=%s", trace_id, len(image_bytes))
+
+        try:
+            import ddddocr  # type: ignore
+        except ImportError:
+            logger.error("验证码签到[%s] OCR 依赖缺失: ddddocr 未安装", trace_id)
+            return False, {"message": "未安装内置验证码识别依赖，请执行 pip install ddddocr"}
+
+        try:
+            ocr = ddddocr.DdddOcr(show_ad=False)
+            answer = self._normalize_captcha_answer(ocr.classification(image_bytes))
+            if not answer:
+                logger.warning("验证码签到[%s] OCR 识别失败: 返回空结果", trace_id)
+                return False, {"message": "内置 OCR 未识别出验证码"}
+            logger.info("验证码签到[%s] OCR 识别成功: answer=%s answer_length=%s", trace_id, answer, len(answer))
+            return True, {"captcha_answer": answer}
+        except Exception as e:
+            logger.exception("验证码签到[%s] OCR 识别异常", trace_id)
+            return False, {"message": f"内置 OCR 识别失败: {str(e)}"}
+
+    def _solve_checkin_captcha(
+        self,
+        captcha_data: Dict[str, Any],
+        session: requests.Session = None,
+        trace_id: str = "",
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        识别签到验证码。
+
+        使用内置 ddddocr 直接识别图片验证码。
+        """
+        return self._solve_captcha_with_builtin_ocr(captcha_data, session=session, trace_id=trace_id)
+
+    def _post_with_anti_crawler_retry(
+        self,
+        session: requests.Session,
+        url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        **kwargs: Any,
+    ) -> requests.Response:
+        """POST 请求并处理一次阿里云盾挑战。"""
+        response = session.post(
+            url,
+            headers=headers,
+            cookies=cookies,
+            timeout=settings.request_timeout,
+            **kwargs,
+        )
+
+        if self._is_anti_crawler_challenge(response.text):
+            result = self.anti_crawler.solve(response.text)
+            if result:
+                cookies["acw_sc__v2"] = result
+                time.sleep(2)
+                response = session.post(
+                    url,
+                    headers=headers,
+                    cookies=cookies,
+                    timeout=settings.request_timeout,
+                    **kwargs,
+                )
+
+        return response
+
+    def _request_with_anti_crawler_retry(
+        self,
+        session: requests.Session,
+        method: str,
+        url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        **kwargs: Any,
+    ) -> requests.Response:
+        """通用请求并处理一次阿里云盾挑战。"""
+        if method.lower() == "post":
+            return self._post_with_anti_crawler_retry(
+                session,
+                url,
+                headers,
+                cookies,
+                **kwargs,
+            )
+
+        request_fn = getattr(session, method.lower())
+        response = request_fn(
+            url,
+            headers=headers,
+            cookies=cookies,
+            timeout=settings.request_timeout,
+            **kwargs,
+        )
+
+        if self._is_anti_crawler_challenge(response.text):
+            result = self.anti_crawler.solve(response.text)
+            if result:
+                cookies["acw_sc__v2"] = result
+                time.sleep(2)
+                response = request_fn(
+                    url,
+                    headers=headers,
+                    cookies=cookies,
+                    timeout=settings.request_timeout,
+                    **kwargs,
+                )
+
+        return response
+
+    def _parse_json_response(self, response: requests.Response, parse_error_message: str) -> Tuple[bool, Dict[str, Any]]:
+        """解析 JSON 响应，统一处理空响应和解析错误。"""
+        if not response.text.strip():
+            return False, {"message": "接口返回为空"}
+        if self._is_anti_crawler_challenge(response.text):
+            return False, {"message": "接口仍返回反爬挑战"}
+        try:
+            return True, response.json()
+        except json.JSONDecodeError:
+            return False, {"message": parse_error_message}
+
+    def _post_json(
+        self,
+        session: requests.Session,
+        url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        parse_error_message: str = "响应解析失败",
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """POST JSON 请求并解析响应。"""
+        response = self._post_with_anti_crawler_retry(
+            session,
+            url,
+            headers,
+            cookies,
+            **kwargs,
+        )
+        return self._parse_json_response(response, parse_error_message)
+
+    def _json_request(
+        self,
+        session: requests.Session,
+        method: str,
+        url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+        parse_error_message: str = "响应解析失败",
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """任意 HTTP 方法的 JSON 请求并解析响应。"""
+        response = self._request_with_anti_crawler_retry(
+            session,
+            method,
+            url,
+            headers,
+            cookies,
+            **kwargs,
+        )
+        return self._parse_json_response(response, parse_error_message)
+
+    def _sign_in_with_captcha(
+        self,
+        session: requests.Session,
+        cookies: Dict[str, str],
+        headers: Dict[str, str],
+        base_url: str,
+        sign_api: str,
+        captcha_api: str = "",
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """拉取签到验证码，识别后提交验证码签到请求。"""
+        last_result: Dict[str, Any] = {"success": False, "message": "验证码签到失败"}
+        total_attempts = settings.retry_times
+        trace_id = uuid.uuid4().hex[:8]
+        logger.info(
+            "验证码签到[%s] 开始: sign_api=%s captcha_api=%s retry_times=%s",
+            trace_id,
+            sign_api,
+            captcha_api or "",
+            total_attempts,
+        )
+        for captcha_attempt in range(settings.retry_times):
+            if captcha_attempt > 0:
+                time.sleep(settings.retry_interval)
+            logger.info("验证码签到[%s] 尝试: attempt=%s/%s", trace_id, captcha_attempt + 1, total_attempts)
+
+            captcha_success, captcha_result = self._sign_in_with_single_captcha(
+                session=session,
+                cookies=cookies,
+                headers=headers,
+                base_url=base_url,
+                sign_api=sign_api,
+                captcha_api=captcha_api,
+                trace_id=trace_id,
+            )
+            if captcha_success:
+                logger.info(
+                    "验证码签到[%s] 成功: attempt=%s/%s message=%s reward_quota=%s already_signed=%s",
+                    trace_id,
+                    captcha_attempt + 1,
+                    total_attempts,
+                    captcha_result.get("message", ""),
+                    captcha_result.get("reward_quota", 0),
+                    captcha_result.get("already_signed", False),
+                )
+                return captcha_success, captcha_result
+
+            last_result = captcha_result
+            logger.warning(
+                "验证码签到[%s] 失败: attempt=%s/%s message=%s",
+                trace_id,
+                captcha_attempt + 1,
+                total_attempts,
+                captcha_result.get("message", ""),
+            )
+            if not self._requires_captcha_message(captcha_result.get("message", "")):
+                logger.info("验证码签到[%s] 停止重试: 当前失败原因不属于验证码重试场景", trace_id)
+                break
+
+        logger.warning("验证码签到[%s] 结束: success=False message=%s", trace_id, last_result.get("message", ""))
+        return False, last_result
+
+    def _sign_in_with_single_captcha(
+        self,
+        session: requests.Session,
+        cookies: Dict[str, str],
+        headers: Dict[str, str],
+        base_url: str,
+        sign_api: str,
+        captcha_api: str = "",
+        trace_id: str = "",
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """执行一次验证码获取、识别和签到提交。"""
+        resolved_captcha_api = (captcha_api or "").strip()
+        if not resolved_captcha_api:
+            logger.warning("验证码签到[%s] 缺少 captcha_api: sign_api=%s", trace_id, sign_api)
+            return False, {"success": False, "message": "该平台需要验证码，请先在平台配置中填写验证码接口"}
+        if not resolved_captcha_api.startswith("/"):
+            resolved_captcha_api = f"/{resolved_captcha_api}"
+        captcha_url = f"{base_url}{resolved_captcha_api}"
+        captcha_headers = headers.copy()
+        captcha_headers["origin"] = self._get_origin(base_url)
+
+        logger.info("验证码签到[%s] 请求验证码: url=%s", trace_id, captcha_url)
+        captcha_response = self._post_with_anti_crawler_retry(
+            session,
+            captcha_url,
+            captcha_headers,
+            cookies,
+        )
+        logger.info(
+            "验证码签到[%s] 验证码接口响应: status_code=%s content_length=%s",
+            trace_id,
+            captcha_response.status_code,
+            len(captcha_response.text or ""),
+        )
+        if not captcha_response.text.strip():
+            logger.warning("验证码签到[%s] 验证码接口返回为空: url=%s", trace_id, captcha_url)
+            return False, {"success": False, "message": "验证码接口返回为空"}
+
+        if self._is_anti_crawler_challenge(captcha_response.text):
+            logger.warning("验证码签到[%s] 验证码接口返回反爬挑战: url=%s", trace_id, captcha_url)
+            return False, {"success": False, "message": "验证码接口仍返回反爬挑战"}
+
+        try:
+            captcha_payload = captcha_response.json()
+        except json.JSONDecodeError:
+            logger.warning("验证码签到[%s] 验证码接口 JSON 解析失败: url=%s", trace_id, captcha_url)
+            return False, {"success": False, "message": "验证码接口响应解析失败"}
+        logger.info(
+            "验证码签到[%s] 验证码接口 JSON: success=%s message=%s keys=%s",
+            trace_id,
+            captcha_payload.get("success", False),
+            captcha_payload.get("message", ""),
+            list(captcha_payload.keys()),
+        )
+        if not captcha_payload.get("success", False):
+            logger.warning(
+                "验证码签到[%s] 获取验证码失败: message=%s",
+                trace_id,
+                captcha_payload.get("message", "获取验证码失败"),
+            )
+            return False, {
+                "success": False,
+                "message": captcha_payload.get("message", "获取验证码失败"),
+                "raw": captcha_payload,
+            }
+
+        captcha_data = self._extract_captcha_data(captcha_payload)
+        captcha_id = self._get_captcha_id(captcha_data)
+        if not captcha_id:
+            logger.warning("验证码签到[%s] 验证码接口未返回 captcha_id: data_keys=%s", trace_id, list(captcha_data.keys()))
+            return False, {
+                "success": False,
+                "message": "验证码接口未返回 captcha_id",
+                "raw": captcha_payload,
+            }
+        logger.info(
+            "验证码签到[%s] 验证码数据提取成功: captcha_id=%s data_keys=%s",
+            trace_id,
+            _mask_log_value(captcha_id),
+            list(captcha_data.keys()),
+        )
+
+        solve_success, solve_result = self._solve_checkin_captcha(captcha_data, session=session, trace_id=trace_id)
+        if not solve_success:
+            logger.warning("验证码签到[%s] 识别失败: message=%s", trace_id, solve_result.get("message", "验证码识别失败"))
+            return False, {
+                "success": False,
+                "message": solve_result.get("message", "验证码识别失败"),
+                "raw": captcha_payload,
+            }
+
+        sign_headers = headers.copy()
+        sign_headers["content-type"] = "application/json"
+        sign_headers["origin"] = self._get_origin(base_url)
+        sign_payload = {
+            "captcha_id": captcha_id,
+            "captcha_answer": solve_result["captcha_answer"],
+        }
+        logger.info(
+            "验证码签到[%s] 提交签到: url=%s captcha_id=%s captcha_answer=%s answer_length=%s",
+            trace_id,
+            f"{base_url}{sign_api}",
+            _mask_log_value(captcha_id),
+            solve_result["captcha_answer"],
+            len(str(solve_result["captcha_answer"])),
+        )
+        parsed, sign_data = self._post_json(
+            session,
+            f"{base_url}{sign_api}",
+            sign_headers,
+            cookies,
+            json=sign_payload,
+        )
+        if not parsed:
+            logger.warning("验证码签到[%s] 提交响应解析失败: message=%s", trace_id, sign_data.get("message", "签到响应解析失败"))
+            return False, {
+                "success": False,
+                "message": sign_data.get("message", "签到响应解析失败"),
+            }
+        normalized = self._normalize_sign_payload(sign_data)
+        logger.info(
+            "验证码签到[%s] 提交完成: success=%s message=%s reward_quota=%s already_signed=%s",
+            trace_id,
+            normalized.get("success", False),
+            normalized.get("message", ""),
+            normalized.get("reward_quota", 0),
+            normalized.get("already_signed", False),
+        )
+        return True, normalized
+
     def _get_base_headers(self, base_url: str, console_url: str = None) -> Dict[str, str]:
         """获取基础请求头（无认证，用于公开接口）"""
         if console_url is None:
@@ -374,9 +852,9 @@ class AnyRouterService:
         return headers
 
     @staticmethod
-    def _extract_session_cookie(response: requests.Response, session: requests.Session) -> Optional[str]:
+    def _extract_session_cookie(response: Optional[requests.Response], session: requests.Session) -> Optional[str]:
         """从响应或 Session 中提取 session cookie。"""
-        if response.cookies.get("session"):
+        if response is not None and response.cookies.get("session"):
             return response.cookies.get("session")
         if session.cookies.get("session"):
             return session.cookies.get("session")
@@ -433,7 +911,6 @@ class AnyRouterService:
         password: str,
         login_api: str = None,
         login_page: str = None,
-        turnstile: str = "",
         proxy_mode: str = "global",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
@@ -467,34 +944,25 @@ class AnyRouterService:
                     cookies["acw_sc__v2"] = result
                     time.sleep(2)
 
-            response = session.post(
+            login_kwargs: Dict[str, Any] = {
+                "json": {"username": username, "password": password},
+            }
+
+            parsed, data = self._post_json(
+                session,
                 f"{base_url}{login_api}",
-                headers=login_headers,
-                cookies=cookies,
-                params={"turnstile": turnstile},
-                json={"username": username, "password": password},
-                timeout=settings.request_timeout
+                login_headers,
+                cookies,
+                parse_error_message="登录响应解析失败",
+                **login_kwargs,
             )
+            if not parsed:
+                return False, {"message": data.get("message", "登录响应解析失败")}
 
-            if self._is_anti_crawler_challenge(response.text):
-                result = self.anti_crawler.solve(response.text)
-                if result:
-                    cookies["acw_sc__v2"] = result
-                    time.sleep(2)
-                    response = session.post(
-                        f"{base_url}{login_api}",
-                        headers=login_headers,
-                        cookies=cookies,
-                        params={"turnstile": turnstile},
-                        json={"username": username, "password": password},
-                        timeout=settings.request_timeout
-                    )
-
-            data = response.json()
             if not data.get("success"):
                 return False, {"message": data.get("message", "登录失败")}
 
-            session_cookie = self._extract_session_cookie(response, session)
+            session_cookie = self._extract_session_cookie(None, session)
             if not session_cookie:
                 return False, {"message": "登录成功，但响应中未返回 session Cookie"}
 
@@ -648,6 +1116,7 @@ class AnyRouterService:
         sign_api: str = None,
         checkin_api: str = None,
         console_url: str = None,
+        captcha_api: str = "",
         proxy_mode: str = "global",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
@@ -658,6 +1127,7 @@ class AnyRouterService:
             sign_api = DEFAULT_SIGN_API
         if checkin_api is None:
             checkin_api = DEFAULT_CHECKIN_API
+        should_try_captcha_first = bool((captcha_api or "").strip())
         for attempt in range(settings.retry_times):
             if attempt > 0:
                 time.sleep(settings.retry_interval)
@@ -675,33 +1145,50 @@ class AnyRouterService:
             headers = self._get_headers(user_id, base_url, console_url)
 
             try:
-                response = session.post(
-                    f"{base_url}{sign_api}",
-                    headers=headers,
-                    cookies=cookies,
-                    timeout=settings.request_timeout
-                )
+                if should_try_captcha_first:
+                    captcha_success, result = self._sign_in_with_captcha(
+                        session=session,
+                        cookies=cookies,
+                        headers=headers,
+                        base_url=base_url,
+                        sign_api=sign_api,
+                        captcha_api=captcha_api,
+                    )
+                    if not captcha_success:
+                        return False, result
+                    data = result.get("raw", {}) if isinstance(result.get("raw"), dict) else {}
+                else:
+                    parsed, data = self._post_json(
+                        session,
+                        f"{base_url}{sign_api}",
+                        headers,
+                        cookies,
+                    )
+                    if not parsed:
+                        if data.get("message") == "接口返回为空":
+                            continue
+                        if data.get("message") == "接口仍返回反爬挑战":
+                            continue
+                        return False, {"success": False, "message": data.get("message", "签到响应解析失败")}
 
-                if self._is_anti_crawler_challenge(response.text):
-                    result = self.anti_crawler.solve(response.text)
-                    if result:
-                        cookies["acw_sc__v2"] = result
-                        time.sleep(2)
-                        response = session.post(
-                            f"{base_url}{sign_api}",
-                            headers=headers,
+                    if not data:
+                        continue
+
+                    result = self._normalize_sign_payload(data)
+
+                    if not result["success"] and self._requires_captcha_message(result.get("message", "")):
+                        captcha_success, result = self._sign_in_with_captcha(
+                            session=session,
                             cookies=cookies,
-                            timeout=settings.request_timeout
+                            headers=headers,
+                            base_url=base_url,
+                            sign_api=sign_api,
+                            captcha_api=captcha_api,
                         )
+                        if not captcha_success:
+                            return False, result
+                        data = result.get("raw", {}) if isinstance(result.get("raw"), dict) else data
 
-                if not response.text.strip():
-                    continue
-
-                if self._is_anti_crawler_challenge(response.text):
-                    continue
-
-                data = response.json()
-                result = self._normalize_sign_payload(data)
                 raw_sign_data = data.get("data", {})
                 should_fetch_checkin_reward = isinstance(raw_sign_data, dict) and bool(raw_sign_data.get("checkin_date"))
 
@@ -963,29 +1450,18 @@ class AnyRouterService:
 
         try:
             url = f"{base_url}{token_api}"
-            request_fn = session.post if method == "post" else session.put
-            response = request_fn(
+            parsed, data = self._json_request(
+                session,
+                method,
                 url,
-                headers=headers,
-                cookies=cookies,
+                headers,
+                cookies,
                 json=payload,
-                timeout=settings.request_timeout
             )
 
-            if self._is_anti_crawler_challenge(response.text):
-                result = self.anti_crawler.solve(response.text)
-                if result:
-                    cookies["acw_sc__v2"] = result
-                    time.sleep(2)
-                    response = request_fn(
-                        url,
-                        headers=headers,
-                        cookies=cookies,
-                        json=payload,
-                        timeout=settings.request_timeout
-                    )
+            if not parsed:
+                return False, {"message": data.get("message", "响应解析失败")}
 
-            data = response.json()
             if data.get("success"):
                 return True, {"message": data.get("message", success_msg)}
             else:
@@ -1087,26 +1563,16 @@ class AnyRouterService:
 
         try:
             url = f"{base_url}{token_api}/{token_id}"
-            response = session.delete(
+            parsed, data = self._json_request(
+                session,
+                "delete",
                 url,
-                headers=headers,
-                cookies=cookies,
-                timeout=settings.request_timeout
+                headers,
+                cookies,
             )
+            if not parsed:
+                return False, {"message": data.get("message", "响应解析失败")}
 
-            if self._is_anti_crawler_challenge(response.text):
-                result = self.anti_crawler.solve(response.text)
-                if result:
-                    cookies["acw_sc__v2"] = result
-                    time.sleep(2)
-                    response = session.delete(
-                        url,
-                        headers=headers,
-                        cookies=cookies,
-                        timeout=settings.request_timeout
-                    )
-
-            data = response.json()
             if data.get("success"):
                 return True, {"message": data.get("message", "删除成功")}
             else:

@@ -4,6 +4,7 @@
     <div class="trend-legend">
       <span class="legend-item"><span class="dot success"></span>成功</span>
       <span class="legend-item"><span class="dot fail"></span>失败</span>
+      <span class="legend-item"><span class="dot reward"></span>奖励</span>
     </div>
   </div>
 </template>
@@ -33,7 +34,8 @@ const getChartTheme = () => {
     tooltipBg: '#16181c',
     tooltipBorder: '#2a2d33',
     successColor: '#22c55e',
-    failColor: '#ef4444'
+    failColor: '#ef4444',
+    rewardColor: '#f59e0b'
   } : {
     backgroundColor: 'transparent',
     textColor: 'rgba(11, 12, 14, 0.6)',
@@ -42,8 +44,16 @@ const getChartTheme = () => {
     tooltipBg: '#ffffff',
     tooltipBorder: '#e3e5e8',
     successColor: '#16a34a',
-    failColor: '#dc2626'
+    failColor: '#dc2626',
+    rewardColor: '#d97706'
   }
+}
+
+const formatReward = (quota: number | undefined | null): string => {
+  const value = Number(quota || 0)
+  const usd = value / 500000
+  if (usd > 0 && usd < 0.01) return `$${usd.toFixed(4)}`
+  return `$${usd.toFixed(2)}`
 }
 
 // 格式化短日期
@@ -71,6 +81,7 @@ const updateChart = () => {
 
   const theme = getChartTheme()
   const data = props.data
+  const hasReward = data.some(d => Number(d.reward || 0) > 0)
 
   const option: echarts.EChartsOption = {
     backgroundColor: theme.backgroundColor,
@@ -87,14 +98,22 @@ const updateChart = () => {
       },
       formatter: (params: any) => {
         const date = params[0]?.axisValue || ''
+        const dayData = data.find(d => d.date === date)
         let html = `<div style="font-weight: 600; margin-bottom: 6px;">${date}</div>`
         params.forEach((item: any) => {
+          if (item.seriesName === '奖励') return
           const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
           html += `<div style="display: flex; align-items: center; gap: 8px; margin: 3px 0;">
             <span style="width: 8px; height: 8px; border-radius: 2px; background: ${color};"></span>
             <span>${item.seriesName}: <b>${item.value}</b></span>
           </div>`
         })
+        const rewardDisplay = dayData?.reward_display || (Number(dayData?.reward || 0) > 0 ? formatReward(dayData?.reward) : '')
+        if (rewardDisplay) {
+          html += `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${theme.tooltipBorder}; color: ${theme.rewardColor};">
+            奖励: <b>${rewardDisplay}</b>
+          </div>`
+        }
         return html
       }
     },
@@ -116,16 +135,30 @@ const updateChart = () => {
         formatter: formatShortDate
       }
     },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: theme.textColor, fontSize: 10 },
-      splitLine: {
-        lineStyle: { color: theme.splitLineColor, type: 'dashed' }
+    yAxis: [
+      {
+        type: 'value',
+        minInterval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: theme.textColor, fontSize: 10 },
+        splitLine: {
+          lineStyle: { color: theme.splitLineColor, type: 'dashed' }
+        }
+      },
+      {
+        type: 'value',
+        show: hasReward,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: theme.textColor,
+          fontSize: 10,
+          formatter: (value: number) => formatReward(value)
+        },
+        splitLine: { show: false }
       }
-    },
+    ],
     series: [
       {
         name: '成功',
@@ -150,6 +183,25 @@ const updateChart = () => {
           color: theme.failColor,
           borderRadius: [3, 3, 0, 0]
         }
+      },
+      {
+        name: '奖励',
+        type: 'line',
+        yAxisIndex: 1,
+        data: data.map(d => d.reward || 0),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: hasReward ? 5 : 0,
+        lineStyle: {
+          color: theme.rewardColor,
+          width: hasReward ? 2 : 0
+        },
+        itemStyle: {
+          color: theme.rewardColor,
+          borderColor: props.isDark ? '#16181c' : '#fff',
+          borderWidth: 2
+        },
+        emphasis: { disabled: !hasReward }
       }
     ]
   }
@@ -228,6 +280,10 @@ onUnmounted(() => {
 
 .legend-item .dot.fail {
   background: var(--error-color);
+}
+
+.legend-item .dot.reward {
+  background: var(--warning-color);
 }
 
 .trend-chart-container {

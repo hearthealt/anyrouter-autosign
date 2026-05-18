@@ -81,56 +81,58 @@
         </div>
 
         <div class="modal-body">
-          <div class="tip">
-            <n-icon :size="14"><SparklesOutline /></n-icon>
-            <span>Base URL 填写域名根路径（如 <code>https://anyrouter.top</code>），接口保留相对路径</span>
-          </div>
+          <n-form :model="formData" :rules="formRules" label-placement="top" class="platform-form">
+            <section class="form-section">
+              <div class="form-section-title">基础信息</div>
+              <div class="form-grid base-grid">
+                <n-form-item label="平台名称" path="name">
+                  <n-input v-model:value="formData.name" size="small" placeholder="如: AnyRouter" />
+                </n-form-item>
+                <n-form-item label="Base URL" path="base_url">
+                  <n-input v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
+                </n-form-item>
+                <n-form-item label="签到方式" path="sign_mode">
+                  <n-select
+                    v-model:value="formData.sign_mode"
+                    size="small"
+                    :options="signModeOptions"
+                  />
+                </n-form-item>
+              </div>
+            </section>
 
-          <n-form :model="formData" :rules="formRules" label-placement="top">
-            <div class="form-grid">
-              <n-form-item label="平台名称" path="name">
-                <n-input v-model:value="formData.name" size="small" placeholder="如: AnyRouter" />
-              </n-form-item>
-              <n-form-item label="Base URL" path="base_url">
-                <n-input v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
-              </n-form-item>
-              <n-form-item label="签到方式" path="sign_mode">
-                <n-select
-                  v-model:value="formData.sign_mode"
-                  size="small"
-                  :options="signModeOptions"
-                />
-              </n-form-item>
-            </div>
-
-            <div class="form-section-title">接口路径</div>
-
-            <div class="form-grid">
-              <n-form-item label="签到">
-                <n-input v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
-              </n-form-item>
-              <n-form-item label="签到记录">
-                <n-input v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
-              </n-form-item>
-              <n-form-item label="用户信息">
-                <n-input v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
-              </n-form-item>
-              <n-form-item label="状态">
-                <n-input v-model:value="formData.status_api" size="small" placeholder="/api/status" />
-              </n-form-item>
-              <n-form-item label="模型">
-                <n-input v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
-              </n-form-item>
-              <n-form-item label="分组">
-                <n-input v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
-              </n-form-item>
-              <n-form-item label="Token">
-                <n-input v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
-              </n-form-item>
-              <n-form-item label="Console URL">
-                <n-input v-model:value="formData.console_url" size="small" placeholder="/console" />
-              </n-form-item>
-            </div>
+            <section class="form-section">
+              <div class="form-section-title">接口路径</div>
+              <div class="form-grid endpoint-grid">
+                <n-form-item label="签到">
+                  <n-input v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
+                </n-form-item>
+                <n-form-item label="签到记录">
+                  <n-input v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
+                </n-form-item>
+                <n-form-item label="验证码">
+                  <n-input v-model:value="formData.captcha_api" size="small" placeholder="需要图片验证码时填写" />
+                </n-form-item>
+                <n-form-item label="用户信息">
+                  <n-input v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
+                </n-form-item>
+                <n-form-item label="Token">
+                  <n-input v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
+                </n-form-item>
+                <n-form-item label="模型">
+                  <n-input v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
+                </n-form-item>
+                <n-form-item label="分组">
+                  <n-input v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
+                </n-form-item>
+                <n-form-item label="Console URL">
+                  <n-input v-model:value="formData.console_url" size="small" placeholder="/console" />
+                </n-form-item>
+                <n-form-item label="状态">
+                  <n-input v-model:value="formData.status_api" size="small" placeholder="/api/status" />
+                </n-form-item>
+              </div>
+            </section>
           </n-form>
         </div>
 
@@ -154,7 +156,6 @@ import {
   RefreshOutline,
   SearchOutline,
   ServerOutline,
-  SparklesOutline,
 } from '@vicons/ionicons5'
 import { platformApi } from '../api'
 import { useViewRefresh } from '../composables'
@@ -169,6 +170,7 @@ type PlatformEndpointKey =
   | 'groups_api'
   | 'token_api'
   | 'status_api'
+  | 'captcha_api'
 
 interface PlatformForm {
   name: string
@@ -182,6 +184,7 @@ interface PlatformForm {
   groups_api: string
   token_api: string
   status_api: string
+  captcha_api: string
 }
 
 const createDefaultFormData = (): PlatformForm => ({
@@ -195,12 +198,13 @@ const createDefaultFormData = (): PlatformForm => ({
   models_api: '/api/user/models',
   groups_api: '/api/user/self/groups',
   token_api: '/api/token/',
-  status_api: '/api/status'
+  status_api: '/api/status',
+  captcha_api: ''
 })
 
 const endpointKeys: PlatformEndpointKey[] = [
   'sign_api', 'checkin_api', 'user_api', 'status_api',
-  'models_api', 'groups_api', 'token_api', 'console_url'
+  'models_api', 'groups_api', 'token_api', 'console_url', 'captcha_api'
 ]
 
 const signModeOptions = [
@@ -295,7 +299,7 @@ const columns = computed<DataTableColumns<Platform>>(() => [
     key: 'paths',
     width: 80,
     align: 'right',
-    render: row => `${getConfiguredPathCount(row)}/8`
+    render: row => `${getConfiguredPathCount(row)}/9`
   },
   {
     title: '更新时间',
@@ -378,7 +382,8 @@ const editPlatform = (platform: Platform) => {
     models_api: platform.models_api || '/api/user/models',
     groups_api: platform.groups_api || '/api/user/self/groups',
     token_api: platform.token_api || '/api/token/',
-    status_api: platform.status_api || '/api/status'
+    status_api: platform.status_api || '/api/status',
+    captcha_api: platform.captcha_api || ''
   }
   modalVisible.value = true
 }
@@ -584,7 +589,7 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 
 /* 弹窗 */
 .edit-modal {
-  width: min(600px, calc(100vw - 24px));
+  width: min(820px, calc(100vw - 24px));
   background: var(--bg-modal);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
@@ -611,8 +616,8 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 }
 
 .modal-body {
-  padding: var(--spacing-4);
-  max-height: 70vh;
+  padding: var(--spacing-3) var(--spacing-4);
+  max-height: calc(100vh - 160px);
   overflow-y: auto;
 }
 
@@ -623,28 +628,34 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
   background: var(--bg-card-hover);
 }
 
-.tip {
+.platform-form {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  margin-bottom: var(--spacing-3);
+  flex-direction: column;
+  gap: var(--spacing-3);
 }
 
-.tip code {
-  font-family: var(--font-mono);
-  background: transparent;
-  color: var(--text-secondary);
+.form-section {
+  padding-bottom: var(--spacing-2);
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.form-section:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 var(--spacing-3);
+}
+
+.base-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 160px;
+}
+
+.endpoint-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .form-section-title {
@@ -652,8 +663,18 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
   font-weight: var(--font-semibold);
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: var(--spacing-2) 0 var(--spacing-2);
+  letter-spacing: 0;
+  margin-bottom: var(--spacing-2);
+}
+
+.platform-form :deep(.n-form-item) {
+  --n-label-height: 20px;
+  --n-blank-height: 0;
+  margin-bottom: 8px;
+}
+
+.platform-form :deep(.n-form-item-feedback-wrapper) {
+  min-height: 0;
 }
 
 @media (max-width: 900px) {
@@ -664,7 +685,9 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 }
 
 @media (max-width: 640px) {
-  .form-grid {
+  .form-grid,
+  .base-grid,
+  .endpoint-grid {
     grid-template-columns: 1fr;
   }
 }

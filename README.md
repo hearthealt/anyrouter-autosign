@@ -120,6 +120,31 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 
 更完整的字段映射说明见 [docs/new-platform-response-adapter.md](docs/new-platform-response-adapter.md)。
 
+### 需要验证码的签到接口
+
+部分 New API 平台的执行签到接口是 `/api/user/checkin`，需要先请求 `/api/user/checkin/captcha` 获取验证码，再提交：
+
+```json
+{
+  "captcha_id": "xxxx",
+  "captcha_answer": "xxxx"
+}
+```
+
+这类平台请把平台配置里的 `sign_api` 设置为实际签到接口，并在 `captcha_api` 明确填写验证码接口。`captcha_api` 留空时系统不会尝试验证码签到。系统会从验证码响应里提取图片字段，使用内置 OCR 获取 `captcha_answer`。
+
+内置 OCR 依赖 `ddddocr`：
+
+```bash
+pip install ddddocr
+```
+
+验证码识别只使用当前后端进程内的 OCR，不需要额外启动识别服务。
+
+### 需要 Turnstile 的平台
+
+部分平台会在登录、签到或 Token 管理接口要求 Cloudflare Turnstile。系统不内置 Turnstile token provider，也不会调用全局或外部识别服务；这类平台请在目标站点手动完成登录或签到，再把有效的 Session Cookie 填入账号。
+
 ### 平台接口字段
 
 | 字段 | 默认值 | 用途 |
@@ -134,6 +159,7 @@ AnyRouter Admin 是一个支持多平台的账号管理与自动签到面板。�
 | `token_api` | `/api/token/` | 获取和管理 Token |
 | `status_api` | `/api/status` | 获取状态或节点信息 |
 | `console_url` | `/console` | 平台控制台地址 |
+| `captcha_api` | 空 | 签到图片验证码接口，留空表示不启用验证码签到 |
 
 ## 系统设置
 

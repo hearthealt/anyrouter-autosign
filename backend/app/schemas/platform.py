@@ -19,6 +19,7 @@ class PlatformCreate(BaseModel):
     groups_api: str = "/api/user/self/groups"
     token_api: str = "/api/token/"
     status_api: str = "/api/status"
+    captcha_api: str = ""
 
 
 class PlatformUpdate(BaseModel):
@@ -34,6 +35,7 @@ class PlatformUpdate(BaseModel):
     groups_api: Optional[str] = None
     token_api: Optional[str] = None
     status_api: Optional[str] = None
+    captcha_api: Optional[str] = None
 
 
 class PlatformBrief(BaseModel):
@@ -60,6 +62,7 @@ class PlatformResponse(BaseModel):
     groups_api: str = "/api/user/self/groups"
     token_api: str = "/api/token/"
     status_api: str = "/api/status"
+    captcha_api: str = ""
     is_default: bool = False
     accounts_count: int = 0
     created_at: datetime

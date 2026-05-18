@@ -58,7 +58,7 @@ export const authApi = {
 // 平台 API
 export const platformApi = {
   getList: (params?: { page?: number; size?: number; keyword?: string }) => api.get('/platforms', { params }),
-  create: (data: { name: string; base_url: string; sign_mode?: 'api' | 'login'; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string }) => api.post('/platforms', data),
+  create: (data: { name: string; base_url: string; sign_mode?: 'api' | 'login'; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string; captcha_api?: string }) => api.post('/platforms', data),
   get: (id: number) => api.get(`/platforms/${id}`),
   update: (id: number, data: any) => api.put(`/platforms/${id}`, data),
   delete: (id: number) => api.delete(`/platforms/${id}`)
@@ -194,7 +194,8 @@ export const statisticsApi = {
     return api.get('/statistics/daily', { params })
   },
   getMonthly: (months = 12) => api.get('/statistics/monthly', { params: { months } }),
-  getAccounts: () => api.get('/statistics/accounts'),
+  getAccounts: (params?: { page?: number; size?: number; sort_by?: string }) =>
+    api.get('/statistics/accounts', { params }),
   export: (params?: { start_date?: string; end_date?: string; format?: string }) =>
     api.get('/statistics/export', { params })
 }

@@ -52,6 +52,8 @@ class DailyTrend(BaseModel):
     date: str
     success: int
     fail: int
+    reward: int = 0
+    reward_display: str = "$0.00"
 
 
 class DashboardResponse(BaseModel):

@@ -130,6 +130,12 @@
     <div class="panel">
       <div class="panel-head">
         <div class="panel-title">账号排行</div>
+        <n-select
+          v-model:value="accountRankSort"
+          :options="accountRankSortOptions"
+          size="small"
+          class="rank-sort-select"
+        />
       </div>
       <div v-if="loadingAccounts" class="table-wrap skeleton-table" aria-busy="true" aria-label="加载中">
         <n-skeleton v-for="i in 6" :key="i" :height="32" :sharp="false" style="margin-bottom: 8px" />
@@ -143,6 +149,18 @@
           :pagination="false"
           size="small"
         />
+        <div class="ranking-pagination">
+          <n-pagination
+            v-model:page="accountPagination.page"
+            v-model:page-size="accountPagination.pageSize"
+            :item-count="accountPagination.itemCount"
+            :page-sizes="accountPagination.pageSizes"
+            show-size-picker
+            size="small"
+            @update:page="loadAccountStats"
+            @update:page-size="handleAccountPageSizeChange"
+          />
+        </div>
       </div>
       <div v-else class="chart-empty">暂无数据</div>
     </div>
@@ -171,6 +189,20 @@ const dailyDays = ref(7)
 const customRange = ref<[number, number] | null>(null)
 const calendarData = ref<any[]>([])
 const currentMonth = ref(new Date())
+type AccountRankSort = 'streak_days' | 'success_count' | 'success_rate' | 'total_reward'
+const accountRankSort = ref<AccountRankSort>('success_count')
+const accountRankSortOptions = [
+  { label: '成功次数', value: 'success_count' },
+  { label: '连签天数', value: 'streak_days' },
+  { label: '成功率', value: 'success_rate' },
+  { label: '累计奖励', value: 'total_reward' }
+]
+const accountPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+  pageSizes: [10, 20, 50, 100]
+})
 
 const formatYmd = (ts: number) => {
   const d = new Date(ts)
@@ -235,6 +267,13 @@ const getChartTheme = () => {
     rewardColor: '#d97706',
     primaryColor: '#5e6ad2'
   }
+}
+
+const formatReward = (quota: number | undefined | null): string => {
+  const value = Number(quota || 0)
+  const usd = value / 500000
+  if (usd > 0 && usd < 0.01) return `$${usd.toFixed(4)}`
+  return `$${usd.toFixed(2)}`
 }
 
 const currentMonthDisplay = computed(() => {
@@ -321,7 +360,7 @@ const accountColumns = [
     key: 'rank',
     width: 50,
     render: (_: any, index: number) =>
-      h('span', { class: 'rank-num' }, index + 1)
+      h('span', { class: 'rank-num' }, (accountPagination.value.page - 1) * accountPagination.value.pageSize + index + 1)
   },
   {
     title: '账号',
@@ -390,6 +429,7 @@ const updateTrendChart = () => {
   if (!trendChart) return
   const theme = getChartTheme()
   const data = displayDailyData.value
+  const hasReward = data.some((d: any) => Number(d.reward || 0) > 0)
 
   const option: echarts.EChartsOption = {
     backgroundColor: theme.backgroundColor,
@@ -405,6 +445,7 @@ const updateTrendChart = () => {
         const date = params[0]?.axisValue || ''
         let html = `<div style="font-weight:600;margin-bottom:6px;">${date}</div>`
         params.forEach((item: any) => {
+          if (item.seriesName === '奖励') return
           const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
           html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;">
             <span style="display:inline-flex;align-items:center;gap:6px;">
@@ -412,9 +453,10 @@ const updateTrendChart = () => {
             </span><span>${item.value}</span></div>`
         })
         const dayData = data.find((d: any) => d.date === date)
-        if (dayData?.reward_display) {
+        const rewardDisplay = dayData?.reward_display || (Number(dayData?.reward || 0) > 0 ? formatReward(dayData?.reward) : '')
+        if (rewardDisplay) {
           html += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${theme.tooltipBorder};font-size:12px;color:${theme.rewardColor};">
-            奖励 ${dayData.reward_display}</div>`
+            奖励 ${rewardDisplay}</div>`
         }
         return html
       }
@@ -435,14 +477,28 @@ const updateTrendChart = () => {
         }
       }
     },
-    yAxis: {
-      type: 'value',
-      minInterval: 1,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: theme.textColor, fontSize: 11 },
-      splitLine: { lineStyle: { color: theme.splitLineColor, type: 'dashed' } }
-    },
+    yAxis: [
+      {
+        type: 'value',
+        minInterval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: theme.textColor, fontSize: 11 },
+        splitLine: { lineStyle: { color: theme.splitLineColor, type: 'dashed' } }
+      },
+      {
+        type: 'value',
+        show: hasReward,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: theme.textColor,
+          fontSize: 11,
+          formatter: (value: number) => formatReward(value)
+        },
+        splitLine: { show: false }
+      }
+    ],
     series: [
       {
         name: '成功',
@@ -461,6 +517,22 @@ const updateTrendChart = () => {
         barMaxWidth: 24,
         data: data.map((d: any) => d.fail),
         itemStyle: { color: theme.failColor, borderRadius: [3, 3, 0, 0] }
+      },
+      {
+        name: '奖励',
+        type: 'line',
+        yAxisIndex: 1,
+        data: data.map((d: any) => d.reward || 0),
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: hasReward ? 6 : 0,
+        lineStyle: { color: theme.rewardColor, width: hasReward ? 2 : 0 },
+        itemStyle: {
+          color: theme.rewardColor,
+          borderColor: isDarkMode.value ? '#16181c' : '#fff',
+          borderWidth: 2
+        },
+        emphasis: { disabled: !hasReward }
       }
     ]
   }
@@ -637,14 +709,33 @@ const loadMonthlyStats = async () => {
 const loadAccountStats = async () => {
   loadingAccounts.value = true
   try {
-    const res = await statisticsApi.getAccounts()
-    accountStats.value = res.data || []
+    const res = await statisticsApi.getAccounts({
+      page: accountPagination.value.page,
+      size: accountPagination.value.pageSize,
+      sort_by: accountRankSort.value
+    })
+    const data = res.data || {}
+    accountStats.value = data.items || []
+    accountPagination.value.itemCount = data.total || 0
+    accountPagination.value.page = data.page || accountPagination.value.page
+    accountPagination.value.pageSize = data.size || accountPagination.value.pageSize
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {
     loadingAccounts.value = false
   }
 }
+
+const handleAccountPageSizeChange = (pageSize: number) => {
+  accountPagination.value.pageSize = pageSize
+  accountPagination.value.page = 1
+  loadAccountStats()
+}
+
+watch(accountRankSort, () => {
+  accountPagination.value.page = 1
+  loadAccountStats()
+})
 
 onMounted(async () => {
   mediaQuery.addEventListener('change', handleThemeChange)
@@ -814,6 +905,10 @@ onUnmounted(() => {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
+}
+
+.rank-sort-select {
+  width: 120px;
 }
 
 .chart-body {
@@ -992,6 +1087,14 @@ onUnmounted(() => {
 .table-wrap :deep(.n-data-table) {
   border: none;
   border-radius: 0;
+}
+
+.ranking-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--border-color-light);
+  background: var(--bg-card-hover);
 }
 
 .statistics-page :deep(.rank-num) {

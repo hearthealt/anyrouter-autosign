@@ -59,6 +59,7 @@ def get_platforms(
             groups_api=p.groups_api,
             token_api=p.token_api,
             status_api=p.status_api,
+            captcha_api=p.captcha_api or "",
             is_default=p.is_default,
             accounts_count=accounts_count,
             created_at=p.created_at,
@@ -102,6 +103,7 @@ def create_platform(
         groups_api=data.groups_api,
         token_api=data.token_api,
         status_api=data.status_api,
+        captcha_api=data.captcha_api.strip() if data.captcha_api else "",
         is_default=not has_default_platform
     )
 
@@ -125,6 +127,7 @@ def create_platform(
             groups_api=platform.groups_api,
             token_api=platform.token_api,
             status_api=platform.status_api,
+            captcha_api=platform.captcha_api or "",
             is_default=platform.is_default,
             accounts_count=0,
             created_at=platform.created_at,
@@ -158,6 +161,7 @@ def get_platform(platform_id: int, db: Session = Depends(get_db)):
             groups_api=platform.groups_api,
             token_api=platform.token_api,
             status_api=platform.status_api,
+            captcha_api=platform.captcha_api or "",
             is_default=platform.is_default,
             accounts_count=accounts_count,
             created_at=platform.created_at,
@@ -209,6 +213,8 @@ def update_platform(
         platform.token_api = data.token_api
     if data.status_api is not None:
         platform.status_api = data.status_api
+    if data.captcha_api is not None:
+        platform.captcha_api = data.captcha_api.strip()
 
     db.commit()
     db.refresh(platform)

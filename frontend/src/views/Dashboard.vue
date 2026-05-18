@@ -779,7 +779,7 @@ useEventStream((event) => {
   if (eventRefreshTimer !== null) return
   eventRefreshTimer = window.setTimeout(async () => {
     eventRefreshTimer = null
-    await Promise.all([loadData(), loadEndpoints()])
+    await Promise.all([loadData(), loadEndpoints(), loadTrendData(trendDays.value)])
   }, 600)
 })
 

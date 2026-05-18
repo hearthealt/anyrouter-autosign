@@ -67,6 +67,7 @@ def execute_api_sign_request(
             sign_api=current_platform["sign_api"],
             checkin_api=current_platform["checkin_api"],
             console_url=current_platform["console_url"],
+            captcha_api=current_platform.get("captcha_api", ""),
             proxy_mode=account.proxy_mode,
             proxy_url=account.proxy_url,
         ),

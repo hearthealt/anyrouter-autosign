@@ -27,6 +27,7 @@ class Platform(Base):
     groups_api = Column(String(255), default="/api/user/self/groups")
     token_api = Column(String(255), default="/api/token/")
     status_api = Column(String(255), default="/api/status")
+    captcha_api = Column(String(255), default="")
 
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)

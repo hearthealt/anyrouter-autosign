@@ -78,10 +78,13 @@ def get_dashboard(db: Session = Depends(get_db)):
         ).all()
         success_count = len([log for log in day_logs if log.success])
         fail_count = len(day_logs) - success_count
+        reward = sum(log.reward_quota for log in day_logs if log.success)
         daily_trend.append(DailyTrend(
             date=day.strftime("%m-%d"),
             success=success_count,
-            fail=fail_count
+            fail=fail_count,
+            reward=reward,
+            reward_display=format_quota(reward)
         ))
 
     return ApiResponse(

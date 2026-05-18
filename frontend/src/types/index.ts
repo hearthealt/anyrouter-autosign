@@ -12,6 +12,7 @@ export interface Platform {
   groups_api?: string
   token_api?: string
   status_api?: string
+  captcha_api?: string
   is_default: boolean
   accounts_count?: number
   created_at: string
@@ -258,6 +259,8 @@ export interface DailyTrend {
   date: string
   success: number
   fail: number
+  reward?: number
+  reward_display?: string
 }
 
 // 统计相关类型

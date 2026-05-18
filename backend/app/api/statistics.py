@@ -4,7 +4,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, and_, extract
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -175,39 +175,145 @@ def get_monthly_stats(
 
 
 @router.get("/accounts", response_model=ApiResponse)
-def get_account_stats(db: Session = Depends(get_db)):
+def get_account_stats(
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=5, le=100),
+    sort_by: str = Query("success_count", enum=["streak_days", "success_count", "success_rate", "total_reward"]),
+    db: Session = Depends(get_db)
+):
     """获取各账号签到统计"""
-    accounts = db.query(Account).all()
+    total = db.query(func.count(Account.id)).scalar() or 0
+    offset = (page - 1) * size
+
+    success_count_expr = func.coalesce(func.sum(case((SignLog.success == True, 1), else_=0)), 0)
+    total_signs_expr = func.count(SignLog.id)
+    total_reward_expr = func.coalesce(func.sum(case((SignLog.success == True, SignLog.reward_quota), else_=0)), 0)
+    fail_count_expr = total_signs_expr - success_count_expr
+    success_rate_expr = case(
+        (total_signs_expr > 0, success_count_expr * 100.0 / total_signs_expr),
+        else_=0.0
+    )
+
+    base_query = (
+        db.query(
+            Account.id.label("account_id"),
+            Account.username,
+            Account.is_active,
+            Account.health_status,
+            total_signs_expr.label("total_signs"),
+            success_count_expr.label("success_count"),
+            fail_count_expr.label("fail_count"),
+            success_rate_expr.label("success_rate"),
+            total_reward_expr.label("total_reward"),
+        )
+        .outerjoin(SignLog, SignLog.account_id == Account.id)
+        .group_by(Account.id)
+    )
+
+    if sort_by == "success_rate":
+        sort_column = success_rate_expr
+    elif sort_by == "total_reward":
+        sort_column = total_reward_expr
+    else:
+        sort_column = success_count_expr
+
+    if sort_by == "streak_days":
+        rows = base_query.all()
+    else:
+        rows = (
+            base_query
+            .order_by(desc(sort_column), desc(success_count_expr), desc(success_rate_expr), desc(total_reward_expr), Account.id.asc())
+            .offset(offset)
+            .limit(size)
+            .all()
+        )
+
+    row_account_ids = [row.account_id for row in rows]
+    streaks = calculate_streaks(db, row_account_ids)
 
     result = []
-    for account in accounts:
-        # 查询该账号签到数据
-        logs = db.query(SignLog).filter(SignLog.account_id == account.id).all()
-
-        success_count = sum(1 for log in logs if log.success)
-        total_reward = sum(log.reward_quota for log in logs if log.success)
-
-        # 计算连续签到天数
-        streak = calculate_streak(db, account.id)
-
+    for row in rows:
         result.append({
-            "account_id": account.id,
-            "username": account.username,
-            "total_signs": len(logs),
-            "success_count": success_count,
-            "fail_count": len(logs) - success_count,
-            "success_rate": round(success_count / len(logs) * 100, 1) if logs else 0,
-            "total_reward": total_reward,
-            "total_reward_display": format_quota(total_reward),
-            "streak_days": streak,
-            "is_active": account.is_active,
-            "health_status": account.health_status
+            "account_id": row.account_id,
+            "username": row.username,
+            "total_signs": int(row.total_signs or 0),
+            "success_count": int(row.success_count or 0),
+            "fail_count": int(row.fail_count or 0),
+            "success_rate": round(float(row.success_rate or 0), 1),
+            "total_reward": int(row.total_reward or 0),
+            "total_reward_display": format_quota(int(row.total_reward or 0)),
+            "streak_days": streaks.get(row.account_id, 0),
+            "is_active": row.is_active,
+            "health_status": row.health_status
         })
 
-    # 按成功次数排序
-    result.sort(key=lambda x: x["success_count"], reverse=True)
+    if sort_by == "streak_days":
+        result.sort(
+            key=lambda item: (
+                item["streak_days"],
+                item["success_count"],
+                item["success_rate"],
+                item["total_reward"],
+            ),
+            reverse=True
+        )
+        result = result[offset:offset + size]
 
-    return ApiResponse(success=True, data=result)
+    return ApiResponse(success=True, data={
+        "items": result,
+        "total": total,
+        "page": page,
+        "size": size
+    })
+
+
+def _coerce_sign_date(value):
+    if hasattr(value, "date"):
+        return value.date()
+    if hasattr(value, "isoformat") and not isinstance(value, str):
+        return value
+    return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+
+
+def _calculate_streak_from_dates(signed_dates: set) -> int:
+    streak = 0
+    today = datetime.now().date()
+    current_date = today
+
+    while current_date in signed_dates or (current_date == today and today not in signed_dates):
+        if current_date in signed_dates:
+            streak += 1
+        elif current_date != today:
+            break
+        current_date -= timedelta(days=1)
+
+    return streak
+
+
+def calculate_streaks(db: Session, account_ids: list[int]) -> dict[int, int]:
+    """批量计算账号连续签到天数。"""
+    if not account_ids:
+        return {}
+
+    sign_date_expr = func.date(SignLog.sign_time)
+    rows = (
+        db.query(SignLog.account_id, sign_date_expr.label("sign_date"))
+        .filter(
+            SignLog.account_id.in_(account_ids),
+            SignLog.success == True
+        )
+        .group_by(SignLog.account_id, sign_date_expr)
+        .all()
+    )
+
+    signed_dates_by_account = {account_id: set() for account_id in account_ids}
+    for account_id, sign_date in rows:
+        signed_dates_by_account.setdefault(account_id, set()).add(_coerce_sign_date(sign_date))
+
+    return {
+        account_id: _calculate_streak_from_dates(signed_dates)
+        for account_id, signed_dates in signed_dates_by_account.items()
+    }
 
 
 def calculate_streak(db: Session, account_id: int) -> int:
@@ -220,24 +326,12 @@ def calculate_streak(db: Session, account_id: int) -> int:
     if not logs:
         return 0
 
-    streak = 0
-    today = datetime.now().date()
-    current_date = today
-
     # 按日期分组
     signed_dates = set()
     for log in logs:
         signed_dates.add(log.sign_time.date())
 
-    # 从今天开始往前数连续天数
-    while current_date in signed_dates or (current_date == today and today not in signed_dates):
-        if current_date in signed_dates:
-            streak += 1
-        elif current_date != today:
-            break
-        current_date -= timedelta(days=1)
-
-    return streak
+    return _calculate_streak_from_dates(signed_dates)
 
 
 @router.get("/export", response_model=ApiResponse)

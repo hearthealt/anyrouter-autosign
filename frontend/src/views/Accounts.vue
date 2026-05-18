@@ -227,6 +227,7 @@ import {
   NButton,
   NIcon,
   NPopconfirm,
+  NSwitch,
   NTooltip,
   type DataTableColumns,
   type DataTableSortOrder,
@@ -262,6 +263,7 @@ const batchSigning = ref(false)
 const batchChecking = ref(false)
 const signingId = ref<number | null>(null)
 const checkingId = ref<number | null>(null)
+const togglingActiveId = ref<number | null>(null)
 const searchKeyword = ref('')
 const selectedPlatformId = ref<number | null>(null)
 const selectedGroupId = ref<number | null>(null)
@@ -442,6 +444,25 @@ const handleHealthCheck = async (account: Account) => {
     window.$notify(e.message || '健康检查失败', 'error', { route: `/account/${account.id}` })
   } finally {
     checkingId.value = null
+  }
+}
+
+const handleToggleAccountActive = async (account: Account, active: boolean) => {
+  if (togglingActiveId.value !== null || account.is_active === active) return
+
+  const previousActive = account.is_active
+  togglingActiveId.value = account.id
+  account.is_active = active
+
+  try {
+    await accountApi.update(account.id, { is_active: active })
+    window.$notify(`${active ? '启用' : '禁用'}成功`, 'success', { route: `/account/${account.id}` })
+    await loadData(pagination.value.page)
+  } catch (e: any) {
+    account.is_active = previousActive
+    window.$notify(e.message || `${active ? '启用' : '禁用'}失败`, 'error', { route: `/account/${account.id}` })
+  } finally {
+    togglingActiveId.value = null
   }
 }
 
@@ -976,11 +997,21 @@ const columns = computed<DataTableColumns<Account>>(() => [
   {
     title: '状态',
     key: 'health',
-    width: 90,
+    width: 150,
     sorter: 'default',
     sortOrder: getSortOrder('health'),
     render: account =>
-      h('span', { class: `tag ${getHealthTone(account)}` }, getHealthLabel(account))
+      h('div', { class: 'status-cell' }, [
+        h('span', { class: `tag ${getHealthTone(account)}` }, getHealthLabel(account)),
+        h(NSwitch, {
+          size: 'small',
+          value: account.is_active,
+          disabled: togglingActiveId.value !== null && togglingActiveId.value !== account.id,
+          loading: togglingActiveId.value === account.id,
+          onClick: (event: MouseEvent) => event.stopPropagation(),
+          'onUpdate:value': (value: boolean) => handleToggleAccountActive(account, value)
+        })
+      ])
   },
   {
     title: '操作',
@@ -991,8 +1022,29 @@ const columns = computed<DataTableColumns<Account>>(() => [
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' }),
-        h(NButton, { size: 'tiny', quaternary: true, disabled: !account.is_active, loading: signingId.value === account.id, onClick: () => handleSign(account) }, { default: () => '签到' }),
-        h(NButton, { size: 'tiny', quaternary: true, loading: checkingId.value === account.id, onClick: () => handleHealthCheck(account) }, { default: () => '检查' }),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            quaternary: true,
+            class: 'action-button',
+            disabled: !account.is_active,
+            loading: signingId.value === account.id,
+            onClick: () => handleSign(account)
+          },
+          { default: () => (signingId.value === account.id ? '' : '签到') }
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            quaternary: true,
+            class: 'action-button',
+            loading: checkingId.value === account.id,
+            onClick: () => handleHealthCheck(account)
+          },
+          { default: () => (checkingId.value === account.id ? '' : '检查') }
+        ),
         h(
           NPopconfirm,
           {
@@ -1405,9 +1457,25 @@ useViewRefresh(() => handleRefresh())
   color: var(--text-tertiary);
 }
 
+.accounts-page :deep(.status-cell) {
+  display: inline-grid;
+  grid-template-columns: 56px 42px;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-width: 106px;
+}
+
+.accounts-page :deep(.status-cell .tag) {
+  justify-content: center;
+}
+
 .accounts-page :deep(.actions) {
   display: flex;
   gap: 2px;
+}
+
+.accounts-page :deep(.action-button) {
+  width: 42px;
 }
 
 .accounts-page :deep(.account-row-warning td) {
