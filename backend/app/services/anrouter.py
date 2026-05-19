@@ -8,7 +8,9 @@ import json
 import time
 import logging
 import uuid
-from typing import Optional, Tuple, Dict, Any
+from io import BytesIO
+from threading import RLock
+from typing import Optional, Tuple, Dict, Any, Iterable, List
 
 import requests
 
@@ -105,6 +107,8 @@ class AnyRouterService:
 
     def __init__(self):
         self.anti_crawler = AntiCrawlerSolver()
+        self._captcha_ocr = None
+        self._captcha_ocr_lock = RLock()
 
     @staticmethod
     def _parse_setting_value(raw_value: Any) -> Any:
@@ -422,9 +426,145 @@ class AnyRouterService:
         if raw_answer is None:
             return None
         answer = str(raw_answer).strip()
+        expression = (
+            answer.replace(" ", "")
+            .replace("=", "")
+            .replace("＋", "+")
+            .replace("－", "-")
+            .replace("×", "*")
+            .replace("x", "*")
+            .replace("X", "*")
+            .replace("÷", "/")
+        )
+        expression_match = re.search(r"(\d{1,2})([+\-*/])(\d{1,2})", expression)
+        if expression_match:
+            left = int(expression_match.group(1))
+            operator = expression_match.group(2)
+            right = int(expression_match.group(3))
+            if operator == "+":
+                return str(left + right)
+            if operator == "-":
+                return str(left - right)
+            if operator == "*":
+                return str(left * right)
+            if operator == "/" and right != 0 and left % right == 0:
+                return str(left // right)
+
+        answer = re.sub(r"[^0-9A-Za-z]", "", answer)
         if not answer:
             return None
         return answer
+
+    @staticmethod
+    def _score_captcha_answer(answer: str) -> int:
+        """给 OCR 候选答案打分，优先选择常见的 4-6 位字母数字验证码。"""
+        if not answer:
+            return -100
+
+        length = len(answer)
+        score = 0
+        if length == 5:
+            score += 55
+        elif length == 4:
+            score += 35
+        elif length == 6:
+            score += 30
+        elif 3 <= length <= 8:
+            score += 15
+        else:
+            score -= 30
+
+        unsigned_answer = answer.lstrip("-")
+        if unsigned_answer.isalnum():
+            score += 20
+        if unsigned_answer.isdigit() and 1 <= len(unsigned_answer) <= 2:
+            score += 25
+        if unsigned_answer.isdigit() or unsigned_answer.isalpha():
+            score += 5
+        if any(char.isdigit() for char in unsigned_answer) and any(char.isalpha() for char in unsigned_answer):
+            score += 10
+
+        score -= abs(length - 5) * 3
+        return score
+
+    @staticmethod
+    def _captcha_variant_weight(variant_name: str) -> int:
+        """同分时优先保留信息更多的图像版本，避免二值化误伤字符细节。"""
+        if variant_name == "gray_autocontrast":
+            return 6
+        if variant_name == "original":
+            return 5
+        if variant_name == "contrast_median":
+            return 3
+        if variant_name.startswith("binary_"):
+            return 1
+        return 0
+
+    @staticmethod
+    def _is_low_fidelity_captcha_variant(variant_name: str) -> bool:
+        return variant_name.startswith("binary_")
+
+    def _get_captcha_ocr(self):
+        """懒加载并复用 ddddocr 实例，避免每次验证码都重新加载模型。"""
+        if self._captcha_ocr is not None:
+            return self._captcha_ocr
+
+        with self._captcha_ocr_lock:
+            if self._captcha_ocr is not None:
+                return self._captcha_ocr
+            import ddddocr  # type: ignore
+
+            try:
+                self._captcha_ocr = ddddocr.DdddOcr(show_ad=False)
+            except TypeError:
+                self._captcha_ocr = ddddocr.DdddOcr()
+            return self._captcha_ocr
+
+    def _classify_captcha_image(self, image_bytes: bytes) -> Any:
+        """串行调用共享 OCR 实例，避免并发签到时模型对象状态互相影响。"""
+        with self._captcha_ocr_lock:
+            ocr = self._get_captcha_ocr()
+            return ocr.classification(image_bytes)
+
+    @staticmethod
+    def _image_to_png_bytes(image: Any) -> bytes:
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    @classmethod
+    def _iter_captcha_image_candidates(cls, image_bytes: bytes) -> Iterable[Tuple[str, bytes]]:
+        """生成多种验证码图片候选，提升 ddddocr 对噪声、低对比度图片的稳定性。"""
+        yield "original", image_bytes
+
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+        except ImportError:
+            return
+
+        try:
+            with Image.open(BytesIO(image_bytes)) as opened:
+                image = opened.convert("RGB")
+        except Exception:
+            return
+
+        width, height = image.size
+        scale = 2 if max(width, height) < 160 else 1
+        if scale > 1:
+            resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.BICUBIC)
+            image = image.resize((width * scale, height * scale), resampling)
+
+        gray = ImageOps.grayscale(image)
+        gray = ImageOps.autocontrast(gray)
+        yield "gray_autocontrast", cls._image_to_png_bytes(gray)
+
+        enhanced = ImageEnhance.Contrast(gray).enhance(1.8)
+        enhanced = enhanced.filter(ImageFilter.MedianFilter(size=3))
+        yield "contrast_median", cls._image_to_png_bytes(enhanced)
+
+        for threshold in (110, 130, 150, 170):
+            binary = enhanced.point(lambda pixel, limit=threshold: 255 if pixel > limit else 0, mode="1")
+            yield f"binary_{threshold}", cls._image_to_png_bytes(binary.convert("L"))
 
     @staticmethod
     def _find_value_by_keys(data: Any, keys: set[str]) -> Optional[str]:
@@ -496,18 +636,63 @@ class AnyRouterService:
         logger.info("验证码签到[%s] OCR 图片提取成功: image_bytes=%s", trace_id, len(image_bytes))
 
         try:
-            import ddddocr  # type: ignore
+            self._get_captcha_ocr()
         except ImportError:
             logger.error("验证码签到[%s] OCR 依赖缺失: ddddocr 未安装", trace_id)
             return False, {"message": "未安装内置验证码识别依赖，请执行 pip install ddddocr"}
 
         try:
-            ocr = ddddocr.DdddOcr(show_ad=False)
-            answer = self._normalize_captcha_answer(ocr.classification(image_bytes))
+            candidates: List[Dict[str, Any]] = []
+            seen_answers: set[str] = set()
+
+            for variant_name, candidate_bytes in self._iter_captcha_image_candidates(image_bytes):
+                try:
+                    answer = self._normalize_captcha_answer(self._classify_captcha_image(candidate_bytes))
+                except Exception as variant_error:
+                    logger.debug(
+                        "验证码签到[%s] OCR 候选识别异常: variant=%s error=%s",
+                        trace_id,
+                        variant_name,
+                        variant_error,
+                    )
+                    continue
+                if not answer:
+                    continue
+
+                answer_key = answer.upper()
+                score = self._score_captcha_answer(answer)
+                if answer_key in seen_answers:
+                    score += 3 if self._is_low_fidelity_captcha_variant(variant_name) else 8
+                else:
+                    seen_answers.add(answer_key)
+                candidates.append({
+                    "answer": answer,
+                    "variant": variant_name,
+                    "score": score,
+                    "variant_weight": self._captcha_variant_weight(variant_name),
+                })
+
+            if not candidates:
+                logger.warning("验证码签到[%s] OCR 识别失败: 返回空结果", trace_id)
+                return False, {"message": "内置 OCR 未识别出验证码"}
+
+            best_candidate = max(candidates, key=lambda item: (item["score"] + item["variant_weight"], item["score"]))
+            answer = best_candidate["answer"]
             if not answer:
                 logger.warning("验证码签到[%s] OCR 识别失败: 返回空结果", trace_id)
                 return False, {"message": "内置 OCR 未识别出验证码"}
-            logger.info("验证码签到[%s] OCR 识别成功: answer=%s answer_length=%s", trace_id, answer, len(answer))
+            logger.info(
+                "验证码签到[%s] OCR 识别成功: answer=%s answer_length=%s variant=%s total_score=%s candidates=%s",
+                trace_id,
+                _mask_log_value(answer, keep=1),
+                len(answer),
+                best_candidate["variant"],
+                best_candidate["score"] + best_candidate["variant_weight"],
+                [
+                    f"{item['variant']}:len={len(str(item['answer']))}:score={item['score']}:weight={item['variant_weight']}"
+                    for item in candidates
+                ],
+            )
             return True, {"captcha_answer": answer}
         except Exception as e:
             logger.exception("验证码签到[%s] OCR 识别异常", trace_id)
@@ -816,7 +1001,7 @@ class AnyRouterService:
             trace_id,
             f"{base_url}{sign_api}",
             _mask_log_value(captcha_id),
-            solve_result["captcha_answer"],
+            _mask_log_value(solve_result["captcha_answer"], keep=1),
             len(str(solve_result["captcha_answer"])),
         )
         parsed, sign_data = self._post_json(
@@ -841,6 +1026,8 @@ class AnyRouterService:
             normalized.get("reward_quota", 0),
             normalized.get("already_signed", False),
         )
+        if not normalized.get("success", False):
+            return False, normalized
         return True, normalized
 
     def _get_base_headers(self, base_url: str, console_url: str = None) -> Dict[str, str]:
