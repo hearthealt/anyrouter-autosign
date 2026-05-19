@@ -22,6 +22,86 @@ class WeChatMPNotify(NotifyBase):
         super().__init__(config)
         self.access_token: Optional[str] = None
 
+    @staticmethod
+    def _parse_sign_summary(content: str) -> Dict[str, str]:
+        """解析定时签到汇总内容，供微信公众号模板压缩展示。"""
+        result: Dict[str, str] = {}
+        failed_items = []
+        in_failed_section = False
+
+        for raw_line in (content or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line == "失败账号:":
+                in_failed_section = True
+                continue
+            if in_failed_section:
+                failed_items.append(line.lstrip("- ").strip())
+                continue
+            if ":" not in line:
+                continue
+
+            key, value = line.split(":", 1)
+            result[key.strip()] = value.strip()
+
+        if failed_items:
+            result["失败账号"] = "；".join(failed_items[:2])
+        return result
+
+    @staticmethod
+    def _format_summary_time(value: str) -> str:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").strftime("%Y年%m月%d日 %H:%M:%S")
+        except (TypeError, ValueError):
+            return value
+
+    def _build_template_data(self, title: str, content: str) -> Dict[str, Dict[str, str]]:
+        summary = self._parse_sign_summary(content)
+        if summary.get("本次签到账号"):
+            fail_count = summary.get("失败", "0 个")
+            has_failures = not fail_count.startswith("0")
+            detail = summary.get("失败账号") or "无失败账号"
+            return {
+                "keyword1": {
+                    "value": f"账号{summary.get('本次签到账号')} 成功{summary.get('成功', '0 个')} 失败{fail_count}",
+                    "color": "#ff6b6b" if has_failures else "#51cf66"
+                },
+                "keyword2": {
+                    "value": f"已签{summary.get('已签到', '0 个')} 奖励{summary.get('签到奖励', '$0.00')}",
+                    "color": "#606266"
+                },
+                "keyword3": {
+                    "value": self._format_summary_time(summary.get("执行时间", "")),
+                    "color": "#909399"
+                },
+                "keyword4": {
+                    "value": detail,
+                    "color": "#ff6b6b" if has_failures else "#606266"
+                }
+            }
+
+        current_time = datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')
+        status = "成功" if "成功" in title else "失败"
+        return {
+            "keyword1": {
+                "value": title,
+                "color": "#ff6b6b" if status == "失败" else "#51cf66"
+            },
+            "keyword2": {
+                "value": "AnyRouter签到",
+                "color": "#909399"
+            },
+            "keyword3": {
+                "value": current_time,
+                "color": "#909399"
+            },
+            "keyword4": {
+                "value": content,
+                "color": "#606266"
+            }
+        }
+
     def _get_access_token(self) -> bool:
         """获取访问令牌"""
         try:
@@ -51,34 +131,16 @@ class WeChatMPNotify(NotifyBase):
 
         openid = account_config.get("openid") if account_config else None
         if not openid:
+            openid = self.config.get("openid")
+        if not openid:
             logger.error("未提供 OpenID")
             return False
 
         try:
-            current_time = datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')
-            status = "成功" if "成功" in title else "失败"
-
             data = {
                 "touser": openid,
                 "template_id": self.config.get("template_id"),
-                "data": {
-                    "keyword1": {
-                        "value": title,
-                        "color": "#ff6b6b" if status == "失败" else "#51cf66"
-                    },
-                    "keyword2": {
-                        "value": "AnyRouter签到",
-                        "color": "#909399"
-                    },
-                    "keyword3": {
-                        "value": current_time,
-                        "color": "#909399"
-                    },
-                    "keyword4": {
-                        "value": content,
-                        "color": "#606266"
-                    }
-                }
+                "data": self._build_template_data(title, content)
             }
 
             url = f"{self.MESSAGE_URL}?access_token={self.access_token}"
