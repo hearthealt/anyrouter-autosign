@@ -594,7 +594,7 @@ const handleAccountSubmit = async (data: any) => {
       if (data.platform_id) {
         updateData.platform_id = data.platform_id
       }
-      const previousProxyMode = editingAccount.value.proxy_mode || 'global'
+      const previousProxyMode = editingAccount.value.proxy_mode || 'direct'
       if (data.proxy_mode !== previousProxyMode) {
         updateData.proxy_mode = data.proxy_mode as AccountProxyMode
       }

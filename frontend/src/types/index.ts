@@ -85,7 +85,7 @@ export interface CreateAccountParams {
   group_id?: number
 }
 
-export type AccountProxyMode = 'global' | 'direct' | 'custom'
+export type AccountProxyMode = 'direct' | 'custom'
 
 export interface BatchImportItem {
   session_cookie?: string
@@ -306,8 +306,8 @@ export interface SystemSettings {
   sign_retry_enabled: boolean
   sign_max_retries: number
   sign_retry_interval: number
-  anyrouter_proxy_enabled: boolean
-  anyrouter_proxy_url: string
+  sign_notify_enabled: boolean
+  sign_notify_channel_ids: number[]
   quota_warning_threshold: number
 }
 

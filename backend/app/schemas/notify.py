@@ -11,6 +11,7 @@ class NotifyChannelCreate(BaseModel):
     type: str  # pushplus, wechat_mp, wechat_work, dingtalk, feishu, email
     name: str
     config: Dict[str, Any]
+    is_enabled: bool = True
 
 
 class NotifyChannelUpdate(BaseModel):

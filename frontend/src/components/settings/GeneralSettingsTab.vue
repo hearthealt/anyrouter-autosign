@@ -72,7 +72,7 @@
             <span class="setting-row-label">重试间隔</span>
             <div class="setting-row-control">
               <n-input-number v-model:value="settings.sign_retry_interval" :min="5" :max="120" size="small" style="width: 70px;" />
-              <span class="setting-row-unit">分钟</span>
+              <span class="setting-row-unit">分</span>
             </div>
           </div>
         </div>
@@ -83,30 +83,33 @@
 
       <div class="setting-card">
         <div class="setting-card-header">
-          <div class="setting-card-icon proxy">
-            <n-icon :size="20"><GlobeOutline /></n-icon>
+          <div class="setting-card-icon notify">
+            <n-icon :size="20"><NotificationsOutline /></n-icon>
           </div>
           <div class="setting-card-title">
-            <span>平台代理</span>
-            <n-switch v-model:value="settings.anyrouter_proxy_enabled" size="small" />
+            <span>签到推送</span>
+            <n-switch v-model:value="settings.sign_notify_enabled" size="small" />
           </div>
         </div>
-        <div class="setting-card-body" v-if="settings.anyrouter_proxy_enabled">
+        <div class="setting-card-body" v-if="settings.sign_notify_enabled">
           <div class="setting-stack">
-            <span class="setting-row-label">代理地址</span>
-            <n-input
-              v-model:value="settings.anyrouter_proxy_url"
+            <span class="setting-row-label">推送渠道</span>
+            <n-select
+              v-model:value="settings.sign_notify_channel_ids"
+              multiple
               size="small"
+              :options="notifyChannelOptions"
+              :loading="loadingChannels"
+              placeholder="选择接收定时签到汇总的渠道"
               clearable
-              placeholder="http://127.0.0.1:7890"
             />
           </div>
           <div class="setting-note">
-            仅影响服务端访问平台接口的请求，推荐填写 HTTP/HTTPS 代理地址
+            仅定时签到和定时重试会发送汇总，手动签到不推送
           </div>
         </div>
         <div class="setting-card-footer" v-else>
-          <span class="setting-disabled-text">关闭后将直接连接目标平台</span>
+          <span class="setting-disabled-text">开启后可选择定时签到汇总接收渠道</span>
         </div>
       </div>
 
@@ -144,7 +147,7 @@
     <div class="settings-footer">
       <div class="settings-tip">
         <n-icon><InformationCircleOutline /></n-icon>
-        签到推送渠道请在「控制台」编辑账号时配置
+        已选择的推送渠道会接收定时签到汇总；账号编辑里的渠道仅用于定时健康告警
       </div>
       <n-button type="primary" @click="saveSettings" :loading="saving">
         保存设置
@@ -159,12 +162,13 @@ import {
   TimeOutline,
   PulseOutline,
   RefreshOutline,
-  GlobeOutline,
+  NotificationsOutline,
   WarningOutline,
   InformationCircleOutline
 } from '@vicons/ionicons5'
-import { settingsApi } from '../../api'
+import { notifyApi, settingsApi } from '../../api'
 import { apiError } from '../../utils/apiError'
+import type { NotifyChannel, SelectOption } from '../../types'
 
 const emit = defineEmits<{
   (e: 'update:auto-sign-enabled', v: boolean): void
@@ -172,6 +176,8 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 const saving = ref(false)
+const loadingChannels = ref(false)
+const notifyChannelOptions = ref<SelectOption<number>[]>([])
 const settings = ref({
   auto_sign_enabled: false,
   auto_sign_time: '08:00',
@@ -180,8 +186,8 @@ const settings = ref({
   sign_retry_enabled: true,
   sign_max_retries: 3,
   sign_retry_interval: 30,
-  anyrouter_proxy_enabled: false,
-  anyrouter_proxy_url: '',
+  sign_notify_enabled: false,
+  sign_notify_channel_ids: [] as number[],
   quota_warning_threshold: 5
 })
 const schedulerStatus = ref({
@@ -206,10 +212,12 @@ watch(() => settings.value.auto_sign_enabled, v => emit('update:auto-sign-enable
 
 const load = async () => {
   loading.value = true
+  loadingChannels.value = true
   try {
-    const [settingsRes, schedulerRes] = await Promise.all([
+    const [settingsRes, schedulerRes, channelsRes] = await Promise.all([
       settingsApi.get(),
-      settingsApi.getScheduler()
+      settingsApi.getScheduler(),
+      notifyApi.getChannels()
     ])
     if (settingsRes.data) {
       settings.value = { ...settings.value, ...settingsRes.data }
@@ -217,21 +225,23 @@ const load = async () => {
     if (schedulerRes.data) {
       schedulerStatus.value = schedulerRes.data
     }
+    notifyChannelOptions.value = (channelsRes.data || [])
+      .filter((channel: NotifyChannel) => channel.is_enabled)
+      .map((channel: NotifyChannel) => ({ label: channel.name, value: channel.id }))
   } catch (e) {
     window.$notify(apiError(e), 'error')
   } finally {
     loading.value = false
+    loadingChannels.value = false
   }
 }
 
 const saveSettings = async () => {
-  const proxyUrl = settings.value.anyrouter_proxy_url.trim()
-  if (settings.value.anyrouter_proxy_enabled && !proxyUrl) {
-    window.$notify('启用代理时请填写代理地址', 'warning')
+  if (settings.value.sign_notify_enabled && settings.value.sign_notify_channel_ids.length === 0) {
+    window.$notify('启用签到推送时请选择推送渠道', 'warning')
     return
   }
 
-  settings.value.anyrouter_proxy_url = proxyUrl
   saving.value = true
   try {
     await settingsApi.update(settings.value)
@@ -291,7 +301,7 @@ onMounted(load)
 .setting-card-icon.auto-sign { background: var(--primary-color-light); color: var(--primary-color); }
 .setting-card-icon.health { background: var(--info-color-light); color: var(--info-color); }
 .setting-card-icon.retry { background: var(--warning-color-light); color: var(--warning-color); }
-.setting-card-icon.proxy { background: var(--cyan-light); color: var(--cyan-color); }
+.setting-card-icon.notify { background: var(--cyan-light); color: var(--cyan-color); }
 .setting-card-icon.quota { background: var(--warning-color-light); color: var(--warning-color); }
 
 .setting-card-title {

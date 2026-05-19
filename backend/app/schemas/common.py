@@ -2,7 +2,7 @@
 通用响应和设置 Schema
 """
 from typing import Optional, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ApiResponse(BaseModel):
@@ -21,8 +21,8 @@ class SettingsResponse(BaseModel):
     sign_retry_enabled: bool = True
     sign_max_retries: int = 3
     sign_retry_interval: int = 30
-    anyrouter_proxy_enabled: bool = False
-    anyrouter_proxy_url: str = ""
+    sign_notify_enabled: bool = False
+    sign_notify_channel_ids: List[int] = Field(default_factory=list)
     quota_warning_threshold: float = 5.0
 
 
@@ -35,8 +35,8 @@ class SettingsUpdate(BaseModel):
     sign_retry_enabled: Optional[bool] = None
     sign_max_retries: Optional[int] = None
     sign_retry_interval: Optional[int] = None
-    anyrouter_proxy_enabled: Optional[bool] = None
-    anyrouter_proxy_url: Optional[str] = None
+    sign_notify_enabled: Optional[bool] = None
+    sign_notify_channel_ids: Optional[List[int]] = None
     quota_warning_threshold: Optional[float] = None
 
 

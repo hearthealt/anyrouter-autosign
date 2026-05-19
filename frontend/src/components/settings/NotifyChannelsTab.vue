@@ -4,7 +4,7 @@
       <div class="channel-header">
         <div class="channel-header-info">
           <div class="channel-header-title">推送渠道</div>
-          <div class="channel-header-desc">配置签到结果通知方式，支持多种推送渠道</div>
+          <div class="channel-header-desc">配置定时签到汇总与健康告警通知方式，支持多种推送渠道</div>
         </div>
         <n-button type="primary" @click="showAddChannelModal">
           <template #icon><n-icon><AddOutline /></n-icon></template>
@@ -17,9 +17,9 @@
       <div v-if="channels.length > 0" class="channel-grid">
         <div v-for="channel in channels" :key="channel.id" class="channel-card">
           <div class="channel-card-header">
-            <div class="channel-icon" :class="channel.channel_type">
+            <div class="channel-icon" :class="channel.type">
               <n-icon :size="20">
-                <component :is="getChannelIcon(channel.channel_type)" />
+                <component :is="getChannelIcon(channel.type)" />
               </n-icon>
             </div>
             <div class="channel-status">
@@ -30,7 +30,7 @@
           </div>
           <div class="channel-card-body">
             <div class="channel-name">{{ channel.name }}</div>
-            <div class="channel-type-label">{{ getChannelTypeName(channel.channel_type) }}</div>
+            <div class="channel-type-label">{{ getChannelTypeName(channel.type) }}</div>
           </div>
           <div class="channel-card-footer">
             <n-button size="small" quaternary @click="testChannel(channel)" :loading="testingId === channel.id">
@@ -59,7 +59,7 @@
           <n-icon :size="48" color="#ddd"><NotificationsOutline /></n-icon>
         </div>
         <div class="empty-title">暂无推送渠道</div>
-        <div class="empty-desc">添加推送渠道后，签到结果将自动通知到您</div>
+        <div class="empty-desc">添加推送渠道后，定时任务结果将自动通知到您</div>
         <n-button type="primary" @click="showAddChannelModal" style="margin-top: 16px;">
           <template #icon><n-icon><AddOutline /></n-icon></template>
           添加第一个渠道
@@ -242,7 +242,7 @@ const editChannel = (channel: any) => {
   editingChannel.value = channel
   channelForm.value = {
     name: channel.name,
-    channel_type: channel.channel_type,
+    channel_type: channel.type,
     is_enabled: channel.is_enabled,
     config: { ...channel.config }
   }

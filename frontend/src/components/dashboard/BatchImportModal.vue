@@ -217,8 +217,9 @@ const normalizeOptionalString = (value: unknown): string | undefined => {
 
 const normalizeProxyMode = (value: unknown, index: number): AccountProxyMode => {
   const normalized = normalizeOptionalString(value)?.toLowerCase()
-  if (!normalized) return 'global'
-  if (normalized === 'global' || normalized === 'direct' || normalized === 'custom') {
+  if (!normalized) return 'direct'
+  if (normalized === 'global') return 'direct'
+  if (normalized === 'direct' || normalized === 'custom') {
     return normalized
   }
   throw new Error(`第 ${index + 1} 条的 proxy_mode 无效`)

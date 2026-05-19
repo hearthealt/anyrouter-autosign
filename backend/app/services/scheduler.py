@@ -38,47 +38,113 @@ def get_setting_value(db, key: str, default=None):
     return default
 
 
-def send_sign_notification(db, account, success: bool, sign_message: str):
-    """发送单个账号的签到通知"""
-    from app.models import AccountNotify
+def normalize_channel_ids(channel_ids) -> list[int]:
+    """清理推送渠道 ID 列表，避免脏配置影响定时任务。"""
+    normalized = []
+    seen = set()
+    if not isinstance(channel_ids, list):
+        return normalized
+    for channel_id in channel_ids:
+        try:
+            normalized_id = int(channel_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id <= 0 or normalized_id in seen:
+            continue
+        seen.add(normalized_id)
+        normalized.append(normalized_id)
+    return normalized
 
-    account_notifies = db.query(AccountNotify).filter(
-        AccountNotify.account_id == account.id,
-        AccountNotify.is_enabled == True
-    ).all()
 
-    if not account_notifies:
+def _global_channel_config(channel_type: str, config: dict) -> dict:
+    """构造全局通知使用的渠道附加配置。"""
+    if channel_type == "email":
+        return {"to_email": config.get("to_email") or config.get("username")}
+    return {}
+
+
+def send_global_notification(db, title: str, content: str, channel_ids: list[int]):
+    """向指定的全局推送渠道发送通知。"""
+    if not channel_ids:
+        logger.info("未选择签到推送渠道，跳过全局通知")
         return
 
-    channel_ids = [n.channel_id for n in account_notifies]
     channels = db.query(NotifyChannel).filter(
         NotifyChannel.id.in_(channel_ids),
         NotifyChannel.is_enabled == True
     ).all()
-
     if not channels:
+        logger.info("没有可用的签到推送渠道，跳过全局通知")
         return
-
-    title = f"签到{'成功' if success else '失败'} - {account.username}"
-    content = sign_message
-
-    account_notify_map = {n.channel_id: n for n in account_notifies}
 
     for channel in channels:
         try:
             config = json.loads(channel.config)
-            account_notify = account_notify_map.get(channel.id)
-            account_config = json.loads(account_notify.notify_config) if account_notify and account_notify.notify_config else {}
-            merged_config = {**config, **account_config}
-
             notifier = NotifyFactory.create(channel.type, config)
-            result = notifier.send(title, content, merged_config)
+            result = notifier.send(title, content, _global_channel_config(channel.type, config))
             if result:
-                logger.info(f"通知发送成功: {channel.name} -> {account.username}")
+                logger.info(f"全局通知发送成功: {channel.name}")
             else:
-                logger.error(f"通知发送失败: {channel.name} -> {account.username}")
+                logger.error(f"全局通知发送失败: {channel.name}")
         except Exception as e:
-            logger.error(f"通知发送异常 {channel.name}: {e}")
+            logger.error(f"全局通知发送异常 {channel.name}: {e}")
+
+
+def build_sign_summary_content(
+    total_count: int,
+    success_count: int,
+    already_signed_count: int,
+    fail_count: int,
+    reward_quota: int,
+    failed_items: list,
+) -> str:
+    """构造定时签到汇总通知。"""
+    lines = [
+        f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"本次签到账号: {total_count} 个",
+        f"成功: {success_count} 个",
+        f"已签到: {already_signed_count} 个",
+        f"失败: {fail_count} 个",
+        f"签到奖励: {format_quota(reward_quota)}",
+    ]
+
+    if failed_items:
+        lines.append("")
+        lines.append("失败账号:")
+        for item in failed_items[:10]:
+            lines.append(f"- {item['username']}: {item['message']}")
+        if len(failed_items) > 10:
+            lines.append(f"- 其余 {len(failed_items) - 10} 个失败账号请查看签到日志")
+
+    return "\n".join(lines)
+
+
+def send_sign_summary_notification(
+    db,
+    title: str,
+    total_count: int,
+    success_count: int,
+    already_signed_count: int,
+    fail_count: int,
+    reward_quota: int,
+    failed_items: list,
+):
+    """发送定时签到全局汇总。"""
+    if total_count <= 0:
+        return
+    if not get_setting_value(db, "sign_notify_enabled", False):
+        logger.info("签到推送未启用，跳过定时签到汇总通知")
+        return
+    channel_ids = normalize_channel_ids(get_setting_value(db, "sign_notify_channel_ids", []) or [])
+    content = build_sign_summary_content(
+        total_count,
+        success_count,
+        already_signed_count,
+        fail_count,
+        reward_quota,
+        failed_items,
+    )
+    send_global_notification(db, title, content, channel_ids)
 
 
 def execute_sign(db, account) -> dict:
@@ -159,6 +225,8 @@ def auto_sign_job():
         success_count = 0
         fail_count = 0
         skip_count = 0
+        total_reward_quota = 0
+        failed_items = []
         retry_accounts = []
         event_payloads = []
 
@@ -181,8 +249,13 @@ def auto_sign_job():
                     log_status = "success" if sign_success else "failed"
                     if sign_success:
                         success_count += 1
+                        total_reward_quota += reward_quota
                     else:
                         fail_count += 1
+                        failed_items.append({
+                            "username": account.username or f"账号 {account.id}",
+                            "message": log_message,
+                        })
 
                 log = SignLog(
                     account_id=account.id,
@@ -197,8 +270,6 @@ def auto_sign_job():
 
                 logger.info(f"账号 {account.username} 签到: {log_message}")
 
-                if not already_signed:
-                    send_sign_notification(db, account, sign_success, log_message)
                 if retry_enabled and not sign_success and not already_signed:
                     retry_accounts.append({
                         "account_id": account.id,
@@ -219,7 +290,10 @@ def auto_sign_job():
             except Exception as e:
                 logger.error(f"账号 {account.username} 签到异常: {e}")
                 fail_count += 1
-                send_sign_notification(db, account, False, str(e))
+                failed_items.append({
+                    "username": account.username or f"账号 {account.id}",
+                    "message": str(e),
+                })
                 if retry_enabled:
                     retry_accounts.append({
                         "account_id": account.id,
@@ -239,6 +313,16 @@ def auto_sign_job():
         for payload in event_payloads:
             publish_event("sign_completed", payload)
         logger.info(f"自动签到完成: 成功 {success_count}, 已签 {skip_count}, 失败 {fail_count}")
+        send_sign_summary_notification(
+            db,
+            "AnyRouter 定时签到汇总",
+            len(event_payloads),
+            success_count,
+            skip_count,
+            fail_count,
+            total_reward_quota,
+            failed_items,
+        )
 
         if retry_accounts and retry_enabled:
             schedule_retry_sign(retry_accounts, max_retries, retry_interval)
@@ -275,6 +359,9 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
     try:
         success_count = 0
         fail_count = 0
+        already_signed_count = 0
+        total_reward_quota = 0
+        failed_items = []
         retry_accounts = []
         event_payloads = []
 
@@ -304,15 +391,20 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                 if already_signed:
                     log_message = f"重试{retry_count}次后: 今日已签到"
                     log_status = "already_signed"
-                    success_count += 1
+                    already_signed_count += 1
                 elif sign_success:
                     log_message = f"重试{retry_count}次后: {build_sign_message(message, reward_quota)}"
                     log_status = "success"
                     success_count += 1
+                    total_reward_quota += reward_quota
                 else:
                     log_message = f"重试{retry_count}次后: {message}"
                     log_status = "failed"
                     fail_count += 1
+                    failed_items.append({
+                        "username": account.username or f"账号 {account.id}",
+                        "message": log_message,
+                    })
                     if retry_count < max_retries:
                         retry_accounts.append({
                             "account_id": account_id,
@@ -342,13 +434,6 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
 
                 logger.info(f"账号 {account.username} 重试签到(第{retry_count}次): {log_message}")
 
-                if sign_success and not already_signed:
-                    send_sign_notification(
-                        db,
-                        account,
-                        True,
-                        f"重试签到成功: {build_sign_message(message, reward_quota)}"
-                    )
                 event_payloads.append({
                     "account_id": account.id,
                     "username": account.username or "",
@@ -362,6 +447,10 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
             except Exception as e:
                 logger.error(f"账号 {account.username} 重试签到异常: {e}")
                 fail_count += 1
+                failed_items.append({
+                    "username": account.username or f"账号 {account.id}",
+                    "message": str(e),
+                })
                 log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
                 if log:
                     log.sign_time = datetime.now()
@@ -402,6 +491,16 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         for payload in event_payloads:
             publish_event("sign_completed", payload)
         logger.info(f"重试签到完成: 成功 {success_count}, 失败 {fail_count}")
+        send_sign_summary_notification(
+            db,
+            "AnyRouter 定时签到重试汇总",
+            len(event_payloads),
+            success_count,
+            already_signed_count,
+            fail_count,
+            total_reward_quota,
+            failed_items,
+        )
 
         if retry_accounts:
             schedule_retry_sign(retry_accounts, max_retries, retry_interval)
@@ -587,7 +686,10 @@ def send_health_alert_for_account(db, account):
                 config = json.loads(channel.config)
                 account_notify = account_notify_map.get(channel.id)
                 account_config = json.loads(account_notify.notify_config) if account_notify and account_notify.notify_config else {}
-                merged_config = {**config, **account_config}
+                merged_config = {
+                    **_global_channel_config(channel.type, config),
+                    **account_config
+                }
 
                 notifier = NotifyFactory.create(channel.type, config)
                 result = notifier.send(title, content, merged_config)

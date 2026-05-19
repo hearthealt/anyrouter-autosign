@@ -379,8 +379,6 @@ SSE 说明：
 | `REQUEST_TIMEOUT` | 请求超时秒数 | `30` |
 | `RETRY_TIMES` | 重试次数 | `3` |
 | `RETRY_INTERVAL` | 重试间隔秒数 | `3` |
-| `ANYROUTER_PROXY_ENABLED` | 后端平台代理默认开关 | `false` |
-| `ANYROUTER_PROXY_URL` | 后端平台代理地址 | 空 |
 | `DEFAULT_ADMIN_USERNAME` | 默认管理员用户名 | `admin` |
 | `DEFAULT_ADMIN_PASSWORD` | 默认管理员密码 | `admin123` |
 
@@ -391,17 +389,15 @@ SSE 说明：
 ```env
 DEBUG=false
 DATABASE_URL=sqlite:///./data/anyrouter.db
-ANYROUTER_PROXY_ENABLED=false
-ANYROUTER_PROXY_URL=
 DEFAULT_ADMIN_USERNAME=admin
 DEFAULT_ADMIN_PASSWORD=admin123
 ```
 
 说明：
 
-- `ANYROUTER_PROXY_ENABLED` 和 `ANYROUTER_PROXY_URL` 是后端启动时的默认值
-- 如果你已经在前端「系统设置」页面保存了代理配置，运行时会优先使用页面保存的配置
-- 代理仅作用于后端访问目标平台的请求，不影响浏览器访问前端页面
+- 全局平台代理环境变量已移除
+- 如需代理访问目标平台，请在账号编辑中把“访问出口”设置为“自定义代理”
+- 账号级代理仅作用于该账号访问目标平台的请求，不影响浏览器访问前端页面
 
 ---
 
@@ -438,7 +434,7 @@ mkdir data
 
 ### 3. 无法访问目标平台或请求超时
 
-- 如果服务器所在网络无法直连目标平台，可在「系统设置」中开启后端平台代理
+- 如果服务器所在网络无法直连目标平台，可在账号编辑中把“访问出口”设置为“自定义代理”
 - 代理地址需填写 `http://` 或 `https://` 格式
 - 如果使用带认证代理，确认用户名和密码正确
 - 查看后端日志确认是否为代理连接失败、超时或认证失败

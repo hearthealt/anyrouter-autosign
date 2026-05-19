@@ -22,7 +22,7 @@ class Account(Base):
     username = Column(String(100), nullable=True)
     display_name = Column(String(100), nullable=True)
     note = Column(String(255), nullable=True)
-    proxy_mode = Column(String(20), default="global")  # global, direct, custom
+    proxy_mode = Column(String(20), default="direct")  # direct, custom
     proxy_url = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)

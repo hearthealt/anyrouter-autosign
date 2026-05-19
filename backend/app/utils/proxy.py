@@ -6,8 +6,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException
 
-ACCOUNT_PROXY_MODES = {"global", "direct", "custom"}
-DEFAULT_ACCOUNT_PROXY_MODE = "global"
+ACCOUNT_PROXY_MODES = {"direct", "custom"}
+DEFAULT_ACCOUNT_PROXY_MODE = "direct"
 
 
 def normalize_proxy_mode(value: Optional[str]) -> str:

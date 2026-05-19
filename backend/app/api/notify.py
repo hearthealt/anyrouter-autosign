@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import NotifyChannel, AccountNotify, User, AuditAction
+from app.models import NotifyChannel, AccountNotify, User, AuditAction, Setting
 from app.schemas import (
     NotifyChannelCreate, NotifyChannelUpdate, NotifyChannelResponse,
     AccountNotifyResponse, AccountNotifyUpdate,
@@ -18,6 +18,44 @@ from app.services.audit import log_action
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/notify", tags=["推送管理"])
+
+
+def remove_channel_from_sign_notify(db: Session, channel_id: int) -> bool:
+    """从全局签到推送设置中移除不可用渠道。"""
+    setting = db.query(Setting).filter(Setting.key == "sign_notify_channel_ids").first()
+    if not setting or not setting.value:
+        return False
+
+    try:
+        raw_channel_ids = json.loads(setting.value)
+    except (TypeError, json.JSONDecodeError):
+        raw_channel_ids = []
+    if not isinstance(raw_channel_ids, list):
+        raw_channel_ids = []
+
+    channel_ids = []
+    removed = False
+    for item in raw_channel_ids:
+        try:
+            current_id = int(item)
+        except (TypeError, ValueError):
+            removed = True
+            continue
+        if current_id == channel_id:
+            removed = True
+            continue
+        if current_id not in channel_ids:
+            channel_ids.append(current_id)
+
+    if not removed:
+        return False
+
+    setting.value = json.dumps(channel_ids)
+    if not channel_ids:
+        enabled_setting = db.query(Setting).filter(Setting.key == "sign_notify_enabled").first()
+        if enabled_setting:
+            enabled_setting.value = json.dumps(False)
+    return True
 
 
 @router.get("/channels", response_model=ApiResponse)
@@ -68,7 +106,8 @@ def create_channel(
     channel = NotifyChannel(
         type=data.type,
         name=data.name,
-        config=json.dumps(data.config)
+        config=json.dumps(data.config),
+        is_enabled=data.is_enabled
     )
 
     db.add(channel)
@@ -133,6 +172,8 @@ def update_channel(
         if channel.is_enabled != data.is_enabled:
             changes["is_enabled"] = f"{channel.is_enabled} -> {data.is_enabled}"
         channel.is_enabled = data.is_enabled
+        if data.is_enabled is False and remove_channel_from_sign_notify(db, channel.id):
+            changes["sign_notify_channel_ids"] = "已移除该渠道"
 
     channel.updated_at = datetime.now()
     db.commit()
@@ -171,6 +212,7 @@ def delete_channel(
 
     # 删除关联配置
     db.query(AccountNotify).filter(AccountNotify.channel_id == channel_id).delete()
+    remove_channel_from_sign_notify(db, channel_id)
 
     db.delete(channel)
     db.commit()

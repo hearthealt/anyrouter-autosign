@@ -76,7 +76,7 @@ export const accountApi = {
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   }) => api.get('/accounts', { params }),
-  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; proxy_mode?: 'global' | 'direct' | 'custom'; proxy_url?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; proxy_mode?: 'direct' | 'custom'; proxy_url?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
   batchImport: (data: {
     items: Array<{
       session_cookie?: string
@@ -84,7 +84,7 @@ export const accountApi = {
       login_username?: string
       login_password?: string
       note?: string
-      proxy_mode?: 'global' | 'direct' | 'custom'
+      proxy_mode?: 'direct' | 'custom'
       proxy_url?: string
       platform_id: number
       group_id?: number

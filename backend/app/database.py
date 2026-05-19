@@ -38,6 +38,7 @@ def init_db():
 
     _migrate_api_endpoint_schema()
     Base.metadata.create_all(bind=engine)
+    _migrate_removed_settings()
     _migrate_platform_schema()
     _migrate_account_login_schema()
     _migrate_account_note_schema()
@@ -67,6 +68,33 @@ def _migrate_api_endpoint_schema():
         logger.info("已删除旧版 api_endpoints 表，将在平台同步时重建")
     except Exception as e:
         logger.error(f"迁移 api_endpoints 表失败: {e}")
+
+
+def _migrate_removed_settings():
+    """删除已废弃的全局代理设置。"""
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("settings"):
+            return
+
+        result = db.execute(text("""
+            DELETE FROM settings
+            WHERE key IN (
+                'anyrouter_proxy_enabled',
+                'anyrouter_proxy_url',
+                'anrouter_proxy_enabled',
+                'anrouter_proxy_url'
+            )
+        """))
+        if result.rowcount:
+            db.commit()
+            logger.info(f"已删除 {result.rowcount} 条废弃全局代理设置")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"清理废弃设置失败: {e}")
+    finally:
+        db.close()
 
 
 def _migrate_platform_schema():
@@ -245,7 +273,7 @@ def _migrate_account_proxy_schema():
             logger.info("已为 accounts 表添加 proxy_url 列")
 
         result = db.execute(
-            text("UPDATE accounts SET proxy_mode = 'global' WHERE proxy_mode IS NULL OR proxy_mode = ''")
+            text("UPDATE accounts SET proxy_mode = 'direct' WHERE proxy_mode IS NULL OR proxy_mode = '' OR proxy_mode = 'global'")
         )
         if result.rowcount:
             db.commit()

@@ -14,7 +14,7 @@ class AccountCreate(BaseModel):
     login_username: Optional[str] = None
     login_password: Optional[str] = None
     note: Optional[str] = None
-    proxy_mode: str = "global"  # global, direct, custom
+    proxy_mode: str = "direct"  # direct, custom
     proxy_url: Optional[str] = None
     platform_id: int
     group_id: Optional[int] = None
@@ -27,7 +27,7 @@ class AccountUpdate(BaseModel):
     login_username: Optional[str] = None
     login_password: Optional[str] = None
     note: Optional[str] = None
-    proxy_mode: Optional[str] = None  # global, direct, custom
+    proxy_mode: Optional[str] = None  # direct, custom
     proxy_url: Optional[str] = None
     clear_login_credentials: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -64,7 +64,7 @@ class AccountResponse(BaseModel):
     note: Optional[str] = None
     login_username: Optional[str] = None
     has_login_credentials: bool = False
-    proxy_mode: str = "global"
+    proxy_mode: str = "direct"
     proxy_url: Optional[str] = None
     proxy_url_masked: Optional[str] = None
     anrouter_user_id: Optional[int] = None
@@ -144,7 +144,7 @@ class BatchImportItem(BaseModel):
     login_username: Optional[str] = None
     login_password: Optional[str] = None
     note: Optional[str] = None
-    proxy_mode: str = "global"
+    proxy_mode: str = "direct"
     proxy_url: Optional[str] = None
     platform_id: int
     group_id: Optional[int] = None

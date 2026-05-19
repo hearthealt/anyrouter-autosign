@@ -1,7 +1,6 @@
 """
 签到 API
 """
-import json
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,46 +8,17 @@ from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, Platform, SignLog, NotifyChannel, AccountNotify
+from app.models import Account, Platform, SignLog
 from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
-from app.services import NotifyFactory, execute_sign_request
+from app.services import execute_sign_request
 from app.services.signing import refresh_account_cache_after_sign as refresh_cache_after_sign
 from app.services.events import publish_event
 from app.utils import format_quota, get_account_platform_config
 
 router = APIRouter(tags=["签到"])
 logger = logging.getLogger(__name__)
-
-
-def send_notifications(db: Session, account: Account, title: str, content: str):
-    """发送推送通知"""
-    notify_configs = db.query(AccountNotify, NotifyChannel).join(
-        NotifyChannel, NotifyChannel.id == AccountNotify.channel_id
-    ).filter(
-        AccountNotify.account_id == account.id,
-        AccountNotify.is_enabled == True,
-        NotifyChannel.is_enabled == True
-    ).all()
-
-    for account_notify, channel in notify_configs:
-        try:
-            config = json.loads(channel.config)
-            account_config = json.loads(account_notify.notify_config) if account_notify.notify_config else {}
-            merged_config = {**config, **account_config}
-
-            notifier = NotifyFactory.create(channel.type, config)
-            notifier.send(title, content, merged_config)
-        except Exception as e:
-            pass  # 静默失败，不影响主流程
-
-
-def build_success_notification_content(reward_quota: int) -> str:
-    """构造签到成功通知文案。"""
-    if reward_quota > 0:
-        return f"获得 {format_quota(reward_quota)}，祝您使用愉快！"
-    return "签到成功"
 
 
 def perform_sign_request(db: Session, account: Account, platform_config: dict):
@@ -114,15 +84,6 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
     )
     db.add(log)
     db.commit()
-
-    if sign_success and not already_signed:
-        title = f"{account.username} 签到成功"
-        content = build_success_notification_content(reward_quota)
-        send_notifications(db, account, title, content)
-    elif not sign_success:
-        title = f"{account.username} 签到失败"
-        content = f"原因: {message}"
-        send_notifications(db, account, title, content)
 
     if already_signed:
         return_message = "今日已签到"
@@ -207,16 +168,10 @@ def batch_sign(db: Session = Depends(get_db)):
         db.add(log)
 
         if sign_success and not already_signed:
-            title = f"{account.username} 签到成功"
-            content = build_success_notification_content(reward_quota)
-            send_notifications(db, account, title, content)
             success_count += 1
         elif already_signed:
             already_signed_count += 1
         else:
-            title = f"{account.username} 签到失败"
-            content = f"原因: {message}"
-            send_notifications(db, account, title, content)
             fail_count += 1
 
         if already_signed:

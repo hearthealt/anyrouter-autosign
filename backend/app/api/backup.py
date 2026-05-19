@@ -19,10 +19,17 @@ from app.utils.proxy import normalize_proxy_mode, normalize_proxy_url, validate_
 
 router = APIRouter(prefix="/backup", tags=["备份恢复"])
 
+REMOVED_SETTING_KEYS = {
+    "anyrouter_proxy_enabled",
+    "anyrouter_proxy_url",
+    "anrouter_proxy_enabled",
+    "anrouter_proxy_url",
+}
+
 
 def clean_imported_proxy(proxy_mode: Optional[str], proxy_url: Optional[str]) -> tuple[str, Optional[str]]:
     """清理备份中的账号级代理配置。"""
-    mode = normalize_proxy_mode(proxy_mode)
+    mode = "direct" if str(proxy_mode or "").strip().lower() == "global" else normalize_proxy_mode(proxy_mode)
     cleaned_proxy_url = normalize_proxy_url(proxy_url)
     if mode == "custom":
         if not cleaned_proxy_url:
@@ -87,7 +94,7 @@ def export_backup(
             "username": acc.username,
             "display_name": acc.display_name,
             "note": acc.note,
-            "proxy_mode": acc.proxy_mode or "global",
+            "proxy_mode": acc.proxy_mode or "direct",
             "proxy_url": acc.proxy_url,
             "is_active": acc.is_active,
             "health_status": acc.health_status,
@@ -97,6 +104,8 @@ def export_backup(
     # 导出设置
     settings = db.query(Setting).all()
     for s in settings:
+        if s.key in REMOVED_SETTING_KEYS:
+            continue
         backup_data["settings"].append({
             "key": s.key,
             "value": s.value,
@@ -252,6 +261,8 @@ async def import_backup(
         # 导入设置
         if "settings" in backup_data:
             for s in backup_data["settings"]:
+                if s["key"] in REMOVED_SETTING_KEYS:
+                    continue
                 existing = db.query(Setting).filter(Setting.key == s["key"]).first()
                 if existing:
                     if overwrite:

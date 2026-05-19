@@ -111,17 +111,6 @@ class AnyRouterService:
         self._captcha_ocr_lock = RLock()
 
     @staticmethod
-    def _parse_setting_value(raw_value: Any) -> Any:
-        """解析设置表中的值。"""
-        if raw_value is None:
-            return None
-
-        try:
-            return json.loads(raw_value)
-        except (TypeError, json.JSONDecodeError):
-            return raw_value
-
-    @staticmethod
     def _safe_int(value: Any, default: int = 0) -> int:
         """尽量将任意值转换为整数。"""
         try:
@@ -302,53 +291,6 @@ class AnyRouterService:
                 return AnyRouterService._safe_int(record.get("quota_awarded"), 0)
         return None
 
-    def _get_global_proxy_config(self) -> Dict[str, str]:
-        """读取全局出站代理配置。"""
-        proxy_enabled = settings.anyrouter_proxy_enabled
-        proxy_url = (settings.anyrouter_proxy_url or "").strip()
-        db = None
-
-        try:
-            from app.database import SessionLocal
-            from app.models.setting import Setting
-
-            db = SessionLocal()
-            proxy_settings = db.query(Setting).filter(
-                Setting.key.in_([
-                    "anyrouter_proxy_enabled",
-                    "anyrouter_proxy_url",
-                    "anrouter_proxy_enabled",
-                    "anrouter_proxy_url",
-                ])
-            ).all()
-            parsed_settings = {
-                item.key: self._parse_setting_value(item.value)
-                for item in proxy_settings
-            }
-
-            if "anyrouter_proxy_enabled" in parsed_settings:
-                proxy_enabled = bool(parsed_settings["anyrouter_proxy_enabled"])
-            elif "anrouter_proxy_enabled" in parsed_settings:
-                proxy_enabled = bool(parsed_settings["anrouter_proxy_enabled"])
-
-            if parsed_settings.get("anyrouter_proxy_url") is not None:
-                proxy_url = str(parsed_settings["anyrouter_proxy_url"]).strip()
-            elif parsed_settings.get("anrouter_proxy_url") is not None:
-                proxy_url = str(parsed_settings["anrouter_proxy_url"]).strip()
-        except Exception as e:
-            logger.debug(f"加载代理配置失败，继续使用默认配置: {e}")
-        finally:
-            if db is not None:
-                db.close()
-
-        if not proxy_enabled or not proxy_url:
-            return {}
-
-        return {
-            "http": proxy_url,
-            "https": proxy_url
-        }
-
     @staticmethod
     def _build_proxy_config(proxy_url: str) -> Dict[str, str]:
         """把代理地址转换为 requests 需要的配置。"""
@@ -357,17 +299,17 @@ class AnyRouterService:
             "https": proxy_url
         }
 
-    def _get_proxy_config(self, proxy_mode: str = "global", proxy_url: Optional[str] = None) -> Dict[str, str]:
+    def _get_proxy_config(self, proxy_mode: str = "direct", proxy_url: Optional[str] = None) -> Dict[str, str]:
         """按账号代理模式解析本次请求的出站代理。"""
-        mode = (proxy_mode or "global").strip().lower()
+        mode = (proxy_mode or "direct").strip().lower()
         if mode == "direct":
             return {}
         if mode == "custom":
             cleaned_proxy_url = (proxy_url or "").strip()
             return self._build_proxy_config(cleaned_proxy_url) if cleaned_proxy_url else {}
-        return self._get_global_proxy_config()
+        return {}
 
-    def _get_session(self, proxy_mode: str = "global", proxy_url: Optional[str] = None) -> requests.Session:
+    def _get_session(self, proxy_mode: str = "direct", proxy_url: Optional[str] = None) -> requests.Session:
         """
         获取新的 Session 实例
         避免在多线程环境下复用 Session 导致的 SSL 连接问题
@@ -1058,7 +1000,7 @@ class AnyRouterService:
         base_url: str,
         console_url: str = None,
         session: requests.Session = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None
     ) -> Dict[str, str]:
         """获取 Cookies 并处理反爬虫挑战"""
@@ -1098,7 +1040,7 @@ class AnyRouterService:
         password: str,
         login_api: str = None,
         login_page: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """使用账号密码登录并提取新的 session cookie。"""
@@ -1182,7 +1124,7 @@ class AnyRouterService:
         base_url: str,
         user_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -1244,7 +1186,7 @@ class AnyRouterService:
         month: str,
         checkin_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """获取指定月份的签到记录。"""
@@ -1304,7 +1246,7 @@ class AnyRouterService:
         checkin_api: str = None,
         console_url: str = None,
         captcha_api: str = "",
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -1429,7 +1371,7 @@ class AnyRouterService:
         base_url: str,
         token_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -1490,7 +1432,7 @@ class AnyRouterService:
         base_url: str,
         models_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -1551,7 +1493,7 @@ class AnyRouterService:
         base_url: str,
         groups_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -1616,7 +1558,7 @@ class AnyRouterService:
         method: str = "post",
         success_msg: str = "操作成功",
         fail_msg: str = "操作失败",
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """令牌相关请求的通用方法"""
@@ -1676,7 +1618,7 @@ class AnyRouterService:
         group: str = "default",
         token_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """创建访问令牌"""
@@ -1707,7 +1649,7 @@ class AnyRouterService:
         token_data: Dict[str, Any],
         token_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """更新访问令牌"""
@@ -1728,7 +1670,7 @@ class AnyRouterService:
         token_id: int,
         token_api: str = None,
         console_url: str = None,
-        proxy_mode: str = "global",
+        proxy_mode: str = "direct",
         proxy_url: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Any]]:
         """

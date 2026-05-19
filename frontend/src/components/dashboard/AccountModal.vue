@@ -158,13 +158,13 @@
           </div>
 
           <div class="field field-full">
-            <label class="field-label">推送渠道</label>
+            <label class="field-label">健康告警渠道</label>
             <n-select
               v-model:value="form.notify_channel_ids"
               multiple
               size="small"
               :options="channelOptions"
-              placeholder="选择推送渠道（可多选）"
+              placeholder="仅用于定时健康检查告警"
               clearable
               :loading="loadingChannels"
             />
@@ -225,7 +225,7 @@ const form = ref({
   login_username: '',
   login_password: '',
   note: '',
-  proxy_mode: 'global' as AccountProxyMode,
+  proxy_mode: 'direct' as AccountProxyMode,
   proxy_url: '',
   clear_login_credentials: false,
   is_active: true,
@@ -240,7 +240,6 @@ const loadingPlatforms = ref(false)
 const channelOptions = ref<SelectOption<number>[]>([])
 const platformOptions = ref<SelectOption<number>[]>([])
 const proxyModeOptions: SelectOption<AccountProxyMode>[] = [
-  { label: '跟随全局代理', value: 'global' },
   { label: '直连服务器出口', value: 'direct' },
   { label: '自定义代理', value: 'custom' }
 ]
@@ -256,7 +255,7 @@ const resetForm = () => {
     login_username: '',
     login_password: '',
     note: '',
-    proxy_mode: 'global',
+    proxy_mode: 'direct',
     proxy_url: '',
     clear_login_credentials: false,
     is_active: true,
@@ -278,7 +277,7 @@ const applyAccountToForm = (account?: Account | null) => {
     login_username: account.login_username || '',
     login_password: '',
     note: account.note || '',
-    proxy_mode: account.proxy_mode || 'global',
+    proxy_mode: account.proxy_mode || 'direct',
     proxy_url: '',
     clear_login_credentials: false,
     is_active: account.is_active,
@@ -360,7 +359,7 @@ const handleSubmit = () => {
     return
   }
 
-  const currentProxyMode = props.account?.proxy_mode || 'global'
+  const currentProxyMode = props.account?.proxy_mode || 'direct'
   const canKeepExistingCustomProxy = isEdit.value && currentProxyMode === 'custom' && form.value.proxy_mode === 'custom'
 
   if (form.value.proxy_mode === 'custom' && !form.value.proxy_url.trim() && !canKeepExistingCustomProxy) {

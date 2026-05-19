@@ -7,12 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Setting, User, AuditAction
+from app.models import Setting, User, AuditAction, NotifyChannel
 from app.schemas import ApiResponse, SettingsResponse, SettingsUpdate
 from app.services.scheduler import update_sign_schedule, update_health_check_schedule
 from app.services.audit import log_action
 from app.api.deps import get_current_user
-from app.utils.proxy import mask_proxy_url, validate_proxy_url
 
 router = APIRouter(prefix="/settings", tags=["系统设置"])
 
@@ -25,8 +24,8 @@ DEFAULT_SETTINGS = {
     "sign_retry_enabled": True,
     "sign_max_retries": 3,
     "sign_retry_interval": 30,
-    "anyrouter_proxy_enabled": False,
-    "anyrouter_proxy_url": "",
+    "sign_notify_enabled": False,
+    "sign_notify_channel_ids": [],
     "quota_warning_threshold": 5.0,
 }
 
@@ -57,12 +56,33 @@ def set_setting(db: Session, key: str, value):
         db.add(setting)
 
 
+def normalize_channel_ids(channel_ids) -> list[int]:
+    """清理推送渠道 ID 列表，保留原顺序并去重。"""
+    normalized = []
+    seen = set()
+    if not isinstance(channel_ids, list):
+        return normalized
+    for channel_id in channel_ids:
+        try:
+            normalized_id = int(channel_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id <= 0 or normalized_id in seen:
+            continue
+        seen.add(normalized_id)
+        normalized.append(normalized_id)
+    return normalized
+
+
 @router.get("", response_model=ApiResponse)
 def get_settings(db: Session = Depends(get_db)):
     """获取系统设置"""
     result = {}
     for key, default in DEFAULT_SETTINGS.items():
         result[key] = get_setting(db, key, default)
+    result["sign_notify_channel_ids"] = normalize_channel_ids(
+        result.get("sign_notify_channel_ids") or []
+    )
 
     return ApiResponse(
         success=True,
@@ -84,21 +104,24 @@ def update_settings(
         for key, default in DEFAULT_SETTINGS.items()
     }
 
-    if isinstance(update_data.get("anyrouter_proxy_url"), str):
-        update_data["anyrouter_proxy_url"] = update_data["anyrouter_proxy_url"].strip()
-
     merged_settings = {**current_settings, **update_data}
-    proxy_enabled = merged_settings.get("anyrouter_proxy_enabled", False)
-    proxy_url = merged_settings.get("anyrouter_proxy_url", "")
     quota_warning_threshold = merged_settings.get("quota_warning_threshold", 5.0)
-
-    if proxy_enabled:
-        if not proxy_url:
-            raise HTTPException(status_code=400, detail="启用代理时必须填写代理地址")
-        validate_proxy_url(proxy_url)
+    sign_notify_enabled = bool(merged_settings.get("sign_notify_enabled", False))
+    sign_notify_channel_ids = normalize_channel_ids(merged_settings.get("sign_notify_channel_ids") or [])
+    if "sign_notify_channel_ids" in update_data:
+        update_data["sign_notify_channel_ids"] = sign_notify_channel_ids
 
     if quota_warning_threshold is None or quota_warning_threshold < 0:
         raise HTTPException(status_code=400, detail="额度告警阈值不能小于 0")
+    if sign_notify_enabled and not sign_notify_channel_ids:
+        raise HTTPException(status_code=400, detail="启用签到推送时请选择推送渠道")
+    if sign_notify_enabled:
+        enabled_channel_count = db.query(NotifyChannel).filter(
+            NotifyChannel.id.in_(sign_notify_channel_ids),
+            NotifyChannel.is_enabled == True
+        ).count()
+        if enabled_channel_count != len(sign_notify_channel_ids):
+            raise HTTPException(status_code=400, detail="签到推送只能选择已启用的推送渠道")
 
     for key, value in update_data.items():
         if value is not None:
@@ -116,8 +139,6 @@ def update_settings(
 
     # 记录审计日志
     audit_detail = update_data.copy()
-    if isinstance(audit_detail.get("anyrouter_proxy_url"), str) and audit_detail["anyrouter_proxy_url"]:
-        audit_detail["anyrouter_proxy_url"] = mask_proxy_url(audit_detail["anyrouter_proxy_url"])
 
     log_action(
         db=db,

@@ -162,7 +162,7 @@ def build_account_response(db: Session, account: Account) -> AccountResponse:
         note=account.note,
         login_username=account.login_username,
         has_login_credentials=has_login_credentials(account),
-        proxy_mode=account.proxy_mode or "global",
+        proxy_mode=account.proxy_mode or "direct",
         proxy_url=None,
         proxy_url_masked=mask_proxy_url(account.proxy_url) if account.proxy_url else None,
         anrouter_user_id=account.anrouter_user_id,
@@ -720,7 +720,7 @@ def update_account(
         next_note = clean_optional_note(data.note)
 
     proxy_updated = data.proxy_mode is not None or data.proxy_url is not None
-    target_proxy_mode = account.proxy_mode or "global"
+    target_proxy_mode = account.proxy_mode or "direct"
     target_proxy_url = account.proxy_url
     if proxy_updated:
         target_proxy_mode = data.proxy_mode if data.proxy_mode is not None else target_proxy_mode
@@ -809,7 +809,7 @@ def update_account(
             changes["credentials"] = "已更新"
 
     if proxy_updated:
-        previous_proxy_mode = account.proxy_mode or "global"
+        previous_proxy_mode = account.proxy_mode or "direct"
         previous_proxy_url = account.proxy_url
         if previous_proxy_mode != target_proxy_mode:
             changes["proxy_mode"] = f"{previous_proxy_mode} -> {target_proxy_mode}"

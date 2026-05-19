@@ -47,10 +47,6 @@ class Settings(BaseSettings):
     log_max_size: int = 10            # 单文件最大大小（MB）
     log_backup_count: int = 30        # 保留文件数量
 
-    # ============ 服务端代理配置 ============ 
-    anyrouter_proxy_enabled: bool = False
-    anyrouter_proxy_url: str = ""
-
     # ============ 反爬虫配置 ============
     anti_crawler_mask: str = "3000176000856006061501533003690027800375"
     anti_crawler_pos_list: list = [
