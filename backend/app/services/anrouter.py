@@ -3,6 +3,7 @@ AnyRouter API 服务
 """
 from datetime import datetime
 import base64
+import hashlib
 import re
 import json
 import time
@@ -11,6 +12,7 @@ import uuid
 from io import BytesIO
 from threading import RLock
 from typing import Optional, Tuple, Dict, Any, Iterable, List
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -104,6 +106,26 @@ class AnyRouterService:
         "sec-fetch-site": "same-origin",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
     }
+    GAME_INTEGRITY_PROTECTED_PATHS = (
+        "/slot/",
+        "/pet/",
+        "/stock/",
+        "/market/",
+        "/checkin",
+        "/aff_transfer",
+        "/topup",
+        "/pay",
+        "/amount",
+        "/stripe/",
+        "/creem/",
+        "/daily-tasks/claim",
+        "/quota-grants/claim",
+        "/quota-tickets",
+        "/resource-security/",
+        "/playbook/",
+        "/membership/",
+        "/tower-defense",
+    )
 
     def __init__(self):
         self.anti_crawler = AntiCrawlerSolver()
@@ -233,6 +255,8 @@ class AnyRouterService:
 
         return {
             "enabled": bool(raw_data.get("enabled")),
+            "checkin_nonce": str(raw_data.get("checkin_nonce") or ""),
+            "nonce_date": str(raw_data.get("nonce_date") or ""),
             "min_quota": cls._safe_int(raw_data.get("min_quota"), 0),
             "max_quota": cls._safe_int(raw_data.get("max_quota"), 0),
             "checked_in_today": bool(stats.get("checked_in_today")),
@@ -290,6 +314,146 @@ class AnyRouterService:
             if record.get("checkin_date") == target_date:
                 return AnyRouterService._safe_int(record.get("quota_awarded"), 0)
         return None
+
+    @staticmethod
+    def _should_sign_checkin_request(sign_api: str, checkin_api: str) -> bool:
+        """判断当前签到接口是否使用 New API 的 checkin 签名机制。"""
+        normalized_sign_api = (sign_api or "").split("?", 1)[0].rstrip("/")
+        normalized_checkin_api = (checkin_api or "").split("?", 1)[0].rstrip("/")
+        return (
+            normalized_sign_api == normalized_checkin_api
+            and normalized_sign_api.endswith("/api/user/checkin")
+        )
+
+    @staticmethod
+    def _build_checkin_signature_headers(user_id: str, checkin_nonce: str) -> Dict[str, str]:
+        """生成 New API checkin 签名请求头。"""
+        timestamp = str(int(time.time()))
+        signature_source = f"{user_id}:{timestamp}:{checkin_nonce}"
+        signature = hashlib.sha256(signature_source.encode("utf-8")).hexdigest()
+        return {
+            "X-Checkin-Timestamp": timestamp,
+            "X-Checkin-Signature": signature,
+        }
+
+    @staticmethod
+    def _append_query_param(url: str, key: str, value: str) -> str:
+        """在 URL 上追加查询参数，自动处理已有 query。"""
+        parts = urlsplit(url)
+        query = parse_qsl(parts.query, keep_blank_values=True)
+        query.append((key, value))
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+    @staticmethod
+    def _solve_pow_challenge(challenge: str, difficulty: int) -> Dict[str, Any]:
+        """求解 New API PoW challenge：sha256(challenge + nonce) 前缀匹配 difficulty 个 0。"""
+        target = "0" * max(0, difficulty)
+        nonce = 0
+        started_at = time.perf_counter()
+        max_attempts = max(100000, int((16 ** max(0, difficulty)) * 3))
+
+        while nonce <= max_attempts:
+            digest = hashlib.sha256(f"{challenge}{nonce}".encode("utf-8")).hexdigest()
+            if digest.startswith(target):
+                return {
+                    "nonce": nonce,
+                    "hash": digest,
+                    "time": round(time.perf_counter() - started_at, 2),
+                }
+            nonce += 1
+
+        raise ValueError("POW challenge 求解超时")
+
+    @staticmethod
+    def _build_pow_token(challenge: str, pow_result: Dict[str, Any]) -> str:
+        """按前端 POWCaptcha token 格式构造 pow_token。"""
+        payload = {
+            "challenge": challenge,
+            "pow": pow_result,
+            "fingerprint": {"canvas": 0, "webgl": 0},
+            "behavior": {"score": 80, "moves": 12, "dist": 360},
+            "automation": [],
+            "risk": 0,
+            "ts": int(time.time() * 1000),
+        }
+        token_json = json.dumps(payload, separators=(",", ":"))
+        return base64.b64encode(token_json.encode("utf-8")).decode("ascii")
+
+    @classmethod
+    def _requires_game_integrity_headers(cls, method: str, url: str) -> bool:
+        """判断请求是否命中 New API 前端的游戏/奖励动作完整性拦截器。"""
+        if (method or "").upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return False
+        normalized_url = (url or "").lower()
+        return any(path in normalized_url for path in cls.GAME_INTEGRITY_PROTECTED_PATHS)
+
+    @staticmethod
+    def _compact_json_bytes(value: Any) -> bytes:
+        return json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+    @staticmethod
+    def _coerce_body_bytes(value: Any) -> bytes:
+        if value is None:
+            return b""
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        return str(value).encode("utf-8")
+
+    @classmethod
+    def _build_game_integrity_headers(
+        cls,
+        body_bytes: bytes,
+        session_id: Optional[str] = None,
+        seq: int = 1,
+    ) -> Dict[str, str]:
+        """生成 New API 前端拦截器添加的游戏动作完整性请求头。"""
+        user_agent = cls.BASE_HEADERS.get("user-agent", "")
+        fingerprint_source = "|".join([user_agent, "zh-CN", "Win32", "Asia/Shanghai", "8", "8"])
+        fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
+        return {
+            "X-Game-Action-Id": str(uuid.uuid4()),
+            "X-Game-Client-Ts": str(int(time.time() * 1000)),
+            "X-Game-Session-Id": session_id or str(uuid.uuid4()),
+            "X-Game-Client-Seq": str(max(1, seq)),
+            "X-Game-Client-Fingerprint": fingerprint,
+            "X-Game-Body-SHA256": hashlib.sha256(body_bytes).hexdigest(),
+        }
+
+    @classmethod
+    def _prepare_game_integrity_request(
+        cls,
+        method: str,
+        url: str,
+        headers: Dict[str, str],
+        kwargs: Dict[str, Any],
+    ) -> Tuple[Dict[str, str], Dict[str, Any]]:
+        """按前端 axios 拦截器规则补齐完整性头，并保证 body hash 与实际发送内容一致。"""
+        if not cls._requires_game_integrity_headers(method, url):
+            return headers, kwargs
+
+        prepared_headers = headers.copy()
+        prepared_kwargs = kwargs.copy()
+        body_bytes = b""
+
+        if "json" in prepared_kwargs:
+            body_bytes = cls._compact_json_bytes(prepared_kwargs.pop("json"))
+            prepared_kwargs["data"] = body_bytes
+            prepared_headers["Content-Type"] = "application/json"
+        elif "data" in prepared_kwargs:
+            data_value = prepared_kwargs.get("data")
+            if isinstance(data_value, (dict, list, tuple)):
+                body_bytes = cls._compact_json_bytes(data_value)
+                prepared_kwargs["data"] = body_bytes
+                prepared_headers["Content-Type"] = "application/json"
+            else:
+                body_bytes = cls._coerce_body_bytes(data_value)
+                if data_value is not None:
+                    prepared_kwargs["data"] = body_bytes
+
+        prepared_headers.update(cls._build_game_integrity_headers(body_bytes))
+        return prepared_headers, prepared_kwargs
 
     @staticmethod
     def _build_proxy_config(proxy_url: str) -> Dict[str, str]:
@@ -662,12 +826,18 @@ class AnyRouterService:
         **kwargs: Any,
     ) -> requests.Response:
         """POST 请求并处理一次阿里云盾挑战。"""
+        request_headers, request_kwargs = self._prepare_game_integrity_request(
+            "post",
+            url,
+            headers,
+            kwargs,
+        )
         response = session.post(
             url,
-            headers=headers,
+            headers=request_headers,
             cookies=cookies,
             timeout=settings.request_timeout,
-            **kwargs,
+            **request_kwargs,
         )
 
         if self._is_anti_crawler_challenge(response.text):
@@ -677,10 +847,10 @@ class AnyRouterService:
                 time.sleep(2)
                 response = session.post(
                     url,
-                    headers=headers,
+                    headers=request_headers,
                     cookies=cookies,
                     timeout=settings.request_timeout,
-                    **kwargs,
+                    **request_kwargs,
                 )
 
         return response
@@ -1033,6 +1203,41 @@ class AnyRouterService:
             logger.error(f"获取 Cookies 失败: {e}")
             return {"session": session_cookie}
 
+    def _get_checkin_pow_token(
+        self,
+        session: requests.Session,
+        base_url: str,
+        headers: Dict[str, str],
+        cookies: Dict[str, str],
+    ) -> Optional[str]:
+        """尝试获取并求解签到 PoW token；站点未启用时返回 None。"""
+        try:
+            response = self._request_with_anti_crawler_retry(
+                session,
+                "get",
+                f"{base_url}/api/pow/challenge",
+                headers,
+                cookies,
+            )
+            parsed, data = self._parse_json_response(response, "PoW challenge 响应解析失败")
+            if not parsed or not data.get("success"):
+                return None
+
+            raw_data = data.get("data", {})
+            if not isinstance(raw_data, dict) or not raw_data.get("enabled"):
+                return None
+
+            challenge = str(raw_data.get("challenge") or "")
+            difficulty = self._safe_int(raw_data.get("difficulty"), 0)
+            if not challenge or difficulty <= 0:
+                return ""
+
+            pow_result = self._solve_pow_challenge(challenge, difficulty)
+            return self._build_pow_token(challenge, pow_result)
+        except Exception as e:
+            logger.debug("获取签到 PoW token 失败，继续普通签到: %s", e)
+            return None
+
     def login(
         self,
         base_url: str,
@@ -1287,11 +1492,47 @@ class AnyRouterService:
                         return False, result
                     data = result.get("raw", {}) if isinstance(result.get("raw"), dict) else {}
                 else:
+                    sign_headers = headers
+                    sign_kwargs: Dict[str, Any] = {}
+                    sign_url = f"{base_url}{sign_api}"
+                    if self._should_sign_checkin_request(sign_api, checkin_api):
+                        month = datetime.now(SHANGHAI_TZ).strftime("%Y-%m")
+                        checkin_url = f"{base_url}{checkin_api}?month={month}"
+                        checkin_response = self._request_with_anti_crawler_retry(
+                            session,
+                            "get",
+                            checkin_url,
+                            headers,
+                            cookies,
+                        )
+                        parsed_checkin, checkin_data = self._parse_json_response(
+                            checkin_response,
+                            "签到状态响应解析失败",
+                        )
+                        if parsed_checkin and checkin_data.get("success"):
+                            raw_checkin_data = checkin_data.get("data", {})
+                            checkin_nonce = raw_checkin_data.get("checkin_nonce") if isinstance(raw_checkin_data, dict) else ""
+                            if checkin_nonce:
+                                sign_headers = headers.copy()
+                                sign_headers["content-type"] = "application/json"
+                                sign_headers.update(self._build_checkin_signature_headers(user_id, str(checkin_nonce)))
+                                sign_kwargs["json"] = {}
+
+                        pow_token = self._get_checkin_pow_token(
+                            session=session,
+                            base_url=base_url,
+                            headers=headers,
+                            cookies=cookies,
+                        )
+                        if pow_token is not None:
+                            sign_url = self._append_query_param(sign_url, "pow_token", pow_token)
+
                     parsed, data = self._post_json(
                         session,
-                        f"{base_url}{sign_api}",
-                        headers,
+                        sign_url,
+                        sign_headers,
                         cookies,
+                        **sign_kwargs,
                     )
                     if not parsed:
                         if data.get("message") == "接口返回为空":
