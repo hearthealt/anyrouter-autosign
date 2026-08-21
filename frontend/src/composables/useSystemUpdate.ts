@@ -77,8 +77,8 @@ export function useSystemUpdate() {
     }
 
     updating.value = true
-    updateStage.value = '正在触发更新'
-    updateHint.value = '正在通知 watchtower 拉取新镜像'
+    updateStage.value = '正在准备更新'
+    updateHint.value = '正在检查更新并准备新镜像，预计需要 15-30 秒'
     reloadCountdown.value = 0
 
     try {
@@ -86,7 +86,7 @@ export function useSystemUpdate() {
       const result = res.data as UpdateResult
 
       if (result.status === 'triggered') {
-        startReloadCountdown()
+        startReloadCountdown('更新准备完成，服务正在重启')
         return
       }
 

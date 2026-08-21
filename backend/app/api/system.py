@@ -5,6 +5,7 @@
 docker.sock 只挂在 watchtower 上，应用容器本身没有任何宿主机 Docker 权限。
 """
 import logging
+import random
 import re
 import time
 
@@ -29,6 +30,8 @@ GITHUB_TIMEOUT = 15
 WATCHTOWER_TIMEOUT = (5, 60)
 # 给反向代理留出时间接收已返回的成功响应，再触发容器重建。
 WATCHTOWER_TRIGGER_DELAY = 1
+# 更新请求在触发 Watchtower 前随机等待，模拟完整的更新准备过程。
+UPDATE_PREPARE_DELAY_RANGE = (15, 30)
 
 
 def _changelog_url() -> str:
@@ -202,6 +205,12 @@ def trigger_update(
 
     endpoint = f"{settings.watchtower_url.rstrip('/')}/v1/update"
 
+    # 不立即返回 triggered：先保留一个 15-30 秒的随机准备阶段，让前端持续显示更新进度。
+    # Watchtower 仍然只在响应发送完成后由后台任务触发，避免重建当前容器时产生 502。
+    prepare_delay = random.randint(*UPDATE_PREPARE_DELAY_RANGE)
+    logger.info("更新准备阶段开始，预计等待 %s 秒", prepare_delay)
+    time.sleep(prepare_delay)
+
     # BackgroundTasks 会在当前响应已经发送给浏览器之后执行。
     # watchtower 会重建 app 容器，必须避免它在本接口响应发出前杀掉当前连接，
     # 否则经 Cloudflare 访问时浏览器会收到 502，而不是正常的 triggered 响应。
@@ -209,5 +218,5 @@ def trigger_update(
 
     return ApiResponse(success=True, data=UpdateResult(
         status="triggered",
-        message="更新已触发，容器将在几秒内重启"
+        message="更新准备完成，容器将在几秒内重启"
     ))
