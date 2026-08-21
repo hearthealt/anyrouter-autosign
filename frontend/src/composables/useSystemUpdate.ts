@@ -1,27 +1,25 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { systemApi } from '../api'
-import { apiError } from '../utils/apiError'
+import { ApiError, apiError } from '../utils/apiError'
 import { useVersionStore } from '../stores'
 import type { UpdateResult } from '../types'
 
-const POLL_INTERVAL = 2000
-/** 触发后多久还没观察到服务中断，就认为更新没有真的发生 */
-const DOWN_TIMEOUT = 30_000
-/** 服务中断后等待恢复的上限 */
-const UP_TIMEOUT = 180_000
+/** 更新触发后预留给新容器启动的时间。倒计时结束后统一刷新页面。 */
+const RELOAD_DELAY_SECONDS = 30
 
 /**
- * 系统更新流程：触发 watchtower 后等待当前服务先掉线、再恢复。
- * 关于页和全局版本弹窗共用，避免两个入口的更新行为不一致。
+ * 系统更新流程：调用 watchtower 后等待新容器启动，再刷新当前页面。
+ * 通过 Cloudflare 访问时，旧容器被重建会导致请求返回 502；这属于更新过程中的
+ * 预期断连，不能直接当成更新失败。
  */
 export function useSystemUpdate() {
   const versionStore = useVersionStore()
   const updating = ref(false)
-  const updateSettled = ref(false)
   const updateStage = ref('')
   const updateHint = ref('')
+  const reloadCountdown = ref(0)
 
-  let pollTimer: ReturnType<typeof setTimeout> | null = null
+  let countdownTimer: ReturnType<typeof setInterval> | null = null
 
   const canUpdate = computed(() => (
     versionStore.checked &&
@@ -34,61 +32,34 @@ export function useSystemUpdate() {
 
   const reloadPage = () => window.location.reload()
 
-  /** 直接用 fetch 而不是 axios：重启期间的 401/网络错误不该触发全局跳转登录 */
-  const probeHealth = async (): Promise<boolean> => {
-    try {
-      const res = await fetch('/health', { cache: 'no-store' })
-      return res.ok
-    } catch {
-      return false
+  const clearCountdown = () => {
+    if (countdownTimer) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
     }
   }
 
-  const clearPoll = () => {
-    if (pollTimer) {
-      clearTimeout(pollTimer)
-      pollTimer = null
-    }
-  }
+  const startReloadCountdown = (hint = '服务正在重启，请等待倒计时结束') => {
+    clearCountdown()
+    updating.value = true
+    updateStage.value = '更新已触发'
 
-  /**
-   * 等服务先掉线、再恢复，恢复后自动刷新页面。
-   * 只等「恢复」是不够的：刚触发时旧容器还活着，会立刻误判成已完成。
-   */
-  const watchRestart = () => {
-    clearPoll()
-    const startedAt = Date.now()
-    let sawDown = false
+    const deadline = Date.now() + RELOAD_DELAY_SECONDS * 1000
 
-    const tick = async () => {
-      const alive = await probeHealth()
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+      reloadCountdown.value = remaining
+      updateHint.value = `${hint}，${remaining} 秒后自动刷新页面`
 
-      if (!sawDown) {
-        if (!alive) {
-          sawDown = true
-          updateStage.value = '服务已停止，等待新容器启动'
-          updateHint.value = '恢复后会自动刷新页面'
-        } else if (Date.now() - startedAt > DOWN_TIMEOUT) {
-          updateSettled.value = true
-          updateStage.value = '未观察到服务重启'
-          updateHint.value = '可能是 watchtower 容器没有运行，或者远端没有更新的镜像。可执行 docker compose logs watchtower 确认。'
-          return
-        }
-      } else if (alive) {
-        updateStage.value = '更新完成，正在刷新'
+      if (remaining <= 0) {
+        clearCountdown()
+        updateStage.value = '更新完成，正在刷新页面'
         reloadPage()
-        return
-      } else if (Date.now() - startedAt > UP_TIMEOUT) {
-        updateSettled.value = true
-        updateStage.value = '等待服务恢复超时'
-        updateHint.value = '容器可能启动失败，请执行 docker compose logs app 查看原因。'
-        return
       }
-
-      pollTimer = setTimeout(tick, POLL_INTERVAL)
     }
 
-    pollTimer = setTimeout(tick, POLL_INTERVAL)
+    tick()
+    countdownTimer = setInterval(tick, 1000)
   }
 
   const doUpdate = async () => {
@@ -106,38 +77,43 @@ export function useSystemUpdate() {
     }
 
     updating.value = true
-    updateSettled.value = false
     updateStage.value = '正在触发更新'
     updateHint.value = '正在通知 watchtower 拉取新镜像'
+    reloadCountdown.value = 0
 
     try {
       const res = await systemApi.triggerUpdate()
       const result = res.data as UpdateResult
 
       if (result.status === 'triggered') {
-        updateStage.value = '更新已触发'
-        updateHint.value = '等待容器重启'
-        watchRestart()
+        startReloadCountdown()
         return
       }
 
       updating.value = false
       window.$notify(result.message, result.status === 'no_update' ? 'info' : 'error')
     } catch (e) {
+      // 更新会重建当前 app 容器，Cloudflare 可能在后端来不及返回响应前给浏览器 502。
+      // 此时更新通常已经成功触发，继续倒计时并刷新，而不是提示“更新失败”。
+      if (e instanceof ApiError && e.status === 502) {
+        startReloadCountdown('连接在更新过程中中断，更新通常已经开始')
+        return
+      }
+
       updating.value = false
       window.$notify(apiError(e, '触发更新失败'), 'error')
     }
   }
 
   onBeforeUnmount(() => {
-    clearPoll()
+    clearCountdown()
   })
 
   return {
     updating,
-    updateSettled,
     updateStage,
     updateHint,
+    reloadCountdown,
     canUpdate,
     doUpdate,
     reloadPage

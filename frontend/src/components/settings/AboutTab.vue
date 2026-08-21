@@ -34,15 +34,22 @@
             <template #icon><n-icon :size="14"><CloudDownloadOutline /></n-icon></template>
             检查更新
           </n-button>
-          <n-popconfirm v-if="canUpdate" @positive-click="doUpdate">
-            <template #trigger>
-              <n-button size="small" type="primary">
-                <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
-                更新并重启
-              </n-button>
-            </template>
-            拉取最新镜像并重建容器，服务会中断约 10-30 秒。确定继续？
-          </n-popconfirm>
+          <template v-if="canUpdate">
+            <n-button size="small" type="primary" @click="confirmingUpdate = true">
+              <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+              更新并重启
+            </n-button>
+            <n-modal
+              v-model:show="confirmingUpdate"
+              preset="dialog"
+              title="确认更新并重启"
+              content="将拉取最新镜像并重建容器，服务会中断约 10-30 秒。确定继续吗？"
+              positive-text="确定更新"
+              negative-text="取消"
+              :mask-closable="false"
+              @positive-click="confirmUpdate"
+            />
+          </template>
           <n-button v-else size="small" disabled>
             <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
             更新并重启
@@ -66,8 +73,11 @@
         <div class="update-title">{{ updateStage }}</div>
         <div class="update-hint">{{ updateHint }}</div>
         <div class="update-actions">
-          <n-button size="small" @click="reloadPage">手动刷新</n-button>
-          <n-button v-if="updateSettled" size="small" quaternary @click="updating = false">关闭</n-button>
+          <div v-if="reloadCountdown > 0" class="update-countdown">
+            <strong>{{ reloadCountdown }}</strong>
+            <span>秒后自动刷新页面</span>
+          </div>
+          <n-button size="small" @click="reloadPage">立即刷新</n-button>
         </div>
       </div>
     </n-modal>
@@ -75,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { CloudDownloadOutline, InformationCircleOutline, RefreshOutline } from '@vicons/ionicons5'
 import { useVersionStore } from '../../stores'
 import { apiError } from '../../utils/apiError'
@@ -85,9 +95,9 @@ import ExternalLink from '../common/ExternalLink.vue'
 const versionStore = useVersionStore()
 const {
   updating,
-  updateSettled,
   updateStage,
   updateHint,
+  reloadCountdown,
   canUpdate,
   doUpdate,
   reloadPage
@@ -102,6 +112,12 @@ const latestTag = computed(() => versionStore.latestTag)
 const latestError = computed(() => versionStore.error)
 const changelog = computed(() => versionStore.changelog)
 const hasNewVersion = computed(() => versionStore.hasNewVersion)
+const confirmingUpdate = ref(false)
+
+const confirmUpdate = () => {
+  confirmingUpdate.value = false
+  void doUpdate()
+}
 
 const load = async () => {
   try {
@@ -259,7 +275,23 @@ defineExpose({ load })
 
 .update-actions {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: var(--spacing-2);
   margin-top: var(--spacing-2);
+}
+
+.update-countdown {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--primary-color);
+  font-size: var(--text-sm);
+}
+
+.update-countdown strong {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
 }
 </style>
