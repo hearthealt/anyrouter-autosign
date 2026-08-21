@@ -10,6 +10,7 @@ from .notify import (
 from .common import ApiResponse, SettingsResponse, SettingsUpdate, DashboardResponse, RecentSign, DailyTrend
 from .auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 from .platform import PlatformCreate, PlatformUpdate, PlatformResponse, PlatformBrief
+from .system import VersionInfo, LatestVersionInfo, UpdateResult
 
 __all__ = [
     "AccountCreate", "AccountUpdate", "AccountResponse", "AccountInfo", "LastSign",
@@ -19,5 +20,6 @@ __all__ = [
     "AccountNotifyConfig", "AccountNotifyResponse", "AccountNotifyUpdate",
     "ApiResponse", "SettingsResponse", "SettingsUpdate", "DashboardResponse", "RecentSign", "DailyTrend",
     "LoginRequest", "LoginResponse", "UserInfo", "ChangePasswordRequest",
-    "PlatformCreate", "PlatformUpdate", "PlatformResponse", "PlatformBrief"
+    "PlatformCreate", "PlatformUpdate", "PlatformResponse", "PlatformBrief",
+    "VersionInfo", "LatestVersionInfo", "UpdateResult"
 ]

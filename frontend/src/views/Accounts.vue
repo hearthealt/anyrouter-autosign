@@ -243,10 +243,10 @@ import {
   RefreshOutline,
   SearchOutline,
 } from '@vicons/ionicons5'
-import { AccountModal, BatchImportModal, TokensModal } from '../components'
+import { AccountModal, BatchImportModal, ExternalLink, TokensModal } from '../components'
 import { accountApi, groupsApi, notifyApi, platformApi, settingsApi, signApi } from '../api'
 import { useEventStream, useFormat, useViewRefresh } from '../composables'
-import type { Account, AccountGroup, AccountProxyMode, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
+import type { Account, AccountAuthType, AccountGroup, AccountProxyMode, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
 
 type StatusFilter = 'healthy' | 'unhealthy' | 'pending' | 'disabled'
 type SortKey = 'username' | 'platform' | 'group' | 'quota' | 'last_sign' | 'health'
@@ -347,8 +347,11 @@ const setStatusFilter = (status: StatusFilter | null) => {
   selectedStatus.value = selectedStatus.value === status ? null : status
 }
 
-const getUserId = (account: Account) => account.anyrouter_user_id ?? '-'
+const isNewApiAccount = (account: Account) => account.platform?.adapter_type !== 'http'
+const getUserId = (account: Account) => account.external_user_id
+  ?? (account.anyrouter_user_id != null ? String(account.anyrouter_user_id) : '-')
 const getPlatformName = (account: Account) => account.platform?.name || '—'
+const getPlatformUrl = (account: Account) => account.platform?.base_url || ''
 const getGroupInfo = (account: Account) => account.group || groups.value.find(group => group.id === account.group_id)
 
 const getHealthTone = (account: Account) => {
@@ -371,7 +374,8 @@ const getQuotaRatio = (account: Account) => {
   return Math.max(0, Math.min(100, ratio))
 }
 
-const isLowQuota = (account: Account) => (account.cached_quota || 0) < quotaWarningValue.value
+const isLowQuota = (account: Account) => isNewApiAccount(account)
+  && (account.cached_quota || 0) < quotaWarningValue.value
 
 const getRowClassName = (account: Account) => {
   if (account.health_status === 'unhealthy') return 'account-row-alert'
@@ -472,7 +476,8 @@ const handleBatchHealthCheck = async () => {
     const res: any = await accountApi.healthCheckAll()
     const healthy = res.data?.healthy_count ?? 0
     const unhealthy = res.data?.unhealthy_count ?? 0
-    window.$notify(`批量检查完成，正常 ${healthy}，异常 ${unhealthy}`, 'success')
+    const unknown = res.data?.unknown_count ?? 0
+    window.$notify(`批量检查完成，正常 ${healthy}，异常 ${unhealthy}${unknown > 0 ? `，未检查 ${unknown}` : ''}`, unknown > 0 ? 'warning' : 'success')
     await loadData()
   } catch (e: any) {
     window.$notify(e.message || '批量检查失败', 'error')
@@ -565,9 +570,15 @@ const handleEditToken = async (tokenId: number, data: CreateTokenParams, done?: 
 
 const handleAccountSubmit = async (data: {
   user_id: string
+  external_user_id: string
+  username: string
+  display_name: string
   session_cookie: string
   login_username: string
   login_password: string
+  auth_type: AccountAuthType
+  auth_data?: Record<string, any>
+  clear_auth_data: boolean
   note: string
   proxy_mode: AccountProxyMode
   proxy_url: string
@@ -578,34 +589,49 @@ const handleAccountSubmit = async (data: {
   notify_channel_ids: number[]
 }) => {
   try {
+    const targetPlatform = platforms.value.find(platform => platform.id === data.platform_id)
+    const isHttpTarget = targetPlatform?.adapter_type === 'http'
+
     if (editingAccount.value) {
       const updateData: any = { is_active: data.is_active }
+      const platformChanged = data.platform_id !== editingAccount.value.platform?.id
+      if (data.platform_id) updateData.platform_id = data.platform_id
 
-      if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
-      if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
-      if (data.note.trim() !== (editingAccount.value.note || '')) updateData.note = data.note.trim()
-      if (data.clear_login_credentials) {
-        updateData.clear_login_credentials = true
+      if (isHttpTarget) {
+        const externalUserId = data.external_user_id.trim()
+        if (platformChanged || externalUserId !== (editingAccount.value.external_user_id || '')) {
+          updateData.external_user_id = externalUserId
+        }
+        if (data.username.trim() !== (editingAccount.value.username || '')) {
+          updateData.username = data.username.trim()
+        }
+        if (data.display_name.trim() !== (editingAccount.value.display_name || '')) {
+          updateData.display_name = data.display_name.trim()
+        }
+        updateData.auth_type = data.clear_auth_data ? 'none' : data.auth_type
+        if (data.auth_data) updateData.auth_data = data.auth_data
+        if (data.clear_auth_data) updateData.clear_auth_data = true
+        if (data.clear_login_credentials) updateData.clear_login_credentials = true
       } else {
-        const previousLoginUsername = editingAccount.value.login_username?.trim() || ''
-        const currentLoginUsername = data.login_username.trim()
-        if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
-          updateData.login_username = currentLoginUsername
+        if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
+        if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+        if (data.clear_login_credentials) {
+          updateData.clear_login_credentials = true
+        } else {
+          const previousLoginUsername = editingAccount.value.login_username?.trim() || ''
+          const currentLoginUsername = data.login_username.trim()
+          if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
+            updateData.login_username = currentLoginUsername
+          }
+          if (data.login_password) updateData.login_password = data.login_password
         }
-        if (data.login_password) {
-          updateData.login_password = data.login_password
-        }
       }
-      if (data.group_id !== editingAccount.value.group_id) {
-        updateData.group_id = data.group_id || 0
-      }
-      if (data.platform_id) {
-        updateData.platform_id = data.platform_id
-      }
+
+      if (data.note.trim() !== (editingAccount.value.note || '')) updateData.note = data.note.trim()
+      if (data.group_id !== editingAccount.value.group_id) updateData.group_id = data.group_id || 0
+
       const previousProxyMode = editingAccount.value.proxy_mode || 'direct'
-      if (data.proxy_mode !== previousProxyMode) {
-        updateData.proxy_mode = data.proxy_mode
-      }
+      if (data.proxy_mode !== previousProxyMode) updateData.proxy_mode = data.proxy_mode
       if (data.proxy_mode === 'custom' && data.proxy_url.trim()) {
         updateData.proxy_mode = 'custom'
         updateData.proxy_url = data.proxy_url.trim()
@@ -614,40 +640,46 @@ const handleAccountSubmit = async (data: {
       }
 
       await accountApi.update(editingAccount.value.id, updateData)
-
-      const notifyData = {
+      await notifyApi.updateAccountNotify(editingAccount.value.id, {
         channels: data.notify_channel_ids.map((id: number) => ({
           channel_id: id,
           is_enabled: true,
           notify_config: {}
         }))
-      }
-      await notifyApi.updateAccountNotify(editingAccount.value.id, notifyData)
+      })
       window.$notify('账号更新成功', 'success')
     } else {
-      const res: any = await accountApi.create({
-        session_cookie: data.session_cookie.trim() || undefined,
-        user_id: data.user_id.trim() || undefined,
-        login_username: data.login_username.trim() || undefined,
-        login_password: data.login_password || undefined,
+      const payload: any = {
         note: data.note.trim() || undefined,
         proxy_mode: data.proxy_mode,
         proxy_url: data.proxy_mode === 'custom' ? data.proxy_url.trim() || undefined : undefined,
         platform_id: data.platform_id as number,
         group_id: data.group_id || undefined
-      })
+      }
 
+      if (isHttpTarget) {
+        payload.external_user_id = data.external_user_id.trim() || undefined
+        payload.username = data.username.trim() || undefined
+        payload.display_name = data.display_name.trim() || undefined
+        payload.auth_type = data.auth_type
+        payload.auth_data = data.auth_data
+      } else {
+        payload.session_cookie = data.session_cookie.trim() || undefined
+        payload.user_id = data.user_id.trim() || undefined
+        payload.login_username = data.login_username.trim() || undefined
+        payload.login_password = data.login_password || undefined
+      }
+
+      const res: any = await accountApi.create(payload)
       if (data.notify_channel_ids.length > 0 && res.data?.id) {
-        const notifyData = {
+        await notifyApi.updateAccountNotify(res.data.id, {
           channels: data.notify_channel_ids.map((id: number) => ({
             channel_id: id,
             is_enabled: true,
             notify_config: {}
           }))
-        }
-        await notifyApi.updateAccountNotify(res.data.id, notifyData)
+        })
       }
-
       window.$notify('账号添加成功', 'success')
     }
 
@@ -659,7 +691,6 @@ const handleAccountSubmit = async (data: {
     accountModalRef.value?.setSubmitting(false)
   }
 }
-
 const handleBatchImported = async () => {
   await loadData(1)
 }
@@ -924,17 +955,21 @@ const columns = computed<DataTableColumns<Account>>(() => [
                 )
               : null
           ]),
-          h('div', { class: 'account-sub' }, `UID ${getUserId(account)}`)
+          h('div', { class: 'account-sub' }, `ID ${getUserId(account)}`)
         ])
       ])
   },
   {
     title: '平台',
     key: 'platform',
-    minWidth: 140,
+    minWidth: 210,
     sorter: 'default',
     sortOrder: getSortOrder('platform'),
-    render: account => getPlatformName(account)
+    render: account => h(ExternalLink, {
+      href: getPlatformUrl(account),
+      label: getPlatformUrl(account) || getPlatformName(account),
+      mono: true
+    })
   },
   {
     title: '分组',
@@ -955,8 +990,9 @@ const columns = computed<DataTableColumns<Account>>(() => [
     minWidth: 180,
     sorter: 'default',
     sortOrder: getSortOrder('quota'),
-    render: account =>
-      h('div', { class: 'quota-cell' }, [
+    render: account => {
+      if (!isNewApiAccount(account)) return h('span', { class: 'muted' }, '不适用')
+      return h('div', { class: 'quota-cell' }, [
         h('div', { class: 'quota-main' }, [
           isLowQuota(account)
             ? h(
@@ -978,6 +1014,7 @@ const columns = computed<DataTableColumns<Account>>(() => [
           h('div', { class: ['quota-bar-fill', isLowQuota(account) ? 'danger' : ''], style: { width: `${getQuotaRatio(account)}%` } })
         ])
       ])
+    }
   },
   {
     title: '最近签到',
@@ -1021,7 +1058,9 @@ const columns = computed<DataTableColumns<Account>>(() => [
       h('div', { class: 'actions' }, [
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
-        h(NButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' }),
+        isNewApiAccount(account)
+          ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' })
+          : null,
         h(
           NButton,
           {
@@ -1520,3 +1559,4 @@ useViewRefresh(() => handleRefresh())
   }
 }
 </style>
+

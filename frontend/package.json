@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "clean": "node -e \"['dist','tsconfig.tsbuildinfo','tsconfig.node.tsbuildinfo','vite.config.js','vite.config.d.ts'].forEach(p=>require('fs').rmSync(p,{recursive:true,force:true}))\"",
+    "build": "npm run clean && vue-tsc -b --force && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

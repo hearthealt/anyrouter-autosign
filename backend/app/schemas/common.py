@@ -54,6 +54,7 @@ class DailyTrend(BaseModel):
     fail: int
     reward: int = 0
     reward_display: str = "$0.00"
+    reward_totals: dict[str, int | float] = Field(default_factory=dict)
 
 
 class DashboardResponse(BaseModel):
@@ -70,6 +71,7 @@ class DashboardResponse(BaseModel):
     total_request_count: int
     month_reward: int = 0
     month_reward_display: str = "$0.00"
+    month_reward_totals: dict[str, int | float] = Field(default_factory=dict)
     success_rate: float = 0
     recent_signs: List[RecentSign]
     daily_trend: List[DailyTrend] = []

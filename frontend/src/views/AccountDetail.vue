@@ -41,9 +41,12 @@
               </span>
             </div>
             <div class="hero-meta">
-              <span class="mono">UID {{ account?.anyrouter_user_id || '-' }}</span>
+              <span class="mono">ID {{ account?.external_user_id || account?.anyrouter_user_id || '-' }}</span>
               <span class="divider">·</span>
-              <span>{{ account?.platform?.name || '—' }}</span>
+              <ExternalLink
+                :href="getPlatformUrl()"
+                :label="getPlatformUrl() || account?.platform?.name || '—'"
+              />
               <span class="divider">·</span>
               <span>创建于 {{ account ? formatDateTime(account.created_at) : '-' }}</span>
             </div>
@@ -113,7 +116,13 @@
               </div>
               <div class="info-row">
                 <span class="info-label">平台</span>
-                <span class="info-value">{{ account?.platform?.name || '—' }}</span>
+                <span class="info-value">
+                  <ExternalLink
+                    :href="getPlatformUrl()"
+                    :label="getPlatformUrl() || account?.platform?.name || '—'"
+                    mono
+                  />
+                </span>
               </div>
               <div class="info-row">
                 <span class="info-label">访问出口</span>
@@ -157,7 +166,7 @@
             <div class="aff-box">
               <div class="aff-label">推广链接</div>
               <div class="aff-row">
-                <code class="aff-link">{{ getAffLink() }}</code>
+                <ExternalLink class="aff-link" :href="getAffLink()" mono wrap />
                 <n-button size="small" @click="copyAffLink">
                   <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
                   复制
@@ -209,7 +218,7 @@
                     <span class="log-status" :class="log.success ? 'success' : 'error'">
                       {{ log.success ? '签到成功' : '签到失败' }}
                     </span>
-                    <span v-if="log.reward_quota" class="log-reward">+{{ formatQuota(log.reward_quota) }}</span>
+                    <span v-if="Number(log.reward_quota || 0)" class="log-reward">+{{ formatRewardAmount(log.reward_quota, log.reward_unit, log.reward_display) }}</span>
                   </div>
                   <div class="log-time">{{ formatDateTime(log.sign_time) }}</div>
                   <div v-if="log.message" class="log-msg">{{ log.message }}</div>
@@ -243,147 +252,27 @@
       </div>
     </n-spin>
 
-    <!-- 编辑弹窗 -->
-    <n-modal v-model:show="showEditModal" :mask-closable="false">
-      <div class="edit-modal">
-        <div class="modal-head">
-          <h3>编辑账号</h3>
-          <n-button text @click="showEditModal = false">
-            <n-icon :size="16"><CloseOutline /></n-icon>
-          </n-button>
-        </div>
-        <div class="modal-body">
-          <div class="form-grid">
-            <div class="field">
-              <label>平台</label>
-              <n-select
-                v-model:value="editForm.platform_id"
-                :options="platformOptions"
-                size="small"
-                placeholder="选择平台"
-                :loading="loadingPlatforms"
-              />
-            </div>
-            <div class="field">
-              <label>User ID</label>
-              <n-input v-model:value="editForm.user_id" size="small" placeholder="留空则不修改" />
-            </div>
-            <div class="field field-full">
-              <label>Session Cookie</label>
-              <n-input
-                v-model:value="editForm.session_cookie"
-                type="textarea"
-                :rows="3"
-                size="small"
-                placeholder="留空则不修改"
-              />
-            </div>
-            <div class="field">
-              <label>登录账号</label>
-              <n-input
-                v-model:value="editForm.login_username"
-                size="small"
-                :disabled="editForm.clear_login_credentials"
-                placeholder="邮箱或用户名"
-              />
-            </div>
-            <div class="field">
-              <label>登录密码</label>
-              <n-input
-                v-model:value="editForm.login_password"
-                type="password"
-                show-password-on="click"
-                size="small"
-                :disabled="editForm.clear_login_credentials"
-                placeholder="留空则不变"
-              />
-            </div>
-            <div class="field field-full">
-              <label>备注</label>
-              <n-input
-                v-model:value="editForm.note"
-                type="textarea"
-                :rows="2"
-                maxlength="255"
-                show-count
-                size="small"
-                placeholder="记录用途、来源或特殊说明"
-              />
-            </div>
-            <div v-if="account?.has_login_credentials" class="field field-full">
-              <n-checkbox v-model:checked="editForm.clear_login_credentials">
-                清除已保存的登录凭证
-              </n-checkbox>
-            </div>
-            <div class="field">
-              <label>状态</label>
-              <n-switch v-model:value="editForm.is_active">
-                <template #checked>启用</template>
-                <template #unchecked>禁用</template>
-              </n-switch>
-            </div>
-            <div class="field">
-              <label>分组</label>
-              <n-select
-                v-model:value="editForm.group_id"
-                :options="groups.map(g => ({ label: g.name, value: g.id }))"
-                size="small"
-                placeholder="选择分组"
-                clearable
-              />
-            </div>
-            <div class="field">
-              <label>访问出口</label>
-              <n-select
-                v-model:value="editForm.proxy_mode"
-                :options="proxyModeOptions"
-                size="small"
-              />
-            </div>
-            <div v-if="editForm.proxy_mode === 'custom'" class="field field-full">
-              <label>代理地址</label>
-              <n-input
-                v-model:value="editForm.proxy_url"
-                size="small"
-                placeholder="http://user:pass@host:port"
-              />
-            </div>
-            <div class="field field-full">
-              <label>健康告警渠道</label>
-              <n-select
-                v-model:value="editForm.notify_channel_ids"
-                multiple
-                size="small"
-                :options="channelOptions"
-                placeholder="仅用于定时健康检查告警"
-                clearable
-                :loading="loadingChannels"
-              />
-            </div>
-          </div>
-        </div>
-        <div class="modal-foot">
-          <n-button size="small" @click="showEditModal = false">取消</n-button>
-          <n-button size="small" type="primary" :loading="updating" @click="handleUpdate">
-            保存
-          </n-button>
-        </div>
-      </div>
-    </n-modal>
+    <AccountModal
+      ref="accountModalRef"
+      v-model:show="showEditModal"
+      :account="account"
+      :groups="groups"
+      @submit="handleAccountSubmit"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { AccountModal } from '../components/dashboard'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline,
-  CloseOutline, DocumentTextOutline
-} from '@vicons/ionicons5'
+import { RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline, DocumentTextOutline } from '@vicons/ionicons5'
+
 import { accountApi, signApi, groupsApi, notifyApi, platformApi } from '../api'
-import { formatDateTime, formatQuota, copyToClipboard } from '../utils'
+import { formatDateTime, formatQuota, formatRewardAmount, copyToClipboard } from '../utils'
 import { useEventStream, useViewRefresh } from '../composables'
-import type { AccountProxyMode } from '../types'
+import ExternalLink from '../components/common/ExternalLink.vue'
+import type { Account, AccountAuthType, AccountGroup, AccountProxyMode } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -393,46 +282,21 @@ const loading = ref(false)
 const refreshing = ref(false)
 const signing = ref(false)
 const loadingLogs = ref(false)
-const updating = ref(false)
-
-const account = ref<any>(null)
+const account = ref<Account | null>(null)
 const accountInfo = ref<any>(null)
 const signLogs = ref<any[]>([])
 
 const showEditModal = ref(false)
-const editForm = ref({
-  user_id: '',
-  session_cookie: '',
-  login_username: '',
-  login_password: '',
-  note: '',
-  proxy_mode: 'direct' as AccountProxyMode,
-  proxy_url: '',
-  clear_login_credentials: false,
-  is_active: true,
-  platform_id: null as number | null,
-  group_id: null as number | null,
-  notify_channel_ids: [] as number[]
-})
-
-const groups = ref<any[]>([])
-const channelOptions = ref<{ label: string; value: number }[]>([])
-const loadingChannels = ref(false)
-const platformOptions = ref<{ label: string; value: number }[]>([])
-const loadingPlatforms = ref(false)
+const accountModalRef = ref<InstanceType<typeof AccountModal> | null>(null)
+const groups = ref<AccountGroup[]>([])
 const miniTrend = ref<Array<{ date: string; short: string; tone: 'success' | 'error' | 'empty'; label: string; height: number }>>([])
-const proxyModeOptions: Array<{ label: string; value: AccountProxyMode }> = [
-  { label: '直连服务器出口', value: 'direct' },
-  { label: '自定义代理', value: 'custom' }
-]
-
 const getProxyModeLabel = (mode?: AccountProxyMode) => {
   if (mode === 'custom') return '自定义代理'
   return '直连服务器出口'
 }
 
-const getAffBaseUrl = () => account.value?.platform?.base_url || ''
-const getAffLink = () => `${getAffBaseUrl()}/register?aff=${accountInfo.value?.aff_code || ''}`
+const getPlatformUrl = () => account.value?.platform?.base_url || ''
+const getAffLink = () => `${getPlatformUrl()}/register?aff=${accountInfo.value?.aff_code || ''}`
 
 const getGroupColor = (color?: string) => {
   const colors: Record<string, string> = {
@@ -515,14 +379,7 @@ const loadAccount = async () => {
   try {
     const res = await accountApi.get(accountId)
     account.value = res.data
-    editForm.value.is_active = res.data.is_active
-    editForm.value.platform_id = res.data.platform?.id || null
-    editForm.value.group_id = res.data.group_id || null
-    editForm.value.login_username = res.data.login_username || ''
-    editForm.value.note = res.data.note || ''
-    editForm.value.proxy_mode = res.data.proxy_mode || 'direct'
-    editForm.value.proxy_url = ''
-    editForm.value.clear_login_credentials = false
+
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {
@@ -588,76 +445,87 @@ const handleSign = async () => {
   }
 }
 
-const handleUpdate = async () => {
-  updating.value = true
+const handleAccountSubmit = async (data: {
+  user_id: string
+  external_user_id: string
+  username: string
+  display_name: string
+  session_cookie: string
+  login_username: string
+  login_password: string
+  auth_type: AccountAuthType
+  auth_data?: Record<string, any>
+  clear_auth_data: boolean
+  note: string
+  proxy_mode: AccountProxyMode
+  proxy_url: string
+  clear_login_credentials: boolean
+  is_active?: boolean
+  platform_id: number | null
+  group_id: number | null
+  notify_channel_ids: number[]
+}) => {
   try {
-    if (!editForm.value.platform_id) {
-      window.$notify('请选择平台', 'warning')
-      return
-    }
-    const currentProxyMode = account.value?.proxy_mode || 'direct'
-    const canKeepExistingCustomProxy = currentProxyMode === 'custom' && editForm.value.proxy_mode === 'custom'
-    if (editForm.value.proxy_mode === 'custom' && !editForm.value.proxy_url.trim() && !canKeepExistingCustomProxy) {
-      window.$notify('自定义代理模式需要填写代理地址', 'warning')
-      return
-    }
-    const data: any = { is_active: editForm.value.is_active }
-    if (editForm.value.user_id.trim()) data.user_id = editForm.value.user_id.trim()
-    if (editForm.value.session_cookie.trim()) data.session_cookie = editForm.value.session_cookie.trim()
-    if (editForm.value.note.trim() !== (account.value?.note || '')) data.note = editForm.value.note.trim()
-    if (editForm.value.clear_login_credentials) {
-      data.clear_login_credentials = true
-    } else {
-      const previousLoginUsername = account.value?.login_username?.trim() || ''
-      const currentLoginUsername = editForm.value.login_username.trim()
-      if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
-        data.login_username = currentLoginUsername
+    const targetPlatform = data.platform_id == null ? null : (await platformApi.get(data.platform_id)).data
+    const isHttpTarget = targetPlatform?.adapter_type === 'http'
+    const updateData: any = { is_active: data.is_active }
+    const platformChanged = data.platform_id !== account.value?.platform?.id
+    if (data.platform_id) updateData.platform_id = data.platform_id
+
+    if (isHttpTarget) {
+      const externalUserId = data.external_user_id.trim()
+      if (platformChanged || externalUserId !== (account.value?.external_user_id || '')) {
+        updateData.external_user_id = externalUserId
       }
-      if (editForm.value.login_password) data.login_password = editForm.value.login_password
+      if (data.username.trim() !== (account.value?.username || '')) updateData.username = data.username.trim()
+      if (data.display_name.trim() !== (account.value?.display_name || '')) updateData.display_name = data.display_name.trim()
+      updateData.auth_type = data.clear_auth_data ? 'none' : data.auth_type
+      if (data.auth_data) updateData.auth_data = data.auth_data
+      if (data.clear_auth_data) updateData.clear_auth_data = true
+      if (data.clear_login_credentials) updateData.clear_login_credentials = true
+    } else {
+      if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
+      if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+      if (data.clear_login_credentials) {
+        updateData.clear_login_credentials = true
+      } else {
+        const previousLoginUsername = account.value?.login_username?.trim() || ''
+        const currentLoginUsername = data.login_username.trim()
+        if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) updateData.login_username = currentLoginUsername
+        if (data.login_password) updateData.login_password = data.login_password
+      }
     }
-    if (editForm.value.group_id !== account.value?.group_id) {
-      data.group_id = editForm.value.group_id || 0
-    }
-    if (editForm.value.platform_id !== account.value?.platform?.id) {
-      data.platform_id = editForm.value.platform_id
-    }
+
+    if (data.note.trim() !== (account.value?.note || '')) updateData.note = data.note.trim()
+    if (data.group_id !== account.value?.group_id) updateData.group_id = data.group_id || 0
+
     const previousProxyMode = account.value?.proxy_mode || 'direct'
-    if (editForm.value.proxy_mode !== previousProxyMode) {
-      data.proxy_mode = editForm.value.proxy_mode
-    }
-    if (editForm.value.proxy_mode === 'custom' && editForm.value.proxy_url.trim()) {
-      data.proxy_mode = 'custom'
-      data.proxy_url = editForm.value.proxy_url.trim()
-    } else if (editForm.value.proxy_mode !== 'custom' && previousProxyMode === 'custom') {
-      data.proxy_url = ''
+    if (data.proxy_mode !== previousProxyMode) updateData.proxy_mode = data.proxy_mode
+    if (data.proxy_mode === 'custom' && data.proxy_url.trim()) {
+      updateData.proxy_mode = 'custom'
+      updateData.proxy_url = data.proxy_url.trim()
+    } else if (data.proxy_mode !== 'custom' && previousProxyMode === 'custom') {
+      updateData.proxy_url = ''
     }
 
-    await accountApi.update(accountId, data)
-
-    const notifyData = {
-      channels: editForm.value.notify_channel_ids.map((id: number) => ({
+    await accountApi.update(accountId, updateData)
+    await notifyApi.updateAccountNotify(accountId, {
+      channels: data.notify_channel_ids.map((id: number) => ({
         channel_id: id,
         is_enabled: true,
         notify_config: {}
       }))
-    }
-    await notifyApi.updateAccountNotify(accountId, notifyData)
+    })
 
     window.$notify('账号信息已更新', 'success')
     showEditModal.value = false
-    editForm.value.user_id = ''
-    editForm.value.session_cookie = ''
-    editForm.value.login_password = ''
-    editForm.value.clear_login_credentials = false
-    loadAccount()
-    loadAccountInfo()
+    await Promise.all([loadAccount(), loadAccountInfo(), loadSignLogs(pagination.value.page), loadMiniTrend()])
   } catch (e: any) {
-    window.$notify(e.message, 'error')
+    window.$notify(e.message || '更新失败', 'error')
   } finally {
-    updating.value = false
+    accountModalRef.value?.setSubmitting(false)
   }
 }
-
 const copyAffLink = () => {
   if (accountInfo.value?.aff_code) {
     const link = getAffLink()
@@ -678,67 +546,10 @@ const loadGroups = async () => {
   }
 }
 
-const loadPlatforms = async () => {
-  loadingPlatforms.value = true
-  try {
-    const res = await platformApi.getList()
-    const platforms = res.data || []
-    platformOptions.value = platforms.map((p: any) => ({
-      label: `${p.name} (${p.base_url})`,
-      value: p.id
-    }))
-    if (!editForm.value.platform_id && platforms.length > 0) {
-      editForm.value.platform_id = platforms[0].id
-    }
-  } catch (e: any) {
-    console.error('Failed to load platforms:', e)
-  } finally {
-    loadingPlatforms.value = false
-  }
-}
 
-const loadChannels = async () => {
-  loadingChannels.value = true
-  try {
-    const res = await notifyApi.getChannels()
-    channelOptions.value = (res.data || [])
-      .filter((c: any) => c.is_enabled)
-      .map((c: any) => ({ label: c.name, value: c.id }))
-  } catch (e: any) {
-    console.error('Failed to load channels:', e)
-  } finally {
-    loadingChannels.value = false
-  }
-}
-
-const loadAccountNotify = async () => {
-  try {
-    const res = await notifyApi.getAccountNotify(accountId)
-    const enabledChannels = (res.data || []).filter((c: any) => c.is_enabled)
-    editForm.value.notify_channel_ids = enabledChannels.map((c: any) => c.channel_id)
-  } catch (e: any) {
-    console.error('Failed to load account notify:', e)
-  }
-}
-
-const openEditModal = async () => {
+const openEditModal = () => {
   showEditModal.value = true
-  editForm.value.user_id = ''
-  editForm.value.session_cookie = ''
-  editForm.value.login_username = account.value?.login_username || ''
-  editForm.value.login_password = ''
-  editForm.value.note = account.value?.note || ''
-  editForm.value.proxy_mode = account.value?.proxy_mode || 'direct'
-  editForm.value.proxy_url = ''
-  editForm.value.clear_login_credentials = false
-  editForm.value.is_active = account.value?.is_active ?? true
-  editForm.value.platform_id = account.value?.platform?.id || null
-  editForm.value.group_id = account.value?.group_id || null
-  editForm.value.notify_channel_ids = []
-
-  await Promise.all([loadPlatforms(), loadChannels(), loadAccountNotify()])
 }
-
 onMounted(() => {
   loadAccount()
   loadAccountInfo()
@@ -1030,13 +841,11 @@ useViewRefresh(async () => {
 
 .aff-link {
   flex: 1;
+  min-width: 0;
   padding: var(--spacing-2);
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
   font-size: var(--text-xs);
-  word-break: break-all;
-  font-family: var(--font-mono);
 }
 
 /* 签到记录 */

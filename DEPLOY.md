@@ -4,6 +4,7 @@
 
 - [本地部署](#本地部署)
 - [Docker 部署](#docker-部署)
+- [升级](#升级)
 - [生产环境部署](#生产环境部署)
 - [Nginx 配置](#nginx-配置)
 - [环境变量与配置文件](#环境变量与配置文件)
@@ -42,7 +43,7 @@ pip install -r requirements.txt
 # 创建数据目录
 mkdir data
 
-# 开发环境会默认读取 backend/.env.local
+# 开发环境读取仓库根目录的 .env（首次先 cp .env.example .env）
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -72,116 +73,107 @@ pnpm dev
 
 ## Docker 部署
 
-以下内容为示例，需要你自行创建对应文件。
+推荐方式。前端构建产物打进同一个镜像、由后端直接提供，只有一个应用容器，不需要额外的 nginx。
 
-### backend/Dockerfile
+镜像由 GitHub Actions 自动构建并推送到 GHCR：`ghcr.io/hearthealt/anyrouter-autosign`。
 
-```dockerfile
-FROM python:3.11-slim
+### 1. 准备部署目录
 
-WORKDIR /app
+```bash
+mkdir -p /opt/anyrouter && cd /opt/anyrouter
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-RUN mkdir -p /app/data
-
-ENV ENVIRONMENT=production
-
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 只需要这两个文件，不用克隆整个仓库
+curl -O https://raw.githubusercontent.com/hearthealt/anyrouter-autosign/master/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/hearthealt/anyrouter-autosign/master/.env.example
 ```
 
-### frontend/Dockerfile
+### 2. 修改 .env
 
-```dockerfile
-FROM node:20-alpine AS builder
+```bash
+# 生成两个随机密钥
+openssl rand -hex 32   # 填入 JWT_SECRET_KEY
+openssl rand -hex 32   # 填入 WATCHTOWER_HTTP_API_TOKEN
 
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-RUN npm install
-
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
+vi .env
 ```
 
-### frontend/nginx.conf
+必须设置的三项：
 
-```nginx
-server {
-    listen 80;
-    server_name _;
+| 变量 | 说明 |
+|---|---|
+| `JWT_SECRET_KEY` | JWT 签名密钥。不改等于没有鉴权 |
+| `DEFAULT_ADMIN_PASSWORD` | 首次启动创建的管理员密码 |
+| `WATCHTOWER_HTTP_API_TOKEN` | 页面「更新并重启」用的令牌，留空则更新按钮不可用 |
 
-    root /usr/share/nginx/html;
-    index index.html;
+> 仓库还没有打过 `v*` tag 时 `:latest` 不存在，先在 `.env` 里改成
+> `ANYROUTER_IMAGE=ghcr.io/hearthealt/anyrouter-autosign:edge`（每次推送 master 都会更新）。
 
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /api/v1/events {
-        proxy_pass http://backend:8000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Connection "";
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
-    }
-}
-```
-
-### docker-compose.yml
-
-```yaml
-version: "3.8"
-
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
-    environment:
-      ENVIRONMENT: production
-      DATABASE_URL: sqlite:///./data/anyrouter.db
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-```
-
-### 启动
+### 3. 启动
 
 ```bash
 docker compose up -d
+docker compose logs -f app
 ```
+
+访问 `http://<服务器IP>:16168`，用 `.env` 里的管理员账号登录。
+
+### 目录与端口
+
+| 项 | 值 |
+|---|---|
+| 应用端口 | `16168`（改 `.env` 的 `ANYROUTER_PORT`，容器内也是 16168） |
+| 数据库 | `./data/anyrouter.db` |
+| 日志 | `./logs/` |
+| watchtower | 只监听 `127.0.0.1:8081`，不对外暴露 |
+
+`data/` 和 `logs/` 是 bind mount，容器重建不会丢数据。**升级前请先备份 `data/`。**
+
+### 关于 watchtower
+
+`docker-compose.yml` 里的 watchtower 用 `--interval 0` 启动，**不做定时轮询**，只响应页面上「更新并重启」的手动触发。
+
+`/var/run/docker.sock` 只挂在 watchtower 上，应用容器本身没有任何宿主机 Docker 权限。
+
+不需要一键更新的话，可以整个删掉 watchtower 服务，用下面的手动升级方式。
+
+---
+
+## 升级
+
+### 方式一：页面一键更新
+
+设置 → 关于 → 检查更新 → 更新并重启。
+
+页面会调用 watchtower 拉取新镜像、重建容器，等服务恢复后自动刷新。整个过程服务中断约 10-30 秒。
+
+前提是 `.env` 里配置了 `WATCHTOWER_HTTP_API_TOKEN`，且 watchtower 容器在运行。
+
+### 方式二：命令行
+
+```bash
+cd /opt/anyrouter
+docker compose pull
+docker compose up -d
+docker image prune -f
+```
+
+### 版本号
+
+版本号以仓库根目录的 `VERSION` 文件为唯一来源，构建时打进镜像。
+「检查更新」会读取 GitHub 上 master 分支的 `VERSION` 和 `CHANGELOG.md` 做对比。
+
+不要在 `.env` 里设置 `APP_VERSION` —— 环境变量优先级更高，会盖住镜像里的真实版本号。
+
+### 镜像标签
+
+| 标签 | 产生时机 |
+|---|---|
+| `latest` | 推送 `v*` tag 时 |
+| `edge` | 每次推送 master 时 |
+| `1.1.0` / `1.1` | 推送 `v1.1.0` tag 时 |
+| `sha-xxxxxxx` | 每次构建 |
+
+镜像目前只构建 `linux/amd64`。ARM 机器需要自行构建，或修改 workflow 里的 `platforms`。
 
 ---
 
@@ -196,7 +188,7 @@ cd backend
 pip install gunicorn
 
 ENVIRONMENT=production gunicorn app.main:app \
-  --workers 4 \
+  --workers 1 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000
 ```
@@ -205,6 +197,8 @@ ENVIRONMENT=production gunicorn app.main:app \
 
 - `requirements.txt` 已包含 `uvicorn[standard]`，但不包含 `gunicorn`
 - 如果你使用 Gunicorn 作为生产入口，需要额外安装 `gunicorn`
+- **当前 APScheduler 随 Web 进程启动，不支持多 Worker。必须保持 `--workers 1`，否则每个 Worker 都会重复执行定时签到和健康检查**
+- 需要多 Worker 承载 API 时，应先把调度器拆成独立进程，或实现可靠的分布式锁
 
 #### 使用 systemd 服务
 
@@ -222,7 +216,7 @@ WorkingDirectory=/opt/anyrouter-autosign/backend
 Environment="PATH=/opt/anyrouter-autosign/backend/venv/bin"
 Environment="ENVIRONMENT=production"
 ExecStart=/opt/anyrouter-autosign/backend/venv/bin/gunicorn app.main:app \
-  --workers 4 \
+  --workers 1 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 127.0.0.1:8000
 Restart=always
@@ -361,37 +355,33 @@ SSE 说明：
 
 ### 加载规则
 
-- 默认环境为 `development`
-- `ENVIRONMENT=development` 时，后端读取 `backend/.env.local`
-- `ENVIRONMENT=production` 时，后端读取 `backend/.env.production`
-- 系统环境变量优先于文件中的同名配置
-- 当前仓库保留 `backend/.env.production.example` 作为生产示例
-- 开发环境请自行创建 `backend/.env.local`，字段可参考 `backend/.env.production.example`
+全项目只有一个配置文件：**仓库根目录的 `.env`**（模板见 `.env.example`）。
+
+- 优先级：系统环境变量 > 根目录 `.env` > 代码默认值
+- 这一个文件同时被两处读取：`docker compose` 的 `${...}` 变量替换，以及后端的 pydantic settings
+- Docker 部署时 `.env` 不进镜像，应用配置由 `docker-compose.yml` 的 `environment` 注入
+- `ENVIRONMENT` **不能**写在 `.env` 里 —— 它在模块导入时就要用到，早于 `.env` 被读取，只能通过系统环境变量设置（镜像里已固定为 `production`，本地默认 `development`）
+- 同理不要设置 `APP_VERSION`，版本号以根目录 `VERSION` 文件为唯一来源
 
 ### 常用环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `ENVIRONMENT` | 运行环境，`development` 或 `production` | `development` |
+| `ANYROUTER_PORT` | 宿主机映射端口（仅 docker compose 用） | `16168` |
+| `ANYROUTER_IMAGE` | 镜像地址（仅 docker compose 用） | `ghcr.io/hearthealt/anyrouter-autosign:latest` |
+| `JWT_SECRET_KEY` | JWT 签名密钥，**必改** | 代码内置的占位值 |
+| `WATCHTOWER_HTTP_API_TOKEN` | 一键更新令牌，留空则更新按钮不可用 | 空 |
 | `APP_NAME` | 应用名称 | `AnyRouter Admin` |
 | `DEBUG` | 是否开启调试 | `false` |
 | `DATABASE_URL` | 数据库连接字符串 | `sqlite:///./data/anyrouter.db` |
+| `LOG_LEVEL` / `LOG_FORMAT` / `LOG_DIR` | 日志级别 / 格式（`text`\|`json`）/ 目录 | `INFO` / `text` / `./logs` |
 | `REQUEST_TIMEOUT` | 请求超时秒数 | `30` |
 | `RETRY_TIMES` | 重试次数 | `3` |
 | `RETRY_INTERVAL` | 重试间隔秒数 | `3` |
 | `DEFAULT_ADMIN_USERNAME` | 默认管理员用户名 | `admin` |
-| `DEFAULT_ADMIN_PASSWORD` | 默认管理员密码 | `admin123` |
+| `DEFAULT_ADMIN_PASSWORD` | 默认管理员密码，**必改** | `admin123` |
 
-### 生产环境示例
-
-`backend/.env.production`
-
-```env
-DEBUG=false
-DATABASE_URL=sqlite:///./data/anyrouter.db
-DEFAULT_ADMIN_USERNAME=admin
-DEFAULT_ADMIN_PASSWORD=admin123
-```
+> `DATABASE_URL` 和 `LOG_DIR` 里的相对路径是相对**进程工作目录**（`backend/`，容器内为 `/app/backend`）。
 
 说明：
 

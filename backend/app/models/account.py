@@ -14,11 +14,17 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id = Column(Integer, primary_key=True, index=True)
-    session_cookie = Column(Text, nullable=False)
+    # 旧版 New API 凭证。通用 HTTP 平台可以不使用这些字段。
+    session_cookie = Column(Text, nullable=True)
     login_username = Column(String(255), nullable=True)
     login_password = Column(Text, nullable=True)
     anyrouter_user_id = Column(Integer, nullable=True)
     anrouter_user_id = synonym("anyrouter_user_id")
+
+    # 通用平台账号标识与认证数据。auth_data 存储 JSON 文本，API 不回传明文。
+    external_user_id = Column(String(255), nullable=True)
+    auth_type = Column(String(30), nullable=True)
+    auth_data = Column(Text, nullable=True)
     username = Column(String(100), nullable=True)
     display_name = Column(String(100), nullable=True)
     note = Column(String(255), nullable=True)

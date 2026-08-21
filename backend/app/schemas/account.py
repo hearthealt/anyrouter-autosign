@@ -1,33 +1,44 @@
-"""
-账号相关 Schema
-"""
+"""账号相关 Schema。"""
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.schemas.platform import PlatformBrief
 
 
 class AccountCreate(BaseModel):
-    """创建账号请求"""
+    """创建账号请求。"""
     session_cookie: Optional[str] = None
-    user_id: Optional[str] = None  # new-api-user，填写了登录账号密码时可留空
+    user_id: Optional[str] = None
+    external_user_id: Optional[str] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
     login_username: Optional[str] = None
     login_password: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_data: Optional[Dict[str, Any]] = None
     note: Optional[str] = None
-    proxy_mode: str = "direct"  # direct, custom
+    proxy_mode: str = "direct"
     proxy_url: Optional[str] = None
     platform_id: int
     group_id: Optional[int] = None
 
 
 class AccountUpdate(BaseModel):
-    """更新账号请求"""
+    """更新账号请求。"""
     session_cookie: Optional[str] = None
-    user_id: Optional[str] = None  # new-api-user
+    user_id: Optional[str] = None
+    external_user_id: Optional[str] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
     login_username: Optional[str] = None
     login_password: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_data: Optional[Dict[str, Any]] = None
+    clear_auth_data: Optional[bool] = None
     note: Optional[str] = None
-    proxy_mode: Optional[str] = None  # direct, custom
+    proxy_mode: Optional[str] = None
     proxy_url: Optional[str] = None
     clear_login_credentials: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -36,34 +47,33 @@ class AccountUpdate(BaseModel):
 
 
 class NotifyChannelBrief(BaseModel):
-    """推送渠道简要信息"""
     id: int
     type: str
     name: str
 
 
 class LastSign(BaseModel):
-    """最后签到信息"""
     time: Optional[datetime] = None
     success: Optional[bool] = None
     message: Optional[str] = None
 
 
 class GroupBrief(BaseModel):
-    """分组简要信息"""
     id: int
     name: str
     color: str = "default"
 
 
 class AccountResponse(BaseModel):
-    """账号响应"""
     id: int
     username: Optional[str] = None
     display_name: Optional[str] = None
     note: Optional[str] = None
     login_username: Optional[str] = None
     has_login_credentials: bool = False
+    external_user_id: Optional[str] = None
+    auth_type: Optional[str] = None
+    has_auth_data: bool = False
     proxy_mode: str = "direct"
     proxy_url: Optional[str] = None
     proxy_url_masked: Optional[str] = None
@@ -72,17 +82,14 @@ class AccountResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    platform: Optional["PlatformBrief"] = None
-    notify_channels: List[NotifyChannelBrief] = []
+    platform: Optional[PlatformBrief] = None
+    notify_channels: List[NotifyChannelBrief] = Field(default_factory=list)
     last_sign: Optional[LastSign] = None
-    # 健康状态
-    health_status: str = "unknown"  # healthy, unhealthy, unknown
+    health_status: str = "unknown"
     health_message: Optional[str] = None
     last_health_check: Optional[datetime] = None
-    # 分组
     group_id: Optional[int] = None
     group: Optional[GroupBrief] = None
-    # 缓存的额度信息
     cached_quota: int = 0
     cached_used_quota: int = 0
     quota_display: str = "$0.00"
@@ -93,7 +100,6 @@ class AccountResponse(BaseModel):
 
 
 class HealthCheckResponse(BaseModel):
-    """健康检查响应"""
     account_id: int
     health_status: str
     health_message: Optional[str] = None
@@ -101,7 +107,7 @@ class HealthCheckResponse(BaseModel):
 
 
 class AccountInfo(BaseModel):
-    """账号实时信息（从 AnyRouter 获取）"""
+    """New API 平台的实时账号信息。"""
     id: int
     username: str
     display_name: str
@@ -110,39 +116,41 @@ class AccountInfo(BaseModel):
     quota: int
     used_quota: int
     request_count: int
-    group: str  # 远程用户组
+    group: str
     aff_code: Optional[str] = None
     aff_count: int = 0
-    aff_history_quota: int = 0  # 推广所得额度
+    aff_history_quota: int = 0
     quota_display: str
     used_quota_display: str
-    quota_percent: str = "0.00%"  # 剩余额度百分比
-    aff_history_quota_display: str = "$0.00"  # 推广所得显示
-    # 本地分组
+    quota_percent: str = "0.00%"
+    aff_history_quota_display: str = "$0.00"
     group_id: Optional[int] = None
     local_group: Optional[GroupBrief] = None
 
 
 class CreateTokenRequest(BaseModel):
-    """创建令牌请求"""
     model_config = ConfigDict(protected_namespaces=())
 
     name: str
     remain_quota: int = 500000
-    expired_time: int = -1  # -1 表示永不过期
+    expired_time: int = -1
     unlimited_quota: bool = False
     model_limits_enabled: bool = False
-    model_limits: str = ""  # 逗号分隔的模型列表
+    model_limits: str = ""
     allow_ips: str = ""
     group: str = "default"
 
 
 class BatchImportItem(BaseModel):
-    """批量导入的单条账号"""
     session_cookie: Optional[str] = None
     user_id: Optional[str] = None
+    external_user_id: Optional[str] = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
     login_username: Optional[str] = None
     login_password: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_data: Optional[Dict[str, Any]] = None
     note: Optional[str] = None
     proxy_mode: str = "direct"
     proxy_url: Optional[str] = None
@@ -151,12 +159,10 @@ class BatchImportItem(BaseModel):
 
 
 class BatchImportRequest(BaseModel):
-    """批量导入请求"""
     items: List[BatchImportItem]
 
 
 class BatchImportResultItem(BaseModel):
-    """批量导入结果单条"""
     index: int
     success: bool
     message: str

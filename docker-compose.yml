@@ -1,0 +1,45 @@
+services:
+  app:
+    image: ${ANYROUTER_IMAGE:-ghcr.io/hearthealt/anyrouter-autosign:latest}
+    container_name: anyrouter
+    restart: unless-stopped
+    ports:
+      - "${ANYROUTER_PORT:-16168}:16168"
+    volumes:
+      - ./data:/app/backend/data
+      - ./logs:/app/backend/logs
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      # ⚠️ 必改：默认值是公开的，不改等于没有鉴权
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?请在 .env 里设置 JWT_SECRET_KEY}
+      DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:?请在 .env 里设置 DEFAULT_ADMIN_PASSWORD}
+      # 页面上「一键更新并重启」通过 watchtower 的 HTTP API 触发
+      # 用服务名而不是容器名：服务名是 compose 网络里保证可解析的别名
+      WATCHTOWER_URL: http://watchtower:8080
+      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:-}
+    labels:
+      # 只有带这个 label 的容器才会被 watchtower 更新
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # 更新执行者。docker.sock 只挂在这里，应用容器本身没有任何宿主机 Docker 权限。
+  # --interval 0 表示不做定时轮询，只响应 HTTP API 的手动触发。
+  watchtower:
+    image: containrrr/watchtower
+    container_name: anyrouter-watchtower
+    restart: unless-stopped
+    command: --interval 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      # 只绑本机，不对外暴露
+      - "127.0.0.1:8081:8080"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      WATCHTOWER_HTTP_API_UPDATE: "true"
+      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:-}
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"

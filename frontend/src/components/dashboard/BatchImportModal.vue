@@ -57,7 +57,7 @@
                 v-model:value="jsonText"
                 type="textarea"
                 :rows="14"
-                placeholder="[{ &quot;platform&quot;: &quot;AnyRouter&quot;, &quot;login_username&quot;: &quot;demo@example.com&quot;, &quot;login_password&quot;: &quot;secret&quot; }]"
+                placeholder="[{ &quot;platform&quot;: &quot;AnyRouter&quot;, &quot;login_username&quot;: &quot;demo@example.com&quot;, &quot;login_password&quot;: &quot;secret&quot; }, { &quot;platform&quot;: &quot;某 HTTP 平台&quot;, &quot;external_user_id&quot;: &quot;user-001&quot;, &quot;auth_type&quot;: &quot;bearer&quot;, &quot;auth_data&quot;: { &quot;token&quot;: &quot;...&quot; } }]"
               />
             </div>
           </n-tab-pane>
@@ -69,7 +69,8 @@
                   <div class="upload-title">CSV 表头</div>
                   <div class="upload-desc">
                     <code>platform_id</code>, <code>platform</code>, <code>group_id</code>, <code>group</code>,
-                    <code>user_id</code>, <code>session_cookie</code>, <code>login_username</code>, <code>login_password</code>,
+                    <code>user_id</code>, <code>session_cookie</code>, <code>external_user_id</code>, <code>username</code>,
+                    <code>display_name</code>, <code>auth_type</code>, <code>auth_data</code>, <code>login_username</code>, <code>login_password</code>,
                     <code>proxy_mode</code>, <code>proxy_url</code>
                   </div>
                 </div>
@@ -290,13 +291,35 @@ const buildImportItems = (rows: Array<Record<string, unknown>>): BatchImportItem
       throw new Error(`第 ${index + 1} 条使用 custom 代理时必须填写 proxy_url`)
     }
 
+    const authType = normalizeOptionalString(raw.auth_type ?? raw.authType)?.toLowerCase() as BatchImportItem['auth_type'] | undefined
+    const rawAuthData = raw.auth_data ?? raw.authData
+    let authData: Record<string, unknown> | undefined
+    if (rawAuthData != null && rawAuthData !== '') {
+      if (typeof rawAuthData === 'string') {
+        try {
+          authData = JSON.parse(rawAuthData) as Record<string, unknown>
+        } catch (error: any) {
+          throw new Error(`第 ${index + 1} 条的 auth_data 不是有效 JSON：${error.message}`)
+        }
+      } else if (typeof rawAuthData === 'object' && !Array.isArray(rawAuthData)) {
+        authData = rawAuthData as Record<string, unknown>
+      } else {
+        throw new Error(`第 ${index + 1} 条的 auth_data 必须是 JSON 对象`)
+      }
+    }
+
     return {
       platform_id: resolvePlatformId(raw, index),
       group_id: resolveGroupId(raw, index),
       user_id: normalizeOptionalString(raw.user_id ?? raw.userId),
       session_cookie: normalizeOptionalString(raw.session_cookie ?? raw.sessionCookie),
+      external_user_id: normalizeOptionalString(raw.external_user_id ?? raw.externalUserId),
+      username: normalizeOptionalString(raw.username),
+      display_name: normalizeOptionalString(raw.display_name ?? raw.displayName),
       login_username: normalizeOptionalString(raw.login_username ?? raw.loginUsername),
       login_password: normalizeOptionalString(raw.login_password ?? raw.loginPassword),
+      auth_type: authType,
+      auth_data: authData,
       note: normalizeOptionalString(raw.note),
       proxy_mode: proxyMode,
       proxy_url: proxyMode === 'custom' ? proxyUrl : undefined,
@@ -421,6 +444,14 @@ const fillExample = () => {
         session_cookie: 'your-session-cookie',
         proxy_mode: 'custom',
         proxy_url: 'http://user:pass@cn-proxy.example.com:8080'
+      },
+      {
+        platform: defaultPlatform?.name || '某 HTTP 平台',
+        external_user_id: 'user-001',
+        username: 'demo',
+        auth_type: 'bearer',
+        auth_data: { token: 'your-token' },
+        proxy_mode: 'direct'
       }
     ],
     null,

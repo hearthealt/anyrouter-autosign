@@ -26,14 +26,14 @@
       </div>
       <div class="stat-card">
         <div class="stat-label">本月奖励</div>
-        <div class="stat-value">{{ overview.month_reward_display || '$0.00' }}</div>
+        <div class="stat-value">{{ monthRewardDisplay }}</div>
         <div class="stat-foot">
           <span class="muted">本月累计获得</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">累计奖励</div>
-        <div class="stat-value">{{ overview.total_reward_display || '$0.00' }}</div>
+        <div class="stat-value">{{ totalRewardDisplay }}</div>
         <div class="stat-foot">
           <span class="muted">全部签到所得</span>
         </div>
@@ -178,6 +178,7 @@ import {
 import { statisticsApi } from '../api'
 import { useViewRefresh } from '../composables'
 import * as echarts from 'echarts'
+import { escapeHtml, formatRewardTotals } from '../utils'
 
 const overview = ref<any>({})
 const dailyData = ref<any[]>([])
@@ -197,6 +198,14 @@ const accountRankSortOptions = [
   { label: '成功率', value: 'success_rate' },
   { label: '累计奖励', value: 'total_reward' }
 ]
+const monthRewardDisplay = computed(() => formatRewardTotals(
+  overview.value.month_reward_totals,
+  overview.value.month_reward_display || '$0.00'
+))
+const totalRewardDisplay = computed(() => formatRewardTotals(
+  overview.value.total_reward_totals,
+  overview.value.total_reward_display || '$0.00'
+))
 const accountPagination = ref({
   page: 1,
   pageSize: 10,
@@ -414,7 +423,11 @@ const accountColumns = [
     key: 'total_reward_display',
     width: 120,
     align: 'right',
-    render: (row: any) => h('span', { class: 'reward-num' }, row.total_reward_display)
+    render: (row: any) => h(
+      'span',
+      { class: 'reward-num' },
+      formatRewardTotals(row.reward_totals, row.total_reward_display || '$0.00')
+    )
   }
 ]
 
@@ -442,8 +455,8 @@ const updateTrendChart = () => {
       padding: [8, 12],
       textStyle: { color: isDarkMode.value ? '#fff' : '#0b0c0e', fontSize: 12 },
       formatter: (params: any) => {
-        const date = params[0]?.axisValue || ''
-        let html = `<div style="font-weight:600;margin-bottom:6px;">${date}</div>`
+        const date = String(params[0]?.axisValue || '')
+        let html = `<div style="font-weight:600;margin-bottom:6px;">${escapeHtml(date)}</div>`
         params.forEach((item: any) => {
           if (item.seriesName === '奖励') return
           const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
@@ -453,10 +466,13 @@ const updateTrendChart = () => {
             </span><span>${item.value}</span></div>`
         })
         const dayData = data.find((d: any) => d.date === date)
-        const rewardDisplay = dayData?.reward_display || (Number(dayData?.reward || 0) > 0 ? formatReward(dayData?.reward) : '')
+        const rewardDisplay = formatRewardTotals(
+          dayData?.reward_totals,
+          Number(dayData?.reward || 0) > 0 ? (dayData?.reward_display || formatReward(dayData?.reward)) : ''
+        )
         if (rewardDisplay) {
           html += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${theme.tooltipBorder};font-size:12px;color:${theme.rewardColor};">
-            奖励 ${rewardDisplay}</div>`
+            奖励 ${escapeHtml(rewardDisplay)}</div>`
         }
         return html
       }
@@ -562,13 +578,17 @@ const updateMonthlyChart = () => {
       formatter: (params: any) => {
         const monthData = data.find((d: any) => d.month === params[0]?.axisValue)
         if (!monthData) return ''
-        return `<div style="font-weight:600;margin-bottom:6px;">${monthData.month}</div>
+        const rewardDisplay = formatRewardTotals(
+          monthData.reward_totals,
+          monthData.reward_display || '$0.00'
+        )
+        return `<div style="font-weight:600;margin-bottom:6px;">${escapeHtml(monthData.month)}</div>
           <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;">
             <span>成功率</span><span style="color:${theme.successColor};">${monthData.success_rate}%</span></div>
           <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;">
             <span>签到</span><span>${monthData.success}/${monthData.total}</span></div>
           <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:${theme.rewardColor};">
-            <span>奖励</span><span>${monthData.reward_display}</span></div>`
+             <span>奖励</span><span>${escapeHtml(rewardDisplay)}</span></div>`
       }
     },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '12%', containLabel: true },

@@ -29,9 +29,7 @@
       >
         <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
       </n-input>
-      <n-button size="small" :loading="loading" @click="loadPlatforms(1)">
-        查询
-      </n-button>
+      <n-button size="small" :loading="loading" @click="loadPlatforms(1)">查询</n-button>
     </div>
 
     <div class="platforms-card">
@@ -44,13 +42,13 @@
           :pagination="false"
           :single-line="false"
           size="small"
-          :scroll-x="960"
+          :scroll-x="1020"
         />
       </div>
       <div v-else class="empty-state">
         <n-icon :size="32" color="var(--text-quaternary)"><ServerOutline /></n-icon>
         <div class="empty-title">还没有平台</div>
-        <div class="empty-desc">创建平台后，可统一管理 Base URL 和接口路径映射</div>
+        <div class="empty-desc">可以添加 New API 兼容站点，或配置任意 HTTP 签到接口</div>
         <n-button size="small" type="primary" @click="showCreateModal">
           <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
           创建平台
@@ -86,61 +84,153 @@
               <div class="form-section-title">基础信息</div>
               <div class="form-grid base-grid">
                 <n-form-item label="平台名称" path="name">
-                  <n-input v-model:value="formData.name" size="small" placeholder="如: AnyRouter" />
+                  <n-input v-model:value="formData.name" size="small" placeholder="如：示例签到站" />
                 </n-form-item>
                 <n-form-item label="Base URL" path="base_url">
                   <n-input v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
                 </n-form-item>
-                <n-form-item label="签到方式" path="sign_mode">
-                  <n-select
-                    v-model:value="formData.sign_mode"
-                    size="small"
-                    :options="signModeOptions"
-                  />
+                <n-form-item label="适配器" path="adapter_type">
+                  <n-select v-model:value="formData.adapter_type" size="small" :options="adapterOptions" />
                 </n-form-item>
+              </div>
+              <div class="form-help">
+                Base URL 仅填写协议和站点地址；接口必须使用以 <code>/</code> 开头的相对路径。
               </div>
             </section>
 
-            <section class="form-section">
-              <div class="form-section-title">接口路径</div>
-              <div class="form-grid endpoint-grid">
-                <n-form-item label="签到">
-                  <n-input v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
-                </n-form-item>
-                <n-form-item label="签到记录">
-                  <n-input v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
-                </n-form-item>
-                <n-form-item label="验证码">
-                  <n-input v-model:value="formData.captcha_api" size="small" placeholder="需要图片验证码时填写" />
-                </n-form-item>
-                <n-form-item label="用户信息">
-                  <n-input v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
-                </n-form-item>
-                <n-form-item label="Token">
-                  <n-input v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
-                </n-form-item>
-                <n-form-item label="模型">
-                  <n-input v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
-                </n-form-item>
-                <n-form-item label="分组">
-                  <n-input v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
-                </n-form-item>
-                <n-form-item label="Console URL">
-                  <n-input v-model:value="formData.console_url" size="small" placeholder="/console" />
-                </n-form-item>
-                <n-form-item label="状态">
-                  <n-input v-model:value="formData.status_api" size="small" placeholder="/api/status" />
-                </n-form-item>
-              </div>
-            </section>
+            <template v-if="formData.adapter_type === 'new_api'">
+              <section class="form-section">
+                <div class="form-section-title">New API 签到</div>
+                <div class="form-grid endpoint-grid">
+                  <n-form-item label="签到方式" path="sign_mode">
+                    <n-select v-model:value="formData.sign_mode" size="small" :options="signModeOptions" />
+                  </n-form-item>
+                  <n-form-item label="签到接口">
+                    <n-input v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
+                  </n-form-item>
+                  <n-form-item label="签到记录">
+                    <n-input v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
+                  </n-form-item>
+                  <n-form-item label="验证码">
+                    <n-input v-model:value="formData.captcha_api" size="small" placeholder="可选" />
+                  </n-form-item>
+                  <n-form-item label="用户信息">
+                    <n-input v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
+                  </n-form-item>
+                  <n-form-item label="控制台">
+                    <n-input v-model:value="formData.console_url" size="small" placeholder="/console" />
+                  </n-form-item>
+                </div>
+              </section>
+
+              <section class="form-section">
+                <div class="form-section-title">New API 扩展接口</div>
+                <div class="form-grid endpoint-grid">
+                  <n-form-item label="模型列表">
+                    <n-input v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
+                  </n-form-item>
+                  <n-form-item label="平台分组">
+                    <n-input v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
+                  </n-form-item>
+                  <n-form-item label="Token">
+                    <n-input v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
+                  </n-form-item>
+                  <n-form-item label="系统状态">
+                    <n-input v-model:value="formData.status_api" size="small" placeholder="/api/status" />
+                  </n-form-item>
+                </div>
+              </section>
+            </template>
+
+            <template v-else>
+              <section class="form-section">
+                <div class="form-section-title">HTTP 请求</div>
+                <div class="form-grid request-grid">
+                  <n-form-item label="请求方法">
+                    <n-select v-model:value="formData.http_method" size="small" :options="httpMethodOptions" />
+                  </n-form-item>
+                  <n-form-item label="签到路径" class="span-2">
+                    <n-input v-model:value="formData.http_path" size="small" placeholder="/api/checkin" />
+                  </n-form-item>
+                  <n-form-item label="请求体类型">
+                    <n-select v-model:value="formData.http_body_type" size="small" :options="bodyTypeOptions" />
+                  </n-form-item>
+                  <n-form-item label="超时（秒）">
+                    <n-input-number v-model:value="formData.http_timeout" size="small" :min="1" :max="120" />
+                  </n-form-item>
+                  <n-form-item label="最大重定向">
+                    <n-input-number v-model:value="formData.http_max_redirects" size="small" :min="0" :max="5" :disabled="!formData.http_follow_redirects" />
+                  </n-form-item>
+                  <n-form-item label="允许重定向">
+                    <div class="switch-field">
+                      <n-switch v-model:value="formData.http_follow_redirects" size="small" />
+                      <span>{{ formData.http_follow_redirects ? '允许（携带凭证时禁止跨域）' : '禁止' }}</span>
+                    </div>
+                  </n-form-item>
+                </div>
+
+                <div class="form-grid json-grid">
+                  <n-form-item label="Headers JSON">
+                    <n-input v-model:value="formData.http_headers_json" type="textarea" :rows="4" size="small" placeholder='{"X-Client":"autosign"}' />
+                  </n-form-item>
+                  <n-form-item label="Query JSON">
+                    <n-input v-model:value="formData.http_query_json" type="textarea" :rows="4" size="small" placeholder='{"uid":"{{account.external_user_id}}"}' />
+                  </n-form-item>
+                  <n-form-item label="请求体" class="span-2">
+                    <n-input
+                      v-model:value="formData.http_body_json"
+                      type="textarea"
+                      :rows="5"
+                      size="small"
+                      :placeholder="formData.http_body_type === 'raw' ? '原始文本，可使用模板变量' : 'JSON 请求体，例如 action=checkin'"
+                      :disabled="formData.http_body_type === 'none'"
+                    />
+                  </n-form-item>
+                </div>
+                <div class="form-help">
+                  配置值支持模板变量：<code v-pre>{{auth.token}}</code>、<code v-pre>{{account.external_user_id}}</code>、<code v-pre>{{account.username}}</code>。
+                  Bearer、Cookie、Header、Basic 认证信息由账号配置自动注入。
+                </div>
+              </section>
+
+              <section class="form-section">
+                <div class="form-section-title">HTTP 响应判定</div>
+                <div class="form-grid json-grid">
+                  <n-form-item label="成功规则 JSON">
+                    <n-input v-model:value="formData.http_success_rule_json" type="textarea" :rows="4" size="small" placeholder='留空则按 HTTP 2xx；或 {"path":"code","equals":0}' />
+                  </n-form-item>
+                  <n-form-item label="已签到规则 JSON">
+                    <n-input v-model:value="formData.http_already_rule_json" type="textarea" :rows="4" size="small" placeholder='{"path":"message","contains":"已签到"}' />
+                  </n-form-item>
+                </div>
+                <div class="form-grid response-grid">
+                  <n-form-item label="消息字段路径">
+                    <n-input v-model:value="formData.http_message_path" size="small" placeholder="message" />
+                  </n-form-item>
+                  <n-form-item label="奖励字段路径">
+                    <n-input v-model:value="formData.http_reward_path" size="small" placeholder="data.points" />
+                  </n-form-item>
+                  <n-form-item label="奖励显示字段路径">
+                    <n-input v-model:value="formData.http_reward_display_path" size="small" placeholder="可选，如 data.reward_text" />
+                  </n-form-item>
+                  <n-form-item label="奖励单位">
+                    <n-input v-model:value="formData.http_reward_unit" size="small" placeholder="积分、金币、天" />
+                  </n-form-item>
+                  <n-form-item label="奖励倍率">
+                    <n-input-number v-model:value="formData.http_reward_multiplier" size="small" :min="0" />
+                  </n-form-item>
+                </div>
+                <div class="form-help">
+                  字段路径支持点号访问嵌套对象。规则支持 <code>equals</code>、<code>contains</code>、<code>exists</code>、<code>in</code>、<code>truthy</code> 等判定。
+                </div>
+              </section>
+            </template>
           </n-form>
         </div>
 
         <div class="modal-foot">
           <n-button size="small" @click="modalVisible = false">取消</n-button>
-          <n-button size="small" type="primary" :loading="saving" @click="handleSave">
-            {{ editingPlatform ? '保存' : '创建' }}
-          </n-button>
+          <n-button size="small" type="primary" :loading="saving" @click="handleSave">保存</n-button>
         </div>
       </div>
     </n-modal>
@@ -159,7 +249,10 @@ import {
 } from '@vicons/ionicons5'
 import { platformApi } from '../api'
 import { useViewRefresh } from '../composables'
-import type { Platform } from '../types'
+import ExternalLink from '../components/common/ExternalLink.vue'
+import type { Platform, PlatformAdapterType } from '../types'
+
+type HttpBodyType = 'json' | 'form' | 'raw' | 'none'
 
 type PlatformEndpointKey =
   | 'sign_api'
@@ -175,6 +268,7 @@ type PlatformEndpointKey =
 interface PlatformForm {
   name: string
   base_url: string
+  adapter_type: PlatformAdapterType
   sign_mode: 'api' | 'login'
   sign_api: string
   checkin_api: string
@@ -185,11 +279,28 @@ interface PlatformForm {
   token_api: string
   status_api: string
   captcha_api: string
+  http_method: string
+  http_path: string
+  http_body_type: HttpBodyType
+  http_headers_json: string
+  http_query_json: string
+  http_body_json: string
+  http_success_rule_json: string
+  http_already_rule_json: string
+  http_message_path: string
+  http_reward_path: string
+  http_reward_display_path: string
+  http_reward_unit: string
+  http_reward_multiplier: number
+  http_follow_redirects: boolean
+  http_max_redirects: number
+  http_timeout: number
 }
 
 const createDefaultFormData = (): PlatformForm => ({
   name: '',
   base_url: '',
+  adapter_type: 'new_api',
   sign_mode: 'api',
   sign_api: '/api/user/sign_in',
   checkin_api: '/api/user/checkin',
@@ -199,7 +310,23 @@ const createDefaultFormData = (): PlatformForm => ({
   groups_api: '/api/user/self/groups',
   token_api: '/api/token/',
   status_api: '/api/status',
-  captcha_api: ''
+  captcha_api: '',
+  http_method: 'POST',
+  http_path: '/api/checkin',
+  http_body_type: 'json',
+  http_headers_json: '{}',
+  http_query_json: '{}',
+  http_body_json: '{}',
+  http_success_rule_json: '',
+  http_already_rule_json: '',
+  http_message_path: 'message',
+  http_reward_path: '',
+  http_reward_display_path: '',
+  http_reward_unit: '',
+  http_reward_multiplier: 1,
+  http_follow_redirects: false,
+  http_max_redirects: 3,
+  http_timeout: 30,
 })
 
 const endpointKeys: PlatformEndpointKey[] = [
@@ -207,9 +334,20 @@ const endpointKeys: PlatformEndpointKey[] = [
   'models_api', 'groups_api', 'token_api', 'console_url', 'captcha_api'
 ]
 
+const adapterOptions = [
+  { label: 'New API 兼容', value: 'new_api' },
+  { label: '通用 HTTP', value: 'http' },
+]
 const signModeOptions = [
   { label: '调用签到接口', value: 'api' },
   { label: '登录即签到', value: 'login' }
+]
+const httpMethodOptions = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(value => ({ label: value, value }))
+const bodyTypeOptions = [
+  { label: 'JSON', value: 'json' },
+  { label: 'Form', value: 'form' },
+  { label: 'Raw', value: 'raw' },
+  { label: '无请求体', value: 'none' },
 ]
 
 const platforms = ref<Platform[]>([])
@@ -226,29 +364,27 @@ const pagination = ref({
   pageSizes: [10, 20, 50, 100]
 })
 
-const defaultPlatform = computed(
-  () => platforms.value.find(platform => platform.is_default) ?? null
-)
-const totalAccounts = computed(() =>
-  platforms.value.reduce((sum, platform) => sum + (platform.accounts_count ?? 0), 0)
-)
-
+const defaultPlatform = computed(() => platforms.value.find(platform => platform.is_default) ?? null)
+const totalAccounts = computed(() => platforms.value.reduce((sum, platform) => sum + (platform.accounts_count ?? 0), 0))
 const getPlatformRowKey = (platform: Platform) => platform.id
 
 const formRules = {
   name: { required: true, message: '请输入平台名称', trigger: 'blur' },
-  base_url: { required: true, message: '请输入 Base URL', trigger: 'blur' }
+  base_url: { required: true, message: '请输入 Base URL', trigger: 'blur' },
+  adapter_type: { required: true, message: '请选择适配器', trigger: 'change' },
 }
 
-const getConfiguredPathCount = (platform: Platform) =>
-  endpointKeys.reduce((count, key) => {
-    const value = String(platform[key] || '').trim()
-    return count + (value ? 1 : 0)
-  }, 0)
+const getConfiguredPathCount = (platform: Platform) => endpointKeys.reduce((count, key) => {
+  const value = String(platform[key] || '').trim()
+  return count + (value ? 1 : 0)
+}, 0)
 
-const getSignModeLabel = (platform: Platform) =>
-  platform.sign_mode === 'login' ? '登录即签到' : '接口签到'
-
+const getAdapterLabel = (platform: Platform) => platform.adapter_type === 'http' ? 'HTTP' : 'New API'
+const getSignModeLabel = (platform: Platform) => platform.sign_mode === 'login' ? '登录签到' : '接口签到'
+const getHttpSummary = (platform: Platform) => {
+  const request = platform.adapter_config?.request || {}
+  return `${String(request.method || 'POST').toUpperCase()} ${request.path || '-'}`
+}
 const formatDateTime = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -259,33 +395,20 @@ const columns = computed<DataTableColumns<Platform>>(() => [
   {
     title: '平台',
     key: 'name',
-    minWidth: 260,
-    render: row =>
-      h('div', { class: 'platform-cell' }, [
-        h('span', { class: 'platform-name', title: row.name }, row.name),
-        h('span', { class: 'platform-tags' }, [
-          h('span', { class: row.sign_mode === 'login' ? 'tag warning' : 'tag' }, getSignModeLabel(row)),
-          row.is_default
-            ? h('span', { class: 'tag primary' }, '默认')
-            : h('span', { class: 'tag ghost' }, '普通')
-        ])
+    minWidth: 270,
+    render: row => h('div', { class: 'platform-cell' }, [
+      h('span', { class: 'platform-name', title: row.name }, row.name),
+      h('span', { class: 'platform-tags' }, [
+        h('span', { class: row.adapter_type === 'http' ? 'tag warning' : 'tag' }, getAdapterLabel(row)),
+        row.is_default ? h('span', { class: 'tag primary' }, '默认') : h('span', { class: 'tag ghost' }, '普通')
       ])
+    ])
   },
   {
     title: 'Base URL',
     key: 'base_url',
     minWidth: 280,
-    ellipsis: { tooltip: true },
-    render: row => h(
-      'a',
-      {
-        class: 'mono link-url',
-        href: row.base_url,
-        target: '_blank',
-        rel: 'noopener noreferrer'
-      },
-      row.base_url
-    )
+    render: row => h(ExternalLink, { href: row.base_url, mono: true })
   },
   {
     title: '账号',
@@ -295,11 +418,12 @@ const columns = computed<DataTableColumns<Platform>>(() => [
     render: row => String(row.accounts_count ?? 0)
   },
   {
-    title: '接口',
+    title: '签到配置',
     key: 'paths',
-    width: 80,
-    align: 'right',
-    render: row => `${getConfiguredPathCount(row)}/9`
+    minWidth: 150,
+    render: row => row.adapter_type === 'http'
+      ? h('span', { class: 'mono', title: getHttpSummary(row) }, getHttpSummary(row))
+      : `${getSignModeLabel(row)} · ${getConfiguredPathCount(row)}/9`
   },
   {
     title: '更新时间',
@@ -311,36 +435,109 @@ const columns = computed<DataTableColumns<Platform>>(() => [
     title: '操作',
     key: 'actions',
     width: 150,
-    render: row =>
-      h('div', { class: 'actions' }, [
-        h(NButton, { size: 'tiny', quaternary: true, onClick: () => editPlatform(row) }, { default: () => '编辑' }),
-        h(
-          NPopconfirm,
-          {
-            onPositiveClick: () => deletePlatform(row),
-            positiveText: '删除',
-            negativeText: '取消',
-          },
-          {
-            trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
-            default: () => `确定删除平台 "${row.name}" ？删除后关联账号会失去平台配置。`
-          }
-        )
-      ])
+    render: row => h('div', { class: 'actions' }, [
+      h(NButton, { size: 'tiny', quaternary: true, onClick: () => editPlatform(row) }, { default: () => '编辑' }),
+      h(NPopconfirm, {
+        onPositiveClick: () => deletePlatform(row), positiveText: '删除', negativeText: '取消',
+      }, {
+        trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
+        default: () => `确定删除平台 "${row.name}"？删除前必须先迁移或删除关联账号。`
+      })
+    ])
   }
 ])
+
+const prettyJson = (value: unknown, fallback = '{}') => {
+  if (value == null || value === '') return fallback
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return fallback
+  }
+}
+
+const parseJsonObject = (value: string, label: string, allowEmpty = false): Record<string, any> | undefined => {
+  const text = value.trim()
+  if (!text && allowEmpty) return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text || '{}')
+  } catch (error: any) {
+    throw new Error(`${label}不是有效 JSON：${error.message}`)
+  }
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error(`${label}必须是 JSON 对象`)
+  }
+  return parsed as Record<string, any>
+}
+
+const buildHttpAdapterConfig = () => {
+  const headers = parseJsonObject(formData.value.http_headers_json, 'Headers JSON') || {}
+  const query = parseJsonObject(formData.value.http_query_json, 'Query JSON') || {}
+  const success = parseJsonObject(formData.value.http_success_rule_json, '成功规则 JSON', true)
+  const alreadySigned = parseJsonObject(formData.value.http_already_rule_json, '已签到规则 JSON', true)
+
+  let body: unknown = undefined
+  if (formData.value.http_body_type === 'raw') {
+    body = formData.value.http_body_json
+  } else if (formData.value.http_body_type !== 'none') {
+    body = parseJsonObject(formData.value.http_body_json, '请求体') || {}
+  }
+
+  const response: Record<string, any> = {}
+  if (success) response.success = success
+  if (alreadySigned) response.already_signed = alreadySigned
+  if (formData.value.http_message_path.trim()) response.message_path = formData.value.http_message_path.trim()
+  if (formData.value.http_reward_path.trim()) response.reward_path = formData.value.http_reward_path.trim()
+  if (formData.value.http_reward_display_path.trim()) response.reward_display_path = formData.value.http_reward_display_path.trim()
+  if (formData.value.http_reward_unit.trim()) response.reward_unit = formData.value.http_reward_unit.trim()
+  response.reward_multiplier = formData.value.http_reward_multiplier || 1
+
+  return {
+    request: {
+      method: formData.value.http_method,
+      path: formData.value.http_path.trim(),
+      body_type: formData.value.http_body_type,
+      headers,
+      query,
+      ...(body !== undefined ? { body } : {}),
+      follow_redirects: formData.value.http_follow_redirects,
+      max_redirects: formData.value.http_max_redirects,
+      timeout: formData.value.http_timeout,
+    },
+    response,
+  }
+}
+
+const applyHttpConfig = (platform: Platform, form: PlatformForm) => {
+  const request = platform.adapter_config?.request || {}
+  const response = platform.adapter_config?.response || {}
+  form.http_method = String(request.method || 'POST').toUpperCase()
+  form.http_path = String(request.path || '/api/checkin')
+  form.http_body_type = (request.body_type || 'json') as HttpBodyType
+  form.http_headers_json = prettyJson(request.headers || {})
+  form.http_query_json = prettyJson(request.query || {})
+  form.http_body_json = form.http_body_type === 'raw'
+    ? String(request.body ?? '')
+    : prettyJson(request.body || {})
+  form.http_success_rule_json = response.success ? prettyJson(response.success, '') : ''
+  form.http_already_rule_json = response.already_signed ? prettyJson(response.already_signed, '') : ''
+  form.http_message_path = String(response.message_path || '')
+  form.http_reward_path = String(response.reward_path || '')
+  form.http_reward_display_path = String(response.reward_display_path || '')
+  form.http_reward_unit = String(response.reward_unit || '')
+  form.http_reward_multiplier = Number(response.reward_multiplier ?? 1)
+  form.http_follow_redirects = Boolean(request.follow_redirects)
+  form.http_max_redirects = Number(request.max_redirects ?? 3)
+  form.http_timeout = Number(request.timeout ?? 30)
+}
 
 const loadPlatforms = async (page = pagination.value.page) => {
   loading.value = true
   try {
-    const params: { page: number; size: number; keyword?: string } = {
-      page,
-      size: pagination.value.pageSize
-    }
+    const params: { page: number; size: number; keyword?: string } = { page, size: pagination.value.pageSize }
     const keyword = searchKeyword.value.trim()
-    if (keyword) {
-      params.keyword = keyword
-    }
+    if (keyword) params.keyword = keyword
 
     const res: any = await platformApi.getList(params)
     const data = res.data || {}
@@ -354,10 +551,7 @@ const loadPlatforms = async (page = pagination.value.page) => {
   }
 }
 
-const handlePageChange = (page: number) => {
-  loadPlatforms(page)
-}
-
+const handlePageChange = (page: number) => loadPlatforms(page)
 const handlePageSizeChange = (pageSize: number) => {
   pagination.value.pageSize = pageSize
   loadPlatforms(1)
@@ -371,9 +565,11 @@ const showCreateModal = () => {
 
 const editPlatform = (platform: Platform) => {
   editingPlatform.value = platform
-  formData.value = {
+  const form = createDefaultFormData()
+  Object.assign(form, {
     name: platform.name,
     base_url: platform.base_url,
+    adapter_type: platform.adapter_type || 'new_api',
     sign_mode: platform.sign_mode || 'api',
     sign_api: platform.sign_api || '/api/user/sign_in',
     checkin_api: platform.checkin_api || '/api/user/checkin',
@@ -383,26 +579,51 @@ const editPlatform = (platform: Platform) => {
     groups_api: platform.groups_api || '/api/user/self/groups',
     token_api: platform.token_api || '/api/token/',
     status_api: platform.status_api || '/api/status',
-    captcha_api: platform.captcha_api || ''
-  }
+    captcha_api: platform.captcha_api || '',
+  })
+  if (form.adapter_type === 'http') applyHttpConfig(platform, form)
+  formData.value = form
   modalVisible.value = true
 }
 
 const handleSave = async () => {
-  const payload = {
-    ...formData.value,
-    name: formData.value.name.trim(),
-    base_url: formData.value.base_url.trim()
-  }
-
-  if (!payload.name) {
+  const name = formData.value.name.trim()
+  const baseUrl = formData.value.base_url.trim()
+  if (!name) {
     window.$notify('请输入平台名称', 'warning')
     return
   }
-
-  if (!payload.base_url) {
+  if (!baseUrl) {
     window.$notify('请输入 Base URL', 'warning')
     return
+  }
+
+  let adapterConfig: Record<string, any> = {}
+  try {
+    if (formData.value.adapter_type === 'http') {
+      if (!formData.value.http_path.trim()) throw new Error('请输入 HTTP 签到路径')
+      adapterConfig = buildHttpAdapterConfig()
+    }
+  } catch (error: any) {
+    window.$notify(error.message || 'HTTP 适配器配置无效', 'warning')
+    return
+  }
+
+  const payload = {
+    name,
+    base_url: baseUrl,
+    adapter_type: formData.value.adapter_type,
+    adapter_config: adapterConfig,
+    sign_mode: formData.value.sign_mode,
+    sign_api: formData.value.sign_api.trim(),
+    checkin_api: formData.value.checkin_api.trim(),
+    user_api: formData.value.user_api.trim(),
+    console_url: formData.value.console_url.trim(),
+    models_api: formData.value.models_api.trim(),
+    groups_api: formData.value.groups_api.trim(),
+    token_api: formData.value.token_api.trim(),
+    status_api: formData.value.status_api.trim(),
+    captcha_api: formData.value.captcha_api.trim(),
   }
 
   saving.value = true
@@ -414,7 +635,6 @@ const handleSave = async () => {
       await platformApi.create(payload)
       window.$notify('平台创建成功', 'success')
     }
-
     modalVisible.value = false
     await loadPlatforms(pagination.value.page)
   } catch (e: any) {
@@ -434,261 +654,59 @@ const deletePlatform = async (platform: Platform) => {
   }
 }
 
-onMounted(() => {
-  loadPlatforms(1)
-})
-
-watch(searchKeyword, value => {
-  if (!value) {
-    loadPlatforms(1)
-  }
-})
-
+onMounted(() => loadPlatforms(1))
+watch(searchKeyword, value => { if (!value) loadPlatforms(1) })
 useViewRefresh(() => loadPlatforms(pagination.value.page))
 </script>
 
 <style scoped>
-.platforms-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin: 0;
-}
-
-.page-subtitle {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.head-actions {
-  display: flex;
-  gap: var(--spacing-2);
-}
-
-.filter-bar {
-  display: flex;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
-}
-
-.search-input {
-  max-width: 360px;
-}
-
-.platforms-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.table-wrap :deep(.n-data-table) {
-  border: none;
-  border-radius: 0;
-}
-
-.pagination-wrap {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.empty-state {
-  padding: var(--spacing-12) var(--spacing-5);
-}
-
-.platforms-page :deep(.platform-cell) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
-  align-items: center;
-  gap: var(--spacing-3);
-  width: 100%;
-  min-width: 0;
-}
-
-.platforms-page :deep(.platform-name) {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-weight: var(--font-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.platforms-page :deep(.platform-tags) {
-  display: inline-grid;
-  grid-template-columns: 70px 36px;
-  gap: 6px;
-  justify-content: end;
-}
-
-.platforms-page :deep(.tag) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  font-size: 10px;
-  font-weight: var(--font-medium);
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
-}
-
-.platforms-page :deep(.tag.primary) {
-  background: var(--primary-color-light);
-  color: var(--primary-color);
-}
-
-.platforms-page :deep(.tag.warning) {
-  background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
-}
-
-.platforms-page :deep(.tag.ghost) {
-  background: transparent;
-  color: transparent;
-}
-
-.platforms-page :deep(.mono) {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.platforms-page :deep(.link-url) {
-  text-decoration: none;
-}
-
-.platforms-page :deep(.link-url:hover) {
-  color: var(--primary-color);
-  text-decoration: underline;
-}
-
-.platforms-page :deep(.actions) {
-  display: flex;
-  gap: 2px;
-}
-
-/* 弹窗 */
-.edit-modal {
-  width: min(820px, calc(100vw - 24px));
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.modal-head,
-.modal-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-4);
-}
-
-.modal-head {
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.modal-head h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-}
-
-.modal-body {
-  padding: var(--spacing-3) var(--spacing-4);
-  max-height: calc(100vh - 160px);
-  overflow-y: auto;
-}
-
-.modal-foot {
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.platform-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.form-section {
-  padding-bottom: var(--spacing-2);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.form-section:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--spacing-3);
-}
-
-.base-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 160px;
-}
-
-.endpoint-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.form-section-title {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0;
-  margin-bottom: var(--spacing-2);
-}
-
-.platform-form :deep(.n-form-item) {
-  --n-label-height: 20px;
-  --n-blank-height: 0;
-  margin-bottom: 8px;
-}
-
-.platform-form :deep(.n-form-item-feedback-wrapper) {
-  min-height: 0;
-}
-
+.platforms-page { display: flex; flex-direction: column; gap: var(--spacing-4); }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-4); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border-color-light); }
+.page-title { font-size: var(--text-xl); font-weight: var(--font-semibold); margin: 0; }
+.page-subtitle { margin-top: 2px; font-size: var(--text-sm); color: var(--text-tertiary); }
+.head-actions, .filter-bar { display: flex; gap: var(--spacing-2); flex-wrap: wrap; }
+.search-input { max-width: 360px; }
+.platforms-card { background: var(--bg-card); border: 1px solid var(--border-color-light); border-radius: var(--radius-md); overflow: hidden; }
+.table-wrap :deep(.n-data-table) { border: none; border-radius: 0; }
+.pagination-wrap { display: flex; justify-content: flex-end; padding: var(--spacing-3) var(--spacing-4); border-top: 1px solid var(--border-color-light); background: var(--bg-card-hover); }
+.empty-state { padding: var(--spacing-12) var(--spacing-5); }
+.platforms-page :deep(.platform-cell) { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: var(--spacing-3); width: 100%; min-width: 0; }
+.platforms-page :deep(.platform-name) { min-width: 0; overflow: hidden; color: var(--text-primary); font-weight: var(--font-medium); text-overflow: ellipsis; white-space: nowrap; }
+.platforms-page :deep(.platform-tags) { display: inline-grid; grid-template-columns: 70px 36px; gap: 6px; justify-content: end; }
+.platforms-page :deep(.tag) { display: inline-flex; align-items: center; justify-content: center; height: 18px; padding: 0 6px; border-radius: var(--radius-xs); font-size: 10px; font-weight: var(--font-medium); background: var(--bg-secondary); color: var(--text-tertiary); }
+.platforms-page :deep(.tag.primary) { background: var(--primary-color-light); color: var(--primary-color); }
+.platforms-page :deep(.tag.warning) { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+.platforms-page :deep(.tag.ghost) { background: transparent; color: transparent; }
+.platforms-page :deep(.mono) { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
+.platforms-page :deep(.actions) { display: flex; gap: 2px; }
+.edit-modal { width: min(940px, calc(100vw - 24px)); background: var(--bg-modal); border: 1px solid var(--border-color-light); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); overflow: hidden; }
+.modal-head, .modal-foot { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-3) var(--spacing-4); }
+.modal-head { border-bottom: 1px solid var(--border-color-light); }
+.modal-head h3 { margin: 0; font-size: var(--text-md); font-weight: var(--font-semibold); }
+.modal-body { padding: var(--spacing-3) var(--spacing-4); max-height: calc(100vh - 160px); overflow-y: auto; }
+.modal-foot { justify-content: flex-end; gap: var(--spacing-2); border-top: 1px solid var(--border-color-light); background: var(--bg-card-hover); }
+.platform-form { display: flex; flex-direction: column; gap: var(--spacing-3); }
+.form-section { padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border-color-light); }
+.form-section:last-child { padding-bottom: 0; border-bottom: none; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--spacing-3); }
+.base-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 180px; }
+.endpoint-grid, .response-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.request-grid { grid-template-columns: 150px minmax(0, 1fr) 150px; }
+.json-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.span-2 { grid-column: span 2; }
+.form-section-title { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-tertiary); text-transform: uppercase; margin-bottom: var(--spacing-2); }
+.form-help { color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.6; margin: -2px 0 8px; }
+.form-help code { color: var(--primary-color); background: var(--bg-secondary); padding: 1px 4px; border-radius: var(--radius-xs); }
+.switch-field { display: flex; align-items: center; gap: var(--spacing-2); min-height: 28px; color: var(--text-tertiary); font-size: var(--text-xs); }
+.platform-form :deep(.n-form-item) { --n-label-height: 20px; --n-blank-height: 0; margin-bottom: 8px; }
+.platform-form :deep(.n-form-item-feedback-wrapper) { min-height: 0; }
+.platform-form :deep(.n-input-number) { width: 100%; }
 @media (max-width: 900px) {
-  .page-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
+  .page-head { flex-direction: column; align-items: stretch; }
+  .base-grid, .endpoint-grid, .request-grid, .response-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
 @media (max-width: 640px) {
-  .form-grid,
-  .base-grid,
-  .endpoint-grid {
-    grid-template-columns: 1fr;
-  }
+  .form-grid, .base-grid, .endpoint-grid, .request-grid, .response-grid, .json-grid { grid-template-columns: 1fr; }
+  .span-2 { grid-column: auto; }
 }
 </style>

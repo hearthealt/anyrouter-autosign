@@ -39,6 +39,7 @@ def init_db():
     _migrate_api_endpoint_schema()
     Base.metadata.create_all(bind=engine)
     _migrate_removed_settings()
+    _migrate_adapter_schema()
     _migrate_platform_schema()
     _migrate_account_login_schema()
     _migrate_account_note_schema()
@@ -68,6 +69,53 @@ def _migrate_api_endpoint_schema():
         logger.info("已删除旧版 api_endpoints 表，将在平台同步时重建")
     except Exception as e:
         logger.error(f"迁移 api_endpoints 表失败: {e}")
+
+
+def _add_missing_columns(table_name: str, columns: dict[str, str]) -> None:
+    """为 SQLite 旧表补充缺失列；关键迁移失败时阻止应用继续启动。"""
+    inspector = inspect(engine)
+    if not inspector.has_table(table_name):
+        return
+    existing = {column["name"] for column in inspector.get_columns(table_name)}
+    missing = [(name, ddl) for name, ddl in columns.items() if name not in existing]
+    if not missing:
+        return
+    with engine.begin() as conn:
+        for name, ddl in missing:
+            conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {ddl}"))
+            logger.info("已为 %s 表添加 %s 列", table_name, name)
+
+
+def _migrate_adapter_schema():
+    """补充通用平台适配器和账号认证字段。"""
+    _add_missing_columns("platforms", {
+        "adapter_type": "VARCHAR(30) DEFAULT 'new_api' NOT NULL",
+        "adapter_config": "TEXT DEFAULT '{}'",
+    })
+    _add_missing_columns("accounts", {
+        "external_user_id": "VARCHAR(255)",
+        "auth_type": "VARCHAR(30)",
+        "auth_data": "TEXT",
+    })
+    _add_missing_columns("sign_logs", {
+        "reward_display": "VARCHAR(100)",
+        "reward_unit": "VARCHAR(50)",
+    })
+    with engine.begin() as conn:
+        if inspect(engine).has_table("platforms"):
+            conn.execute(text(
+                "UPDATE platforms SET adapter_type = 'new_api' "
+                "WHERE adapter_type IS NULL OR adapter_type = ''"
+            ))
+            conn.execute(text(
+                "UPDATE platforms SET adapter_config = '{}' "
+                "WHERE adapter_config IS NULL OR adapter_config = ''"
+            ))
+        if inspect(engine).has_table("accounts"):
+            conn.execute(text(
+                "UPDATE accounts SET external_user_id = CAST(anyrouter_user_id AS VARCHAR) "
+                "WHERE external_user_id IS NULL AND anyrouter_user_id IS NOT NULL"
+            ))
 
 
 def _migrate_removed_settings():
@@ -165,6 +213,8 @@ def _migrate_platform_schema():
                 anyrouter_platform = Platform(
                     name="AnyRouter",
                     base_url=DEFAULT_BASE_URL,
+                    adapter_type="new_api",
+                    adapter_config="{}",
                     sign_mode=DEFAULT_SIGN_MODE,
                     sign_api=DEFAULT_SIGN_API,
                     checkin_api=DEFAULT_CHECKIN_API,

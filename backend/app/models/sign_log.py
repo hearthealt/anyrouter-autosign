@@ -2,7 +2,7 @@
 签到日志模型
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, Text, Boolean, DateTime, BigInteger, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, BigInteger, ForeignKey
 
 from app.database import Base
 
@@ -18,5 +18,8 @@ class SignLog(Base):
     success = Column(Boolean, nullable=False)
     message = Column(Text, nullable=True)
     reward_quota = Column(BigInteger, default=0)
+    reward_display = Column(String(100), nullable=True)
+    # New API 奖励使用 quota；通用 HTTP 奖励使用平台配置的自定义单位。
+    reward_unit = Column(String(50), nullable=True)
     retry_count = Column(Integer, default=0)  # 重试次数
     status = Column(Text, default="failed")  # success 成功有奖励 | already_signed 已签到 | failed 失败

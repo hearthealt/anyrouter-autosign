@@ -71,7 +71,7 @@
 
       <div class="metric-card interactive" @click="$router.push('/statistics')">
         <div class="metric-label">本月奖励</div>
-        <div class="metric-value">{{ dashboard?.month_reward_display || '$0.00' }}</div>
+        <div class="metric-value metric-value-rewards">{{ monthRewardDisplay }}</div>
         <div class="metric-foot">
           <span class="metric-sub-label">累计签到所得</span>
         </div>
@@ -290,7 +290,7 @@
               <span class="endpoint-dot" :class="ep.color"></span>
               <div class="endpoint-main">
                 <div class="endpoint-name">{{ ep.route }}</div>
-                <div class="endpoint-url mono">{{ ep.url }}</div>
+                <ExternalLink class="endpoint-url" :href="ep.url" mono />
               </div>
               <n-button size="tiny" quaternary @click="copyEndpoint(ep.url)">
                 <template #icon><n-icon :size="12"><CopyOutline /></n-icon></template>
@@ -331,8 +331,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { TrendChart, AccountModal, QuotaPieChart, TokensModal } from '../components/dashboard'
+import ExternalLink from '../components/common/ExternalLink.vue'
 import { accountApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi, signApi, statisticsApi, platformApi, settingsApi } from '../api'
-import type { Account, AccountGroup, AccountProxyMode, ApiToken, DashboardData, ApiEndpoint, CreateTokenParams, Platform, SelectOption } from '../types'
+import type { Account, AccountAuthType, AccountGroup, AccountProxyMode, ApiToken, DashboardData, ApiEndpoint, CreateTokenParams, Platform, SelectOption } from '../types'
 import {
   AddOutline,
   PeopleOutline,
@@ -349,6 +350,7 @@ import { useEventStream, useFormat } from '../composables'
 import { useClipboard } from '../composables/useClipboard'
 import { useViewRefresh } from '../composables'
 import type { SystemSettings } from '../types'
+import { formatRewardTotals } from '../utils'
 
 const { formatRelativeTime } = useFormat()
 const { copy } = useClipboard()
@@ -386,6 +388,10 @@ const disabledCount = computed(() => accounts.value.filter(a => !a.is_active).le
 const lowQuotaAccounts = computed(() =>
   accounts.value.filter(account => account.is_active && isLowQuota(account))
 )
+const monthRewardDisplay = computed(() => formatRewardTotals(
+  dashboard.value?.month_reward_totals,
+  dashboard.value?.month_reward_display || '$0.00'
+))
 
 const displayAccounts = computed(() => {
   if (!statusFilter.value) return accounts.value
@@ -569,87 +575,129 @@ const handleSyncEndpoints = async () => {
   }
 }
 
-const handleAccountSubmit = async (data: any) => {
+const handleAccountSubmit = async (data: {
+  user_id: string
+  external_user_id: string
+  username: string
+  display_name: string
+  session_cookie: string
+  login_username: string
+  login_password: string
+  auth_type: AccountAuthType
+  auth_data?: Record<string, any>
+  clear_auth_data: boolean
+  note: string
+  proxy_mode: AccountProxyMode
+  proxy_url: string
+  clear_login_credentials: boolean
+  is_active?: boolean
+  platform_id: number | null
+  group_id: number | null
+  notify_channel_ids: number[]
+}) => {
   try {
+    const targetPlatform = platforms.value.find(platform => platform.id === data.platform_id)
+    const isHttpTarget = targetPlatform?.adapter_type === 'http'
+
     if (editingAccount.value) {
       const updateData: any = { is_active: data.is_active }
-      if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
-      if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
-      if (data.note.trim() !== (editingAccount.value.note || '')) updateData.note = data.note.trim()
-      if (data.clear_login_credentials) {
-        updateData.clear_login_credentials = true
+      const platformChanged = data.platform_id !== editingAccount.value.platform?.id
+      if (data.platform_id) updateData.platform_id = data.platform_id
+
+      if (isHttpTarget) {
+        const externalUserId = data.external_user_id.trim()
+        if (platformChanged || externalUserId !== (editingAccount.value.external_user_id || '')) {
+          updateData.external_user_id = externalUserId
+        }
+        if (data.username.trim() !== (editingAccount.value.username || '')) {
+          updateData.username = data.username.trim()
+        }
+        if (data.display_name.trim() !== (editingAccount.value.display_name || '')) {
+          updateData.display_name = data.display_name.trim()
+        }
+        updateData.auth_type = data.clear_auth_data ? 'none' : data.auth_type
+        if (data.auth_data) updateData.auth_data = data.auth_data
+        if (data.clear_auth_data) updateData.clear_auth_data = true
+        if (data.clear_login_credentials) updateData.clear_login_credentials = true
       } else {
-        const previousLoginUsername = editingAccount.value.login_username?.trim() || ''
-        const currentLoginUsername = data.login_username.trim()
-        if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
-          updateData.login_username = currentLoginUsername
+        if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
+        if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+        if (data.clear_login_credentials) {
+          updateData.clear_login_credentials = true
+        } else {
+          const previousLoginUsername = editingAccount.value.login_username?.trim() || ''
+          const currentLoginUsername = data.login_username.trim()
+          if (currentLoginUsername && currentLoginUsername !== previousLoginUsername) {
+            updateData.login_username = currentLoginUsername
+          }
+          if (data.login_password) updateData.login_password = data.login_password
         }
-        if (data.login_password) {
-          updateData.login_password = data.login_password
-        }
       }
-      if (data.group_id !== editingAccount.value.group_id) {
-        updateData.group_id = data.group_id || 0
-      }
-      if (data.platform_id) {
-        updateData.platform_id = data.platform_id
-      }
+
+      if (data.note.trim() !== (editingAccount.value.note || '')) updateData.note = data.note.trim()
+      if (data.group_id !== editingAccount.value.group_id) updateData.group_id = data.group_id || 0
+
       const previousProxyMode = editingAccount.value.proxy_mode || 'direct'
-      if (data.proxy_mode !== previousProxyMode) {
-        updateData.proxy_mode = data.proxy_mode as AccountProxyMode
-      }
+      if (data.proxy_mode !== previousProxyMode) updateData.proxy_mode = data.proxy_mode
       if (data.proxy_mode === 'custom' && data.proxy_url.trim()) {
         updateData.proxy_mode = 'custom'
         updateData.proxy_url = data.proxy_url.trim()
       } else if (data.proxy_mode !== 'custom' && previousProxyMode === 'custom') {
         updateData.proxy_url = ''
       }
-      await accountApi.update(editingAccount.value.id, updateData)
 
-      const notifyData = {
+      await accountApi.update(editingAccount.value.id, updateData)
+      await notifyApi.updateAccountNotify(editingAccount.value.id, {
         channels: data.notify_channel_ids.map((id: number) => ({
           channel_id: id,
           is_enabled: true,
           notify_config: {}
         }))
-      }
-      await notifyApi.updateAccountNotify(editingAccount.value.id, notifyData)
+      })
       window.$notify('更新成功', 'success')
     } else {
-      const res = await accountApi.create({
-        session_cookie: data.session_cookie.trim() || undefined,
-        user_id: data.user_id.trim() || undefined,
-        login_username: data.login_username.trim() || undefined,
-        login_password: data.login_password || undefined,
+      const payload: any = {
         note: data.note.trim() || undefined,
-        proxy_mode: data.proxy_mode as AccountProxyMode,
+        proxy_mode: data.proxy_mode,
         proxy_url: data.proxy_mode === 'custom' ? data.proxy_url.trim() || undefined : undefined,
-        platform_id: data.platform_id,
+        platform_id: data.platform_id as number,
         group_id: data.group_id || undefined
-      })
+      }
 
+      if (isHttpTarget) {
+        payload.external_user_id = data.external_user_id.trim() || undefined
+        payload.username = data.username.trim() || undefined
+        payload.display_name = data.display_name.trim() || undefined
+        payload.auth_type = data.auth_type
+        payload.auth_data = data.auth_data
+      } else {
+        payload.session_cookie = data.session_cookie.trim() || undefined
+        payload.user_id = data.user_id.trim() || undefined
+        payload.login_username = data.login_username.trim() || undefined
+        payload.login_password = data.login_password || undefined
+      }
+
+      const res = await accountApi.create(payload)
       if (data.notify_channel_ids.length > 0 && res.data?.id) {
-        const notifyData = {
+        await notifyApi.updateAccountNotify(res.data.id, {
           channels: data.notify_channel_ids.map((id: number) => ({
             channel_id: id,
             is_enabled: true,
             notify_config: {}
           }))
-        }
-        await notifyApi.updateAccountNotify(res.data.id, notifyData)
+        })
       }
       window.$notify('账号添加成功', 'success')
     }
 
     showAccountModal.value = false
-    loadData()
+    await loadData()
   } catch (e: any) {
     window.$notify(e.message, 'error')
   } finally {
     accountModalRef.value?.setSubmitting(false)
   }
 }
-
 const handleSign = async (account: Account) => {
   if (!account.is_active) {
     window.$notify('该账号已禁用，无法签到', 'warning', { route: `/account/${account.id}` })
@@ -1306,10 +1354,6 @@ watch(trendDays, (newDays) => {
 
 .endpoint-url {
   font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 @media (max-width: 1100px) {

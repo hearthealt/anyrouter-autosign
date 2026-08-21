@@ -19,7 +19,7 @@ from app.services import (
 )
 from app.services.events import publish_event
 from app.services.notify import NotifyFactory
-from app.utils import format_quota, get_account_platform_config
+from app.utils import add_reward_total, format_quota, format_reward_totals, get_account_platform_config
 
 logger = logging.getLogger(__name__)
 
@@ -97,15 +97,17 @@ def build_sign_summary_content(
     fail_count: int,
     reward_quota: int,
     failed_items: list,
+    reward_totals: dict[str, float] | None = None,
 ) -> str:
-    """构造定时签到汇总通知。"""
+    """构造定时签到汇总通知，按单位展示不同平台的奖励。"""
+    reward_summary = format_reward_totals(reward_totals) if reward_totals else format_quota(reward_quota)
     lines = [
         f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"本次签到账号: {total_count} 个",
         f"成功: {success_count} 个",
         f"已签到: {already_signed_count} 个",
         f"失败: {fail_count} 个",
-        f"签到奖励: {format_quota(reward_quota)}",
+        f"签到奖励: {reward_summary}",
     ]
 
     if failed_items:
@@ -128,6 +130,7 @@ def send_sign_summary_notification(
     fail_count: int,
     reward_quota: int,
     failed_items: list,
+    reward_totals: dict[str, float] | None = None,
 ):
     """发送定时签到全局汇总。"""
     if total_count <= 0:
@@ -143,6 +146,7 @@ def send_sign_summary_notification(
         fail_count,
         reward_quota,
         failed_items,
+        reward_totals,
     )
     send_global_notification(db, title, content, channel_ids)
 
@@ -150,15 +154,6 @@ def send_sign_summary_notification(
 def execute_sign(db, account) -> dict:
     """执行单个账号签到并返回统一结果。"""
     platform_config = get_account_platform_config(account)
-    if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
-        return {
-            "success": False,
-            "already_signed": False,
-            "message": "账号缺少 user_id",
-            "reward_quota": 0,
-            "skipped": True,
-        }
-
     request_success, result = execute_sign_request(
         db,
         account,
@@ -178,6 +173,7 @@ def execute_sign(db, account) -> dict:
             "already_signed": False,
             "message": result.get("message", "签到失败"),
             "reward_quota": 0,
+            "reward_unit": "quota" if platform_config.get("adapter_type") == "new_api" else "count",
         }
 
     return {
@@ -185,16 +181,23 @@ def execute_sign(db, account) -> dict:
         "already_signed": bool(result.get("already_signed", False)),
         "message": result.get("message", ""),
         "reward_quota": result.get("reward_quota", 0),
+        "reward_display": result.get("reward_display"),
+        "reward_unit": result.get("reward_unit") or ("quota" if platform_config.get("adapter_type") == "new_api" else "count"),
     }
 
 
-def build_sign_message(message: str, reward_quota: int, already_signed: bool = False) -> str:
+def build_sign_message(
+    message: str,
+    reward_quota: int,
+    already_signed: bool = False,
+    reward_display: str | None = None,
+) -> str:
     """构造用于日志和通知的签到结果文案。"""
     if already_signed:
         return "今日已签到"
     if reward_quota > 0:
         base_message = message or "签到成功"
-        return f"{base_message}，获得 {format_quota(reward_quota)}"
+        return f"{base_message}，获得 {reward_display or format_quota(reward_quota)}"
     return message or "签到成功"
 
 
@@ -226,6 +229,7 @@ def auto_sign_job():
         fail_count = 0
         skip_count = 0
         total_reward_quota = 0
+        reward_totals: dict[str, float] = {}
         failed_items = []
         retry_accounts = []
         event_payloads = []
@@ -239,17 +243,21 @@ def auto_sign_job():
                 already_signed = result["already_signed"]
                 message = result["message"]
                 reward_quota = result["reward_quota"]
+                reward_display = result.get("reward_display") or format_quota(reward_quota)
+                reward_unit = result.get("reward_unit") or "quota"
 
                 if already_signed:
                     log_message = "今日已签到"
                     log_status = "already_signed"
                     skip_count += 1
                 else:
-                    log_message = build_sign_message(message, reward_quota)
+                    log_message = build_sign_message(message, reward_quota, reward_display=reward_display)
                     log_status = "success" if sign_success else "failed"
                     if sign_success:
                         success_count += 1
-                        total_reward_quota += reward_quota
+                        add_reward_total(reward_totals, reward_quota, reward_unit)
+                        if reward_unit == "quota":
+                            total_reward_quota += reward_quota
                     else:
                         fail_count += 1
                         failed_items.append({
@@ -262,6 +270,8 @@ def auto_sign_job():
                     success=sign_success,
                     message=log_message,
                     reward_quota=reward_quota,
+                    reward_display=reward_display,
+                    reward_unit=reward_unit,
                     retry_count=0,
                     status=log_status
                 )
@@ -284,7 +294,8 @@ def auto_sign_job():
                     "already_signed": already_signed,
                     "message": log_message,
                     "reward_quota": reward_quota,
-                    "reward_display": format_quota(reward_quota),
+                    "reward_display": reward_display,
+                    "reward_unit": reward_unit,
                 })
 
             except Exception as e:
@@ -307,6 +318,7 @@ def auto_sign_job():
                     "message": str(e),
                     "reward_quota": 0,
                     "reward_display": format_quota(0),
+                    "reward_unit": "quota" if getattr(account.platform, "adapter_type", "new_api") == "new_api" else "count",
                 })
 
         db.commit()
@@ -315,13 +327,14 @@ def auto_sign_job():
         logger.info(f"自动签到完成: 成功 {success_count}, 已签 {skip_count}, 失败 {fail_count}")
         send_sign_summary_notification(
             db,
-            "AnyRouter 定时签到汇总",
+            "定时签到汇总",
             len(event_payloads),
             success_count,
             skip_count,
             fail_count,
             total_reward_quota,
             failed_items,
+            reward_totals,
         )
 
         if retry_accounts and retry_enabled:
@@ -361,6 +374,7 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         fail_count = 0
         already_signed_count = 0
         total_reward_quota = 0
+        reward_totals: dict[str, float] = {}
         failed_items = []
         retry_accounts = []
         event_payloads = []
@@ -386,6 +400,8 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                 already_signed = result["already_signed"]
                 message = result["message"]
                 reward_quota = result["reward_quota"]
+                reward_display = result.get("reward_display") or format_quota(reward_quota)
+                reward_unit = result.get("reward_unit") or "quota"
                 log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
 
                 if already_signed:
@@ -393,10 +409,12 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                     log_status = "already_signed"
                     already_signed_count += 1
                 elif sign_success:
-                    log_message = f"重试{retry_count}次后: {build_sign_message(message, reward_quota)}"
+                    log_message = f"重试{retry_count}次后: {build_sign_message(message, reward_quota, reward_display=reward_display)}"
                     log_status = "success"
                     success_count += 1
-                    total_reward_quota += reward_quota
+                    add_reward_total(reward_totals, reward_quota, reward_unit)
+                    if reward_unit == "quota":
+                        total_reward_quota += reward_quota
                 else:
                     log_message = f"重试{retry_count}次后: {message}"
                     log_status = "failed"
@@ -417,6 +435,8 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                     log.success = sign_success
                     log.message = log_message
                     log.reward_quota = reward_quota
+                    log.reward_display = reward_display
+                    log.reward_unit = reward_unit
                     log.retry_count = retry_count
                     log.status = log_status
                 else:
@@ -425,6 +445,8 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                         success=sign_success,
                         message=log_message,
                         reward_quota=reward_quota,
+                        reward_display=reward_display,
+                        reward_unit=reward_unit,
                         retry_count=retry_count,
                         status=log_status
                     )
@@ -441,7 +463,8 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                     "already_signed": already_signed,
                     "message": log_message,
                     "reward_quota": reward_quota,
-                    "reward_display": format_quota(reward_quota),
+                    "reward_display": reward_display,
+                    "reward_unit": reward_unit,
                 })
 
             except Exception as e:
@@ -485,6 +508,7 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
                     "message": str(e),
                     "reward_quota": 0,
                     "reward_display": format_quota(0),
+                    "reward_unit": "quota" if getattr(account.platform, "adapter_type", "new_api") == "new_api" else "count",
                 })
 
         db.commit()
@@ -493,13 +517,14 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         logger.info(f"重试签到完成: 成功 {success_count}, 失败 {fail_count}")
         send_sign_summary_notification(
             db,
-            "AnyRouter 定时签到重试汇总",
+            "定时签到重试汇总",
             len(event_payloads),
             success_count,
             already_signed_count,
             fail_count,
             total_reward_quota,
             failed_items,
+            reward_totals,
         )
 
         if retry_accounts:

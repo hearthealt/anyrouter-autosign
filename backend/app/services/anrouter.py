@@ -208,7 +208,7 @@ class AnyRouterService:
 
         raw_success = bool(payload.get("success"))
         raw_message = payload.get("message", "")
-        already_signed = cls._is_already_signed_message(raw_message) or (raw_success and not raw_message)
+        already_signed = cls._is_already_signed_message(raw_message)
         reward_quota = cls._safe_int(raw_data.get("quota_awarded"), 0)
         if reward_quota <= 0:
             reward_quota = cls._extract_reward_from_message(raw_message)

@@ -59,12 +59,17 @@
           </div>
         </div>
       </n-tab-pane>
+
+      <n-tab-pane name="about" tab="关于" display-directive="show:lazy">
+        <AboutTab ref="aboutRef" />
+      </n-tab-pane>
     </n-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useViewRefresh } from '../composables'
 import GeneralSettingsTab from '../components/settings/GeneralSettingsTab.vue'
 import NotifyChannelsTab from '../components/settings/NotifyChannelsTab.vue'
@@ -72,8 +77,19 @@ import BackupTab from '../components/settings/BackupTab.vue'
 import GroupsTab from '../components/settings/GroupsTab.vue'
 import AuditLogsTab from '../components/settings/AuditLogsTab.vue'
 import SystemLogsTab from '../components/settings/SystemLogsTab.vue'
+import AboutTab from '../components/settings/AboutTab.vue'
 
-const activeTab = ref('general')
+const route = useRoute()
+
+const TAB_NAMES = ['general', 'notify', 'data', 'logs', 'about'] as const
+
+// 支持 /settings?tab=about 直接打开指定标签（侧边栏版本号点击会带上）
+const initialTab = () => {
+  const tab = String(route.query.tab || '')
+  return (TAB_NAMES as readonly string[]).includes(tab) ? tab : 'general'
+}
+
+const activeTab = ref(initialTab())
 const dataSection = ref<'groups' | 'backup'>('groups')
 const logSection = ref<'audit' | 'system'>('audit')
 
@@ -87,6 +103,7 @@ const notifyRef = ref<InstanceType<typeof NotifyChannelsTab> | null>(null)
 const backupRef = ref<InstanceType<typeof BackupTab> | null>(null)
 const groupsRef = ref<InstanceType<typeof GroupsTab> | null>(null)
 const auditRef = ref<InstanceType<typeof AuditLogsTab> | null>(null)
+const aboutRef = ref<InstanceType<typeof AboutTab> | null>(null)
 
 useViewRefresh(async () => {
   await Promise.all([
@@ -94,7 +111,8 @@ useViewRefresh(async () => {
     notifyRef.value?.load(),
     backupRef.value?.load(),
     groupsRef.value?.load(),
-    auditRef.value?.load()
+    auditRef.value?.load(),
+    aboutRef.value?.load()
   ])
 })
 </script>

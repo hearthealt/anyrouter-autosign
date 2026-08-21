@@ -2,7 +2,7 @@
 平台模型
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -16,6 +16,8 @@ class Platform(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
     base_url = Column(String(255), nullable=False)
+    adapter_type = Column(String(30), nullable=False, default="new_api")
+    adapter_config = Column(Text, nullable=True, default="{}")
 
     # API 路径（各平台结构一致时使用默认值即可）
     sign_mode = Column(String(20), default="api")  # api, login

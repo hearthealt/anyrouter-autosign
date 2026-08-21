@@ -59,7 +59,7 @@
         <n-data-table
           :columns="columns"
           :data="logs"
-          :row-key="(row: any) => row.id"
+          :row-key="(row: SignLogRow) => row.id"
           :loading="loading"
           :pagination="false"
           :single-line="false"
@@ -106,13 +106,18 @@ import {
 } from '@vicons/ionicons5'
 import { signApi, accountApi } from '../api'
 import { useFormat, useViewRefresh } from '../composables'
+import { formatRewardAmount } from '../utils'
+import ExternalLink from '../components/common/ExternalLink.vue'
+import type { Account, SignLog } from '../types'
 
 const { formatDateTime } = useFormat()
 const route = useRoute()
 
+type SignLogRow = SignLog & { username?: string }
+
 const loading = ref(false)
-const logs = ref<any[]>([])
-const accounts = ref<any[]>([])
+const logs = ref<SignLogRow[]>([])
+const accounts = ref<Account[]>([])
 const summary = ref({
   success_count: 0,
   fail_count: 0
@@ -215,17 +220,17 @@ const getStatusLabel = (status?: string): string => {
   }
 }
 
-const getRewardDisplay = (row: any) => {
-  if (!row.reward_quota) return '-'
-  return `+${row.reward_display || row.reward_quota}`
+const getRewardDisplay = (row: SignLogRow) => {
+  if (!Number(row.reward_quota || 0)) return '-'
+  return `+${formatRewardAmount(row.reward_quota, row.reward_unit, row.reward_display)}`
 }
 
-const getPlatformName = (row: any) => row.platform?.name || row.platform_name || '未配置平台'
-
+const getPlatformName = (row: SignLogRow) => row.platform?.name || row.platform_name || '未配置平台'
+const getPlatformUrl = (row: SignLogRow) => row.platform?.base_url || ''
 const getSortOrder = (columnKey: LogSortKey): DataTableSortOrder =>
   sortState.value.columnKey === columnKey ? sortState.value.order : false
 
-const columns = computed<DataTableColumns<any>>(() => [
+const columns = computed<DataTableColumns<SignLogRow>>(() => [
   {
     title: '账号',
     key: 'username',
@@ -241,11 +246,14 @@ const columns = computed<DataTableColumns<any>>(() => [
   {
     title: '平台',
     key: 'platform',
-    minWidth: 150,
-    ellipsis: { tooltip: true },
+    minWidth: 220,
     sorter: 'default',
     sortOrder: getSortOrder('platform'),
-    render: row => getPlatformName(row)
+    render: row => h(ExternalLink, {
+      href: getPlatformUrl(row),
+      label: getPlatformUrl(row) || getPlatformName(row),
+      mono: true
+    })
   },
   {
     title: '状态',
@@ -296,7 +304,7 @@ const loadAccounts = async () => {
   try {
     const res = await accountApi.getList()
     accounts.value = res.data || []
-    accountOptions.value = accounts.value.map((account: any) => ({
+    accountOptions.value = accounts.value.map(account => ({
       label: account.username || `账号${account.id}`,
       value: account.id
     }))

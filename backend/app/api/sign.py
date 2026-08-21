@@ -51,15 +51,14 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="账号未配置平台")
 
     platform_config = get_account_platform_config(account)
-    if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
-        raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
     # 执行签到
     request_success, result = perform_sign_request(db, account, platform_config)
 
     sign_success = request_success and result.get("success", False)
     message = result.get("message", "")
     reward_quota = result.get("reward_quota", 0)
+    reward_display = result.get("reward_display") or format_quota(reward_quota)
+    reward_unit = result.get("reward_unit") or ("quota" if platform_config.get("adapter_type") == "new_api" else "count")
     already_signed = bool(result.get("already_signed", False))
 
     refresh_account_cache_after_sign(db, account, platform_config, request_success)
@@ -79,6 +78,8 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         success=sign_success,
         message=log_message,
         reward_quota=reward_quota,
+        reward_display=reward_display,
+        reward_unit=reward_unit,
         retry_count=0,
         status=log_status
     )
@@ -104,7 +105,8 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
             "already_signed": already_signed,
             "message": return_message,
             "reward_quota": reward_quota,
-            "reward_display": format_quota(reward_quota),
+            "reward_display": reward_display,
+            "reward_unit": reward_unit,
         }
     )
 
@@ -113,7 +115,8 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
         message=return_message,
         data=SignResult(
             reward_quota=reward_quota,
-            reward_display=format_quota(reward_quota),
+            reward_display=reward_display,
+            reward_unit=reward_unit,
             message=return_message,
             sign_time=datetime.now(),
             status=status
@@ -136,13 +139,12 @@ def batch_sign(db: Session = Depends(get_db)):
 
     for account in accounts:
         platform_config = get_account_platform_config(account)
-        if not account.anrouter_user_id and platform_config.get("sign_mode") != "login":
-            continue
-
         request_success, result = perform_sign_request(db, account, platform_config)
         sign_success = request_success and result.get("success", False)
         message = result.get("message", "")
         reward_quota = result.get("reward_quota", 0)
+        reward_display = result.get("reward_display") or format_quota(reward_quota)
+        reward_unit = result.get("reward_unit") or ("quota" if platform_config.get("adapter_type") == "new_api" else "count")
         already_signed = bool(result.get("already_signed", False))
 
         refresh_account_cache_after_sign(db, account, platform_config, request_success)
@@ -162,6 +164,8 @@ def batch_sign(db: Session = Depends(get_db)):
             success=sign_success,
             message=log_message,
             reward_quota=reward_quota,
+            reward_display=reward_display,
+            reward_unit=reward_unit,
             retry_count=0,
             status=log_status
         )
@@ -187,7 +191,8 @@ def batch_sign(db: Session = Depends(get_db)):
             success=sign_success,
             message=result_message,
             reward_quota=reward_quota,
-            reward_display=format_quota(reward_quota),
+            reward_display=reward_display,
+            reward_unit=reward_unit,
             status=log_status
         ))
 
@@ -204,6 +209,7 @@ def batch_sign(db: Session = Depends(get_db)):
                 "message": result_item.message,
                 "reward_quota": result_item.reward_quota,
                 "reward_display": result_item.reward_display,
+                "reward_unit": result_item.reward_unit,
             }
         )
 
@@ -296,7 +302,8 @@ def get_all_sign_logs(
             "success": log.success,
             "message": log.message,
             "reward_quota": log.reward_quota,
-            "reward_display": format_quota(log.reward_quota),
+            "reward_display": log.reward_display or format_quota(log.reward_quota),
+            "reward_unit": log.reward_unit or "quota",
             "retry_count": log.retry_count,
             "status": log.status,
             "platform": {
@@ -347,7 +354,8 @@ def get_sign_logs(
             success=log.success,
             message=log.message,
             reward_quota=log.reward_quota,
-            reward_display=format_quota(log.reward_quota),
+            reward_display=log.reward_display or format_quota(log.reward_quota),
+            reward_unit=log.reward_unit or "quota",
             retry_count=log.retry_count,
             status=log.status
         )

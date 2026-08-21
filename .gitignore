@@ -41,11 +41,14 @@ env/
 *.log
 logs/
 
+# Docker compose 运行时的数据卷
+/data/
+
 # Environment
+# 全局唯一配置文件是仓库根目录的 .env，只有 .env.example 入库
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
+!.env.example
 
 # Node
 node_modules/

@@ -1,15 +1,16 @@
-"""
-平台相关 Schema
-"""
+"""平台相关 Schema。"""
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, Field
 
 
 class PlatformCreate(BaseModel):
-    """创建平台请求"""
+    """创建平台请求。"""
     name: str
     base_url: str
+    adapter_type: str = "new_api"
+    adapter_config: Dict[str, Any] = Field(default_factory=dict)
     sign_mode: str = "api"
     sign_api: str = "/api/user/sign_in"
     checkin_api: str = "/api/user/checkin"
@@ -23,9 +24,11 @@ class PlatformCreate(BaseModel):
 
 
 class PlatformUpdate(BaseModel):
-    """更新平台请求"""
+    """更新平台请求。"""
     name: Optional[str] = None
     base_url: Optional[str] = None
+    adapter_type: Optional[str] = None
+    adapter_config: Optional[Dict[str, Any]] = None
     sign_mode: Optional[str] = None
     sign_api: Optional[str] = None
     checkin_api: Optional[str] = None
@@ -39,20 +42,24 @@ class PlatformUpdate(BaseModel):
 
 
 class PlatformBrief(BaseModel):
-    """平台简要信息"""
+    """平台简要信息。"""
     id: int
     name: str
     base_url: str
+    adapter_type: str = "new_api"
 
     class Config:
         from_attributes = True
 
 
 class PlatformResponse(BaseModel):
-    """平台响应"""
+    """平台响应。"""
     id: int
     name: str
     base_url: str
+    adapter_type: str = "new_api"
+    adapter_config: Dict[str, Any] = Field(default_factory=dict)
+    capabilities: Dict[str, bool] = Field(default_factory=dict)
     sign_mode: str = "api"
     sign_api: str = "/api/user/sign_in"
     checkin_api: str = "/api/user/checkin"

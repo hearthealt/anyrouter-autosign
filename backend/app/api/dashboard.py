@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.database import get_db
-from app.models import Account, SignLog
+from app.models import Account, Platform, SignLog
 from app.schemas import ApiResponse, DashboardResponse, RecentSign, DailyTrend
-from app.utils import format_quota
+from app.utils import add_reward_total, format_quota, serialize_reward_totals
 
 router = APIRouter(tags=["仪表盘"])
 
@@ -34,10 +34,33 @@ def get_dashboard(db: Session = Depends(get_db)):
     # 本月奖励统计
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month_reward = db.query(func.sum(SignLog.reward_quota)).filter(
+    # 保留旧字段的语义：只统计 New API 的 quota，避免把积分/金币等单位混入美元。
+    month_reward = db.query(func.sum(SignLog.reward_quota)).join(
+        Account, Account.id == SignLog.account_id
+    ).join(
+        Platform, Platform.id == Account.platform_id
+    ).filter(
         SignLog.success == True,
+        Platform.adapter_type == "new_api",
         SignLog.sign_time >= month_start
     ).scalar() or 0
+
+    month_reward_totals: dict[str, float] = {}
+    month_reward_rows = db.query(SignLog, Platform.adapter_type).join(
+        Account, Account.id == SignLog.account_id
+    ).outerjoin(
+        Platform, Platform.id == Account.platform_id
+    ).filter(
+        SignLog.success == True,
+        SignLog.sign_time >= month_start,
+    ).all()
+    for log, adapter_type in month_reward_rows:
+        add_reward_total(
+            month_reward_totals,
+            log.reward_quota,
+            log.reward_unit,
+            adapter_type=adapter_type,
+        )
 
     # 总体成功率
     all_logs_count = db.query(SignLog).count()
@@ -73,18 +96,36 @@ def get_dashboard(db: Session = Depends(get_db)):
     daily_trend = []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        day_logs = db.query(SignLog).filter(
+        day_logs = db.query(SignLog, Platform.adapter_type).join(
+            Account, Account.id == SignLog.account_id
+        ).outerjoin(
+            Platform, Platform.id == Account.platform_id
+        ).filter(
             func.date(SignLog.sign_time) == day
         ).all()
-        success_count = len([log for log in day_logs if log.success])
+        success_count = len([log for log, _ in day_logs if log.success])
         fail_count = len(day_logs) - success_count
-        reward = sum(log.reward_quota for log in day_logs if log.success)
+        reward = sum(
+            log.reward_quota
+            for log, adapter_type in day_logs
+            if log.success and adapter_type == "new_api"
+        )
+        reward_totals: dict[str, float] = {}
+        for log, adapter_type in day_logs:
+            if log.success:
+                add_reward_total(
+                    reward_totals,
+                    log.reward_quota,
+                    log.reward_unit,
+                    adapter_type=adapter_type,
+                )
         daily_trend.append(DailyTrend(
             date=day.strftime("%m-%d"),
             success=success_count,
             fail=fail_count,
             reward=reward,
-            reward_display=format_quota(reward)
+            reward_display=format_quota(reward),
+            reward_totals=serialize_reward_totals(reward_totals),
         ))
 
     return ApiResponse(
@@ -102,6 +143,7 @@ def get_dashboard(db: Session = Depends(get_db)):
             total_request_count=total_request_count,
             month_reward=month_reward,
             month_reward_display=format_quota(month_reward),
+            month_reward_totals=serialize_reward_totals(month_reward_totals),
             success_rate=success_rate,
             recent_signs=recent_signs,
             daily_trend=daily_trend

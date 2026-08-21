@@ -12,6 +12,87 @@ export function formatQuota(quota: number): string {
   }
 }
 
+export type RewardTotals = Record<string, number>
+
+function formatRewardNumber(value: number, minimumFractionDigits = 0): string {
+  const rounded = Math.round(value * 10000) / 10000
+  return rounded.toLocaleString('zh-CN', {
+    minimumFractionDigits,
+    maximumFractionDigits: 4
+  })
+}
+
+/** 按奖励单位格式化聚合结果；旧接口可通过 fallback 继续显示美元字段。 */
+export function formatRewardTotals(
+  totals?: RewardTotals | null,
+  fallback = '$0.00'
+): string {
+  const entries = Object.entries(totals || {})
+    .map(([unit, raw]) => [unit, Number(raw)] as const)
+    .filter(([, value]) => Number.isFinite(value) && value !== 0)
+    .sort(([left], [right]) => left === '$' ? -1 : right === '$' ? 1 : left.localeCompare(right, 'zh-CN'))
+
+  if (!entries.length) return fallback
+
+  return entries.map(([unit, value]) => {
+    if (unit === '$') {
+      return `$${formatRewardNumber(value, Math.abs(value) < 0.01 ? 4 : 2)}`
+    }
+    if (unit === '¥' || unit === '￥') {
+      return `${unit}${formatRewardNumber(value, 2)}`
+    }
+    if (unit === 'count') {
+      return `${formatRewardNumber(value)} 次`
+    }
+    return `${formatRewardNumber(value)} ${unit}`
+  }).join('、')
+}
+
+/** 格式化一条签到日志的奖励，兼容没有 reward_display 的旧记录。 */
+export function formatRewardAmount(
+  amount?: number | null,
+  unit?: string | null,
+  display?: string | null
+): string {
+  if (display?.trim()) return display.trim()
+
+  const value = Number(amount || 0)
+  const normalizedUnit = (unit || 'quota').trim() || 'quota'
+  if (normalizedUnit === 'quota') return formatQuota(value)
+  if (normalizedUnit === '$' || normalizedUnit === '¥' || normalizedUnit === '￥') {
+    return `${normalizedUnit}${formatRewardNumber(value, 2)}`
+  }
+  if (normalizedUnit === 'count') return `${formatRewardNumber(value)} 次`
+  return `${formatRewardNumber(value)} ${normalizedUnit}`
+}
+
+/** 转义 ECharts HTML tooltip 中的外部数据。 */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+/**
+ * 校验并归一化对外跳转链接。
+ * 平台 base_url 由用户手填并存库，只放行 http/https，其余（含 javascript:）返回空串，
+ * 由调用方降级为纯文本展示。
+ */
+export function normalizeExternalUrl(raw?: string | null): string {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return ''
+    return value
+  } catch {
+    return ''
+  }
+}
+
 /**
  * 格式化日期时间
  */

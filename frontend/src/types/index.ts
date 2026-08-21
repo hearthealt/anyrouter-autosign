@@ -1,8 +1,23 @@
-// 账号相关类型
+export type PlatformAdapterType = 'new_api' | 'http'
+export type RewardTotals = Record<string, number>
+
+export interface PlatformCapabilities {
+  requires_external_user_id: boolean
+  supports_user_info: boolean
+  supports_tokens: boolean
+  supports_models: boolean
+  supports_groups: boolean
+  supports_health_check: boolean
+}
+
+// 平台与账号相关类型
 export interface Platform {
   id: number
   name: string
   base_url: string
+  adapter_type: PlatformAdapterType
+  adapter_config?: Record<string, any>
+  capabilities?: PlatformCapabilities
   sign_mode?: 'api' | 'login'
   sign_api?: string
   checkin_api?: string
@@ -23,16 +38,23 @@ export interface PlatformBrief {
   id: number
   name: string
   base_url: string
+  adapter_type?: PlatformAdapterType
 }
+
+export type AccountAuthType = 'none' | 'custom' | 'bearer' | 'cookie' | 'header' | 'basic'
+export type AccountProxyMode = 'direct' | 'custom'
 
 export interface Account {
   id: number
   anyrouter_user_id?: number
+  external_user_id?: string
   username: string
   display_name?: string
   note?: string
   login_username?: string
   has_login_credentials?: boolean
+  auth_type?: AccountAuthType
+  has_auth_data?: boolean
   proxy_mode?: AccountProxyMode
   proxy_url?: string
   proxy_url_masked?: string
@@ -76,8 +98,13 @@ export type GroupColor = 'default' | 'blue' | 'green' | 'red' | 'orange' | 'purp
 export interface CreateAccountParams {
   session_cookie?: string
   user_id?: string
+  external_user_id?: string
+  username?: string
+  display_name?: string
   login_username?: string
   login_password?: string
+  auth_type?: AccountAuthType
+  auth_data?: Record<string, any>
   note?: string
   proxy_mode?: AccountProxyMode
   proxy_url?: string
@@ -85,19 +112,7 @@ export interface CreateAccountParams {
   group_id?: number
 }
 
-export type AccountProxyMode = 'direct' | 'custom'
-
-export interface BatchImportItem {
-  session_cookie?: string
-  user_id?: string
-  login_username?: string
-  login_password?: string
-  note?: string
-  proxy_mode?: AccountProxyMode
-  proxy_url?: string
-  platform_id: number
-  group_id?: number
-}
+export interface BatchImportItem extends CreateAccountParams {}
 
 export interface BatchImportResultItem {
   index: number
@@ -116,9 +131,15 @@ export interface BatchImportResponse {
 
 export interface UpdateAccountParams {
   user_id?: string
+  external_user_id?: string
+  username?: string
+  display_name?: string
   session_cookie?: string
   login_username?: string
   login_password?: string
+  auth_type?: AccountAuthType
+  auth_data?: Record<string, any>
+  clear_auth_data?: boolean
   note?: string
   proxy_mode?: AccountProxyMode
   proxy_url?: string
@@ -127,7 +148,6 @@ export interface UpdateAccountParams {
   platform_id?: number
   group_id?: number
 }
-
 // API Token 相关类型
 export interface ApiToken {
   id: number
@@ -187,6 +207,7 @@ export interface SignLog {
   message?: string
   reward_quota?: number
   reward_display?: string
+  reward_unit?: string
   status?: 'success' | 'already_signed' | 'failed'
   retry_count: number
 }
@@ -196,6 +217,7 @@ export interface SignResult {
   message: string
   reward_quota?: number
   reward_display?: string
+  reward_unit?: string
   status?: 'success' | 'already_signed' | 'failed'
 }
 
@@ -244,14 +266,19 @@ export interface ApiEndpoint {
 // 仪表盘相关类型
 export interface DashboardData {
   account_count: number
+  active_account_count?: number
   unhealthy_account_count: number
   today_sign_count: number
   today_sign_success: number
   success_rate?: number
   month_reward: number
   month_reward_display: string
+  month_reward_totals?: RewardTotals
   total_quota: number
+  total_used_quota?: number
   total_quota_display: string
+  total_used_quota_display?: string
+  total_request_count?: number
   daily_trend: DailyTrend[]
 }
 
@@ -261,40 +288,61 @@ export interface DailyTrend {
   fail: number
   reward?: number
   reward_display?: string
+  reward_totals?: RewardTotals
 }
 
 // 统计相关类型
 export interface StatisticsOverview {
   total_accounts: number
-  total_signs: number
-  total_success: number
+  active_accounts: number
+  today_success: number
+  today_fail: number
+  month_success: number
+  month_total: number
+  month_success_rate: number
   total_reward: number
+  total_reward_display: string
+  month_reward: number
+  month_reward_display: string
+  total_reward_totals?: RewardTotals
+  month_reward_totals?: RewardTotals
   success_rate: number
 }
 
 export interface DailyStatistics {
   date: string
-  sign_count: number
-  success_count: number
-  fail_count: number
-  reward_quota: number
+  success: number
+  fail: number
+  total: number
+  reward: number
+  reward_display: string
+  reward_totals?: RewardTotals
 }
 
 export interface MonthlyStatistics {
   month: string
-  sign_count: number
-  success_count: number
-  fail_count: number
-  reward_quota: number
+  success: number
+  fail: number
+  total: number
+  success_rate: number
+  reward: number
+  reward_display: string
+  reward_totals?: RewardTotals
 }
 
 export interface AccountStatistics {
   account_id: number
-  account_name: string
-  sign_count: number
+  username: string
+  total_signs: number
   success_count: number
   fail_count: number
-  reward_quota: number
+  success_rate: number
+  total_reward: number
+  total_reward_display: string
+  reward_totals?: RewardTotals
+  streak_days: number
+  is_active: boolean
+  health_status: 'healthy' | 'unhealthy' | 'unknown'
 }
 
 // 系统设置相关类型
@@ -408,6 +456,7 @@ export interface ServerEvent {
   message?: string
   reward_quota?: number
   reward_display?: string
+  reward_unit?: string
   health_status?: 'healthy' | 'unhealthy' | 'unknown'
   health_message?: string
   previous_status?: 'healthy' | 'unhealthy' | 'unknown'
@@ -434,12 +483,32 @@ export interface SelectOption<T = any> {
 // 健康检查结果
 export interface HealthCheckResult {
   account_id: number
-  health_status: 'healthy' | 'unhealthy'
+  health_status: 'healthy' | 'unhealthy' | 'unknown'
   health_message?: string
 }
 
 export interface BatchHealthCheckResult {
   healthy_count: number
   unhealthy_count: number
+  unknown_count: number
   results: HealthCheckResult[]
+}
+
+// 系统版本与更新
+export interface VersionInfo {
+  name: string
+  version: string
+  changelog_url: string
+}
+
+export interface LatestVersionInfo {
+  version: string
+  changelog: string
+  /** 取不到云端版本时的可读原因 */
+  error?: string | null
+}
+
+export interface UpdateResult {
+  status: 'triggered' | 'no_update' | 'error'
+  message: string
 }

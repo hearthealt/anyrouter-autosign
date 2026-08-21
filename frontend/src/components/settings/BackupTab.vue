@@ -39,6 +39,9 @@
           </div>
           <div class="action-controls">
             <n-checkbox v-model:checked="exportIncludeLogs">包含签到日志（最近1000条）</n-checkbox>
+            <n-checkbox v-model:checked="exportIncludeCredentials">
+              包含敏感凭证
+            </n-checkbox>
             <n-button type="primary" @click="handleExport" :loading="exporting">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
               导出备份
@@ -70,7 +73,10 @@
 
         <div class="backup-tip">
           <n-icon><InformationCircleOutline /></n-icon>
-          备份文件包含敏感信息（如 Session Cookie），请妥善保管
+          <span>
+            默认备份不包含 Cookie、Token、登录密码、代理地址和推送渠道配置；
+            勾选“包含敏感凭证”后可完整迁移，但请妥善保管导出的文件。
+          </span>
         </div>
       </div>
     </n-spin>
@@ -91,6 +97,7 @@ const emit = defineEmits<{
 const loading = ref(false)
 const backupInfo = ref<any>({})
 const exportIncludeLogs = ref(false)
+const exportIncludeCredentials = ref(false)
 const exporting = ref(false)
 const importOverwrite = ref(false)
 const importing = ref(false)
@@ -113,7 +120,7 @@ const handleExport = async () => {
   exporting.value = true
   try {
     const token = getToken()
-    const url = `/api/v1/backup/export?include_logs=${exportIncludeLogs.value}`
+    const url = backupApi.exportPath(exportIncludeLogs.value, exportIncludeCredentials.value)
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -143,7 +150,13 @@ const handleImportFile = async ({ file }: { file: { file: File } }) => {
   try {
     const res = await backupApi.import(file.file, importOverwrite.value)
     const data = res.data
-    window.$notify(`导入成功: ${data.accounts} 个账号, ${data.notify_channels} 个渠道, ${data.settings} 个配置`, 'success')
+    const warningText = Array.isArray(data.warnings) && data.warnings.length
+      ? `；${data.warnings.join('；')}`
+      : ''
+    window.$notify(
+      `导入成功: ${data.accounts} 个账号, ${data.notify_channels} 个渠道, ${data.settings} 个配置${warningText}`,
+      data.warnings?.length ? 'warning' : 'success'
+    )
     load()
   } catch (e) {
     window.$notify(apiError(e, '导入失败'), 'error')

@@ -2,6 +2,7 @@ import axios from 'axios'
 import { getToken, removeToken } from '../utils/auth'
 import router from '../router'
 import { ApiError } from '../utils/apiError'
+import type { AccountAuthType, AccountProxyMode, PlatformAdapterType } from '../types'
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -58,7 +59,22 @@ export const authApi = {
 // 平台 API
 export const platformApi = {
   getList: (params?: { page?: number; size?: number; keyword?: string }) => api.get('/platforms', { params }),
-  create: (data: { name: string; base_url: string; sign_mode?: 'api' | 'login'; sign_api?: string; checkin_api?: string; user_api?: string; console_url?: string; models_api?: string; groups_api?: string; token_api?: string; status_api?: string; captcha_api?: string }) => api.post('/platforms', data),
+  create: (data: {
+    name: string
+    base_url: string
+    adapter_type?: PlatformAdapterType
+    adapter_config?: Record<string, any>
+    sign_mode?: 'api' | 'login'
+    sign_api?: string
+    checkin_api?: string
+    user_api?: string
+    console_url?: string
+    models_api?: string
+    groups_api?: string
+    token_api?: string
+    status_api?: string
+    captcha_api?: string
+  }) => api.post('/platforms', data),
   get: (id: number) => api.get(`/platforms/${id}`),
   update: (id: number, data: any) => api.put(`/platforms/${id}`, data),
   delete: (id: number) => api.delete(`/platforms/${id}`)
@@ -76,15 +92,35 @@ export const accountApi = {
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   }) => api.get('/accounts', { params }),
-  create: (data: { session_cookie?: string; user_id?: string; login_username?: string; login_password?: string; note?: string; proxy_mode?: 'direct' | 'custom'; proxy_url?: string; platform_id: number; group_id?: number }) => api.post('/accounts', data),
+  create: (data: {
+    session_cookie?: string
+    user_id?: string
+    external_user_id?: string
+    username?: string
+    display_name?: string
+    login_username?: string
+    login_password?: string
+    auth_type?: AccountAuthType
+    auth_data?: Record<string, any>
+    note?: string
+    proxy_mode?: AccountProxyMode
+    proxy_url?: string
+    platform_id: number
+    group_id?: number
+  }) => api.post('/accounts', data),
   batchImport: (data: {
     items: Array<{
       session_cookie?: string
       user_id?: string
+      external_user_id?: string
+      username?: string
+      display_name?: string
       login_username?: string
       login_password?: string
+      auth_type?: AccountAuthType
+      auth_data?: Record<string, any>
       note?: string
-      proxy_mode?: 'direct' | 'custom'
+      proxy_mode?: AccountProxyMode
       proxy_url?: string
       platform_id: number
       group_id?: number
@@ -174,7 +210,8 @@ export const apiEndpointsApi = {
 export const backupApi = {
   getInfo: () => api.get('/backup/info'),
   // 导出走 fetch + Authorization header（见 Settings.vue handleExport），此处保留 path 供使用者拼装
-  exportPath: (includeLogs = false) => `/api/v1/backup/export?include_logs=${includeLogs}`,
+  exportPath: (includeLogs = false, includeCredentials = false) =>
+    `/api/v1/backup/export?include_logs=${includeLogs}&include_credentials=${includeCredentials}`,
   import: (file: File, overwrite = false) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -252,3 +289,13 @@ export const logsApi = {
   },
   clear: (filename: string) => api.delete(`/logs/${filename}`)
 }
+
+// 系统信息与更新 API
+export const systemApi = {
+  getVersion: () => api.get('/system/version'),
+  getLatestVersion: () => api.get('/system/latest-version'),
+  triggerUpdate: () => api.post('/system/update')
+}
+
+
+

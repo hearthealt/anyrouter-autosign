@@ -57,6 +57,17 @@
                 </div>
                 <span class="nav-label">收起</span>
               </button>
+              <button
+                v-if="versionStore.currentTag"
+                type="button"
+                class="version-btn"
+                :title="versionStore.hasNewVersion ? `有新版本 ${versionStore.latestTag}，点击查看` : '查看版本信息'"
+                @click="$router.push('/settings?tab=about')"
+              >
+                <span class="version-tag mono">{{ versionStore.currentTag }}</span>
+                <span v-if="versionStore.hasNewVersion" class="version-dot" aria-hidden="true"></span>
+                <span v-if="versionStore.hasNewVersion" class="sr-only">有新版本</span>
+              </button>
             </div>
           </aside>
 
@@ -215,6 +226,7 @@ import type { Account, SignLog } from './types'
 import { removeToken, isLoggedIn } from './utils/auth'
 import { getActiveTheme, setThemeMode, type ThemeMode } from './utils'
 import { provideViewRefresh, useShortcuts } from './composables'
+import { useVersionStore } from './stores'
 import PasswordModal from './components/layout/PasswordModal.vue'
 import ShortcutsHelpModal from './components/layout/ShortcutsHelpModal.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
@@ -229,6 +241,7 @@ interface GlobalSearchResult {
 
 const route = useRoute()
 const router = useRouter()
+const versionStore = useVersionStore()
 const collapsed = ref(false)
 const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
@@ -462,8 +475,21 @@ const loadCurrentUser = async () => {
   }
 }
 
+// 侧边栏的版本标签 + 新版本红点。检查云端版本失败不打扰用户，
+// 具体原因在设置页「关于」里展示。
+const loadVersion = async () => {
+  if (!isLoggedIn()) return
+  try {
+    await versionStore.loadVersion()
+  } catch (e) {
+    return
+  }
+  await versionStore.checkLatest()
+}
+
 onMounted(() => {
   loadCurrentUser()
+  loadVersion()
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
     const stored = localStorage.getItem('anyrouter-theme')
@@ -644,6 +670,60 @@ const themeOverrides: GlobalThemeOverrides = {
   gap: 1px;
   padding: var(--spacing-2);
   border-top: 1px solid var(--border-color-light);
+}
+
+/* 版本标签 */
+.version-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: var(--spacing-1);
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-quaternary);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.version-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+}
+
+.version-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.version-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning-color);
+}
+
+.sidebar.collapsed .version-tag {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Main */

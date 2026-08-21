@@ -1,0 +1,8 @@
+# 默认按平台自动处理文本文件换行
+* text=auto
+
+# 进容器执行的脚本必须是 LF，否则在 Linux 里 shebang 会带上 \r 而无法启动
+docker-entrypoint.sh text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+VERSION text eol=lf

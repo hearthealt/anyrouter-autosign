@@ -2,7 +2,8 @@
 账号管理 API
 """
 from datetime import datetime
-from typing import List, Optional, Tuple
+import json
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import String, asc, case, cast, desc, func, or_
 from sqlalchemy.orm import Query, Session
@@ -21,6 +22,7 @@ from app.services import (
     refresh_account_user_cache,
     resolve_session_cookie,
 )
+from app.services.adapters import adapter_registry
 from app.services.audit import log_action
 from app.services.events import publish_event
 from app.utils import (
@@ -33,6 +35,7 @@ from app.utils import (
     normalize_proxy_url,
     validate_proxy_url,
 )
+from app.utils.platform import ADAPTER_TYPE_HTTP, ADAPTER_TYPE_NEW_API
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/accounts", tags=["账号管理"])
@@ -54,19 +57,27 @@ def ensure_account_platform(account: Account) -> Platform:
 
 def find_existing_account(
     db: Session,
-    user_id: int,
     platform_id: Optional[int],
-    exclude_account_id: Optional[int] = None
+    *,
+    external_user_id: Optional[str] = None,
+    anyrouter_user_id: Optional[int] = None,
+    exclude_account_id: Optional[int] = None,
 ) -> Optional[Account]:
-    """按平台和 user_id 查找已存在账号。"""
-    query = db.query(Account).filter(Account.anrouter_user_id == user_id)
+    """按平台及外部账号标识查找重复账号。"""
+    query = db.query(Account)
     if exclude_account_id is not None:
         query = query.filter(Account.id != exclude_account_id)
     if platform_id is None:
         query = query.filter(Account.platform_id.is_(None))
     else:
         query = query.filter(Account.platform_id == platform_id)
-    return query.first()
+
+    if anyrouter_user_id is not None:
+        return query.filter(Account.anyrouter_user_id == anyrouter_user_id).first()
+    cleaned_external_id = clean_optional_str(external_user_id)
+    if cleaned_external_id:
+        return query.filter(Account.external_user_id == cleaned_external_id).first()
+    return None
 
 
 def get_account_platform(account: Account) -> Optional[PlatformBrief]:
@@ -75,7 +86,8 @@ def get_account_platform(account: Account) -> Optional[PlatformBrief]:
         return PlatformBrief(
             id=account.platform.id,
             name=account.platform.name,
-            base_url=account.platform.base_url
+            base_url=account.platform.base_url,
+            adapter_type=account.platform.adapter_type or ADAPTER_TYPE_NEW_API,
         )
     return None
 
@@ -152,6 +164,171 @@ def clean_account_proxy(proxy_mode: Optional[str], proxy_url: Optional[str]) -> 
     return mode, None
 
 
+VALID_AUTH_TYPES = {"none", "custom", "bearer", "cookie", "header", "basic"}
+MAX_AUTH_DATA_LENGTH = 64 * 1024
+
+
+def normalize_auth_type(value: Optional[str], *, has_session_cookie: bool = False) -> str:
+    auth_type = (value or ("cookie" if has_session_cookie else "none")).strip().lower()
+    if auth_type not in VALID_AUTH_TYPES:
+        raise HTTPException(status_code=400, detail=f"不支持的认证方式: {auth_type}")
+    return auth_type
+
+
+def serialize_auth_data(value: Optional[Dict[str, Any]]) -> tuple[Dict[str, Any], Optional[str]]:
+    auth_data = dict(value or {})
+    try:
+        serialized = json.dumps(auth_data, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="认证数据必须是可序列化的 JSON 对象") from exc
+    if len(serialized.encode("utf-8")) > MAX_AUTH_DATA_LENGTH:
+        raise HTTPException(status_code=400, detail="认证数据不能超过 64KB")
+    return auth_data, serialized if auth_data else None
+
+
+def prepare_http_auth(
+    auth_type_value: Optional[str],
+    auth_data_value: Optional[Dict[str, Any]],
+    session_cookie: Optional[str],
+) -> tuple[str, Optional[str]]:
+    auth_data = dict(auth_data_value or {})
+    auth_type = normalize_auth_type(auth_type_value, has_session_cookie=bool(session_cookie))
+    if auth_type == "cookie" and session_cookie and not auth_data.get("cookie") and not auth_data.get("cookies"):
+        auth_data["cookie"] = session_cookie
+
+    if auth_type == "bearer" and not clean_optional_secret(auth_data.get("token")):
+        raise HTTPException(status_code=400, detail="Bearer 认证需要 auth_data.token")
+    if auth_type == "cookie" and not (auth_data.get("cookie") or isinstance(auth_data.get("cookies"), dict)):
+        raise HTTPException(status_code=400, detail="Cookie 认证需要 Session Cookie、auth_data.cookie 或 auth_data.cookies")
+    if auth_type == "header" and not (isinstance(auth_data.get("headers"), dict) or auth_data.get("name")):
+        raise HTTPException(status_code=400, detail="Header 认证需要 auth_data.headers 或 name/value")
+    if auth_type == "basic" and (auth_data.get("username") is None or auth_data.get("password") is None):
+        raise HTTPException(status_code=400, detail="Basic 认证需要 auth_data.username 和 auth_data.password")
+
+    _, serialized = serialize_auth_data(auth_data)
+    return auth_type, serialized
+
+
+def get_platform_adapter(platform_config: Dict[str, Any]):
+    return adapter_registry.get(platform_config["adapter_type"])
+
+
+def require_adapter_capability(account: Account, capability: str, feature_name: str) -> Dict[str, Any]:
+    ensure_account_platform(account)
+    platform_config = get_account_platform_config(account)
+    adapter = get_platform_adapter(platform_config)
+    if not getattr(adapter.capabilities, capability, False):
+        raise HTTPException(status_code=400, detail=f"当前平台适配器不支持{feature_name}")
+    return platform_config
+
+
+def _create_account_record(db: Session, data: Any) -> Account:
+    platform = get_platform_by_id(db, data.platform_id)
+    if not platform:
+        raise HTTPException(status_code=400, detail="平台不存在")
+    platform_config = get_platform_config(platform)
+    adapter = get_platform_adapter(platform_config)
+    note = clean_optional_note(data.note)
+    proxy_mode, proxy_url = clean_account_proxy(data.proxy_mode, data.proxy_url)
+
+    if platform_config["adapter_type"] == ADAPTER_TYPE_HTTP:
+        session_cookie = clean_optional_str(data.session_cookie)
+        external_user_id = clean_optional_str(data.external_user_id or data.user_id)
+        auth_type, auth_data = prepare_http_auth(data.auth_type, data.auth_data, session_cookie)
+        if find_existing_account(db, platform.id, external_user_id=external_user_id):
+            raise HTTPException(status_code=400, detail="该平台下该外部账号标识已存在")
+
+        account = Account(
+            session_cookie=session_cookie or "",
+            external_user_id=external_user_id,
+            auth_type=auth_type,
+            auth_data=auth_data,
+            username=clean_optional_str(data.username) or external_user_id or f"{platform.name} 账号",
+            display_name=clean_optional_str(data.display_name),
+            note=note,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+            health_status="unknown",
+            health_message="通用 HTTP 适配器未配置独立健康检查",
+            platform_id=platform.id,
+            group_id=data.group_id,
+        )
+    else:
+        user_id = clean_optional_str(data.user_id or data.external_user_id)
+        session_cookie = clean_optional_str(data.session_cookie)
+        login_username = clean_optional_str(data.login_username)
+        login_password = clean_optional_secret(data.login_password)
+        if bool(login_username) != bool(login_password):
+            raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
+        if not user_id and not (login_username and login_password):
+            raise HTTPException(status_code=400, detail="请填写 User ID，或填写登录账号和密码")
+
+        resolved, session_result = resolve_session_cookie(
+            base_url=platform_config["base_url"],
+            session_cookie=session_cookie,
+            login_username=login_username,
+            login_password=login_password,
+            prefer_login=not user_id and bool(login_username and login_password),
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
+        if not resolved:
+            raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
+        if not user_id:
+            user_id = clean_optional_str(session_result.get("user_id"))
+        try:
+            numeric_user_id = int(user_id or "")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="User ID 必须是整数") from exc
+
+        success, user_info = anrouter_service.get_user_info(
+            session_result.get("session_cookie", ""),
+            str(numeric_user_id),
+            platform_config["base_url"],
+            user_api=platform_config["user_api"],
+            console_url=platform_config["console_url"],
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail=user_info.get("message", "验证失败"))
+        if find_existing_account(db, platform.id, anyrouter_user_id=numeric_user_id):
+            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
+
+        now = datetime.now()
+        account = Account(
+            session_cookie=session_result.get("session_cookie", ""),
+            login_username=login_username,
+            login_password=login_password,
+            anyrouter_user_id=numeric_user_id,
+            external_user_id=str(numeric_user_id),
+            username=user_info.get("username"),
+            display_name=user_info.get("display_name"),
+            note=note,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
+            health_status="healthy",
+            last_health_check=now,
+            platform_id=platform.id,
+            group_id=data.group_id,
+            cached_quota=user_info.get("quota", 0),
+            cached_used_quota=user_info.get("used_quota", 0),
+            cached_request_count=user_info.get("request_count", 0),
+            cached_user_group=user_info.get("group", "default"),
+            cached_aff_code=user_info.get("aff_code"),
+            cached_aff_count=user_info.get("aff_count", 0),
+            cached_aff_history_quota=user_info.get("aff_history_quota", 0),
+            quota_updated_at=now,
+        )
+
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    if adapter.capabilities.supports_tokens:
+        sync_account_tokens(db, account)
+    return account
+
+
 def build_account_response(db: Session, account: Account) -> AccountResponse:
     """统一构造账号响应。"""
     total_quota = account.cached_quota + account.cached_used_quota
@@ -162,6 +339,9 @@ def build_account_response(db: Session, account: Account) -> AccountResponse:
         note=account.note,
         login_username=account.login_username,
         has_login_credentials=has_login_credentials(account),
+        external_user_id=account.external_user_id,
+        auth_type=account.auth_type,
+        has_auth_data=bool(account.auth_data),
         proxy_mode=account.proxy_mode or "direct",
         proxy_url=None,
         proxy_url_masked=mask_proxy_url(account.proxy_url) if account.proxy_url else None,
@@ -213,6 +393,7 @@ def build_accounts_query(
             Account.display_name.ilike(like_pattern),
             Account.note.ilike(like_pattern),
             Platform.name.ilike(like_pattern),
+            Account.external_user_id.ilike(like_pattern),
             cast(Account.anyrouter_user_id, String).ilike(like_pattern)
         ))
 
@@ -373,99 +554,10 @@ def create_account(
     data: AccountCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """添加账号"""
-    platform = get_platform_by_id(db, data.platform_id)
-    if not platform:
-        raise HTTPException(status_code=400, detail="平台不存在")
-    platform_config = get_platform_config(platform)
-    user_id = clean_optional_str(data.user_id)
-
-    session_cookie = clean_optional_str(data.session_cookie)
-    login_username = clean_optional_str(data.login_username)
-    login_password = clean_optional_secret(data.login_password)
-    note = clean_optional_note(data.note)
-    proxy_mode, proxy_url = clean_account_proxy(data.proxy_mode, data.proxy_url)
-
-    if bool(login_username) != bool(login_password):
-        raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
-
-    if not user_id and not (login_username and login_password):
-        raise HTTPException(status_code=400, detail="请填写 User ID，或填写登录账号和密码")
-
-    prefer_login = not user_id and bool(login_username and login_password)
-    resolved, session_result = resolve_session_cookie(
-        base_url=platform_config["base_url"],
-        session_cookie=session_cookie,
-        login_username=login_username,
-        login_password=login_password,
-        prefer_login=prefer_login,
-        proxy_mode=proxy_mode,
-        proxy_url=proxy_url,
-    )
-    if not resolved:
-        raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
-
-    if not user_id:
-        user_id = clean_optional_str(session_result.get("user_id"))
-        if not user_id:
-            raise HTTPException(status_code=400, detail="登录成功但未获取到 User ID，请手动填写")
-
-    # 验证 session_cookie 和 user_id
-    success, user_info = anrouter_service.get_user_info(
-        session_result.get("session_cookie", ""),
-        user_id,
-        platform_config["base_url"],
-        user_api=platform_config["user_api"],
-        console_url=platform_config["console_url"],
-        proxy_mode=proxy_mode,
-        proxy_url=proxy_url,
-    )
-
-    if not success:
-        raise HTTPException(status_code=400, detail=user_info.get("message", "验证失败"))
-
-    # 检查是否已存在
-    existing = find_existing_account(db, int(user_id), platform.id if platform else None)
-
-    if existing:
-        raise HTTPException(status_code=400, detail="该平台下该账号已存在")
-
-    # 创建账号
-    account = Account(
-        session_cookie=session_result.get("session_cookie", ""),
-        login_username=login_username,
-        login_password=login_password,
-        note=note,
-        proxy_mode=proxy_mode,
-        proxy_url=proxy_url,
-        anrouter_user_id=int(user_id),
-        username=user_info.get("username"),
-        display_name=user_info.get("display_name"),
-        health_status="healthy",
-        last_health_check=datetime.now(),
-        platform_id=platform.id if platform else None,
-        group_id=data.group_id,
-        # 初始化所有缓存字段
-        cached_quota=user_info.get("quota", 0),
-        cached_used_quota=user_info.get("used_quota", 0),
-        cached_request_count=user_info.get("request_count", 0),
-        cached_user_group=user_info.get("group", "default"),
-        cached_aff_code=user_info.get("aff_code"),
-        cached_aff_count=user_info.get("aff_count", 0),
-        cached_aff_history_quota=user_info.get("aff_history_quota", 0),
-        quota_updated_at=datetime.now()
-    )
-
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-
-    # 同步 API Tokens
-    sync_account_tokens(db, account)
-
-    # 记录审计日志
+    """添加 New API 或通用 HTTP 平台账号。"""
+    account = _create_account_record(db, data)
     log_action(
         db=db,
         action=AuditAction.ACCOUNT_CREATE,
@@ -474,23 +566,14 @@ def create_account(
         target_type="account",
         target_id=account.id,
         target_name=account.username,
-        request=request
+        request=request,
     )
-
-    publish_event(
-        "account_changed",
-        {
-            "account_id": account.id,
-            "username": account.username or "",
-            "action": "created",
-        }
-    )
-
-    return ApiResponse(
-        success=True,
-        message="账号添加成功",
-        data=build_account_response(db, account)
-    )
+    publish_event("account_changed", {
+        "account_id": account.id,
+        "username": account.username or "",
+        "action": "created",
+    })
+    return ApiResponse(success=True, message="账号添加成功", data=build_account_response(db, account))
 
 
 @router.post("/batch-import", response_model=ApiResponse)
@@ -498,122 +581,14 @@ def batch_import_accounts(
     data: BatchImportRequest,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """批量导入账号：逐条验证，不抛异常，返回每条结果"""
+    """批量导入账号；每条按所属平台适配器独立验证。"""
     results: List[BatchImportResultItem] = []
     success_count = 0
-
     for idx, item in enumerate(data.items):
         try:
-            platform = get_platform_by_id(db, item.platform_id)
-            if not platform:
-                results.append(BatchImportResultItem(
-                    index=idx, success=False, message="平台不存在"
-                ))
-                continue
-
-            platform_config = get_platform_config(platform)
-            user_id = clean_optional_str(item.user_id)
-            session_cookie = clean_optional_str(item.session_cookie)
-            login_username = clean_optional_str(item.login_username)
-            login_password = clean_optional_secret(item.login_password)
-            note = clean_optional_note(item.note)
-            proxy_mode, proxy_url = clean_account_proxy(item.proxy_mode, item.proxy_url)
-
-            if bool(login_username) != bool(login_password):
-                results.append(BatchImportResultItem(
-                    index=idx, success=False, message="登录账号和密码需要同时填写"
-                ))
-                continue
-
-            if not user_id and not (login_username and login_password):
-                results.append(BatchImportResultItem(
-                    index=idx, success=False, message="缺少 User ID 或登录凭证"
-                ))
-                continue
-
-            prefer_login = not user_id and bool(login_username and login_password)
-            resolved, session_result = resolve_session_cookie(
-                base_url=platform_config["base_url"],
-                session_cookie=session_cookie,
-                login_username=login_username,
-                login_password=login_password,
-                prefer_login=prefer_login,
-                proxy_mode=proxy_mode,
-                proxy_url=proxy_url,
-            )
-            if not resolved:
-                results.append(BatchImportResultItem(
-                    index=idx, success=False,
-                    message=session_result.get("message", "凭证解析失败")
-                ))
-                continue
-
-            if not user_id:
-                user_id = clean_optional_str(session_result.get("user_id"))
-                if not user_id:
-                    results.append(BatchImportResultItem(
-                        index=idx, success=False, message="未能获取 User ID"
-                    ))
-                    continue
-
-            ok, user_info = anrouter_service.get_user_info(
-                session_result.get("session_cookie", ""),
-                user_id,
-                platform_config["base_url"],
-                user_api=platform_config["user_api"],
-                console_url=platform_config["console_url"],
-                proxy_mode=proxy_mode,
-                proxy_url=proxy_url,
-            )
-            if not ok:
-                results.append(BatchImportResultItem(
-                    index=idx, success=False,
-                    message=user_info.get("message", "验证失败")
-                ))
-                continue
-
-            if find_existing_account(db, int(user_id), platform.id):
-                results.append(BatchImportResultItem(
-                    index=idx, success=False,
-                    message="该平台下该账号已存在",
-                    username=user_info.get("username")
-                ))
-                continue
-
-            account = Account(
-                session_cookie=session_result.get("session_cookie", ""),
-                login_username=login_username,
-                login_password=login_password,
-                note=note,
-                proxy_mode=proxy_mode,
-                proxy_url=proxy_url,
-                anrouter_user_id=int(user_id),
-                username=user_info.get("username"),
-                display_name=user_info.get("display_name"),
-                health_status="healthy",
-                last_health_check=datetime.now(),
-                platform_id=platform.id,
-                group_id=item.group_id,
-                cached_quota=user_info.get("quota", 0),
-                cached_used_quota=user_info.get("used_quota", 0),
-                cached_request_count=user_info.get("request_count", 0),
-                cached_user_group=user_info.get("group", "default"),
-                cached_aff_code=user_info.get("aff_code"),
-                cached_aff_count=user_info.get("aff_count", 0),
-                cached_aff_history_quota=user_info.get("aff_history_quota", 0),
-                quota_updated_at=datetime.now()
-            )
-            db.add(account)
-            db.commit()
-            db.refresh(account)
-
-            try:
-                sync_account_tokens(db, account)
-            except Exception:
-                pass
-
+            account = _create_account_record(db, item)
             log_action(
                 db=db,
                 action=AuditAction.ACCOUNT_CREATE,
@@ -622,28 +597,24 @@ def batch_import_accounts(
                 target_type="account",
                 target_id=account.id,
                 target_name=account.username,
-                request=request
+                request=request,
             )
-
-            publish_event(
-                "account_changed",
-                {
-                    "account_id": account.id,
-                    "username": account.username or "",
-                    "action": "created",
-                }
-            )
-
+            publish_event("account_changed", {
+                "account_id": account.id,
+                "username": account.username or "",
+                "action": "created",
+            })
             success_count += 1
             results.append(BatchImportResultItem(
                 index=idx, success=True, message="导入成功",
-                account_id=account.id, username=account.username
+                account_id=account.id, username=account.username,
             ))
-        except Exception as e:
+        except HTTPException as exc:
             db.rollback()
-            results.append(BatchImportResultItem(
-                index=idx, success=False, message=str(e) or "导入失败"
-            ))
+            results.append(BatchImportResultItem(index=idx, success=False, message=str(exc.detail)))
+        except Exception as exc:
+            db.rollback()
+            results.append(BatchImportResultItem(index=idx, success=False, message=str(exc) or "导入失败"))
 
     return ApiResponse(
         success=True,
@@ -652,8 +623,8 @@ def batch_import_accounts(
             "total": len(data.items),
             "success_count": success_count,
             "fail_count": len(data.items) - success_count,
-            "results": [r.model_dump() for r in results]
-        }
+            "results": [result.model_dump() for result in results],
+        },
     )
 
 
@@ -674,129 +645,132 @@ def update_account(
     data: AccountUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """更新账号"""
+    """按目标平台适配器更新账号。"""
     account = db.query(Account).filter(Account.id == account_id).first()
-
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
-    changes = {}
-    target_platform = account.platform
-    target_platform_id = account.platform_id
+    updates = data.model_dump(exclude_unset=True)
+    target_platform_id = updates.get("platform_id", account.platform_id)
+    target_platform = get_platform_by_id(db, target_platform_id)
+    if not target_platform:
+        raise HTTPException(status_code=400, detail="账号未配置有效平台")
+    platform_config = get_platform_config(target_platform)
+    adapter = get_platform_adapter(platform_config)
+    changes: Dict[str, Any] = {}
 
-    if data.platform_id is not None:
-        new_platform_id = data.platform_id
-        target_platform = get_platform_by_id(db, new_platform_id)
-        if not target_platform:
-            raise HTTPException(status_code=400, detail="平台不存在")
-        if account.platform_id != new_platform_id:
-            changes["platform_id"] = f"{account.platform_id} -> {new_platform_id}"
-            account.platform_id = new_platform_id
-            account.platform = target_platform
-        target_platform_id = new_platform_id
-    elif not target_platform_id or not target_platform:
-        raise HTTPException(status_code=400, detail="账号未配置平台，请先选择平台")
+    proxy_mode = updates.get("proxy_mode", account.proxy_mode or "direct")
+    proxy_url = updates.get("proxy_url", account.proxy_url)
+    if proxy_mode == "custom" and updates.get("proxy_url") == "" and account.proxy_url:
+        proxy_url = account.proxy_url
+    proxy_mode, proxy_url = clean_account_proxy(proxy_mode, proxy_url)
 
-    target_user_id = clean_optional_str(data.user_id) or (
-        str(account.anrouter_user_id) if account.anrouter_user_id is not None else None
-    )
-    target_login_username = (
-        clean_optional_str(data.login_username)
-        if data.login_username is not None else account.login_username
-    )
-    target_login_password = (
-        clean_optional_secret(data.login_password)
-        if data.login_password is not None else account.login_password
-    )
-    next_note = account.note
-
-    if data.clear_login_credentials:
-        target_login_username = None
-        target_login_password = None
-
-    if data.note is not None:
-        next_note = clean_optional_note(data.note)
-
-    proxy_updated = data.proxy_mode is not None or data.proxy_url is not None
-    target_proxy_mode = account.proxy_mode or "direct"
-    target_proxy_url = account.proxy_url
-    if proxy_updated:
-        target_proxy_mode = data.proxy_mode if data.proxy_mode is not None else target_proxy_mode
-        target_proxy_url = data.proxy_url if data.proxy_url is not None else target_proxy_url
-        if target_proxy_mode == "custom" and data.proxy_url == "" and account.proxy_url:
-            target_proxy_url = account.proxy_url
-        target_proxy_mode, target_proxy_url = clean_account_proxy(target_proxy_mode, target_proxy_url)
-
-    if target_user_id and (data.user_id is not None or data.platform_id is not None):
-        existing = find_existing_account(
-            db,
-            int(target_user_id),
-            target_platform_id,
-            exclude_account_id=account.id
+    if platform_config["adapter_type"] == ADAPTER_TYPE_HTTP:
+        external_user_id = clean_optional_str(
+            updates.get("external_user_id", updates.get("user_id", account.external_user_id))
         )
-        if existing:
-            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
+        if find_existing_account(
+            db, target_platform.id, external_user_id=external_user_id, exclude_account_id=account.id
+        ):
+            raise HTTPException(status_code=400, detail="该平台下该外部账号标识已存在")
 
-    if bool(target_login_username) != bool(target_login_password):
-        raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
+        session_cookie = account.session_cookie
+        if "session_cookie" in updates:
+            session_cookie = clean_optional_str(updates.get("session_cookie"))
+        if updates.get("clear_auth_data"):
+            auth_type = "none"
+            auth_data = None
+        elif "auth_data" in updates or "auth_type" in updates or "session_cookie" in updates:
+            current_auth_data = None
+            if "auth_data" not in updates and account.auth_data:
+                try:
+                    current_auth_data = json.loads(account.auth_data)
+                except (TypeError, ValueError):
+                    current_auth_data = {}
+            auth_type, auth_data = prepare_http_auth(
+                updates.get("auth_type", account.auth_type),
+                updates.get("auth_data", current_auth_data),
+                session_cookie,
+            )
+        else:
+            auth_type, auth_data = account.auth_type or "none", account.auth_data
 
-    credentials_updated = any([
-        data.session_cookie is not None,
-        data.user_id is not None,
-        data.login_username is not None,
-        data.login_password is not None,
-        data.clear_login_credentials is not None,
-    ])
-    remote_validation_needed = credentials_updated or data.platform_id is not None or proxy_updated
+        account.platform_id = target_platform.id
+        account.session_cookie = session_cookie or ""
+        account.external_user_id = external_user_id
+        account.auth_type = auth_type
+        account.auth_data = auth_data
+        account.anyrouter_user_id = None
+        account.username = clean_optional_str(updates.get("username", account.username)) or external_user_id or f"{target_platform.name} 账号"
+        if "display_name" in updates:
+            account.display_name = clean_optional_str(updates.get("display_name"))
+        if updates.get("clear_login_credentials"):
+            account.login_username = None
+            account.login_password = None
+        account.health_status = "unknown"
+        account.health_message = "通用 HTTP 适配器未配置独立健康检查"
+        account.last_health_check = datetime.now()
+        db.query(ApiToken).filter(ApiToken.account_id == account.id).delete()
+        changes["credentials"] = "已更新"
+    else:
+        user_id_value = clean_optional_str(
+            updates.get("user_id", updates.get("external_user_id", str(account.anyrouter_user_id or "")))
+        )
+        login_username = clean_optional_str(updates.get("login_username", account.login_username))
+        login_password = clean_optional_secret(updates.get("login_password", account.login_password))
+        if updates.get("clear_login_credentials"):
+            login_username = None
+            login_password = None
+        if bool(login_username) != bool(login_password):
+            raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
 
-    if remote_validation_needed:
-        # 使用新的 user_id 或现有的
-        user_id = target_user_id
-        if not user_id:
-            raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-        platform_config = get_platform_config(target_platform)
-        prefer_login = data.login_username is not None or data.login_password is not None
+        prefer_login = "login_username" in updates or "login_password" in updates
         resolved, session_result = resolve_session_cookie(
             base_url=platform_config["base_url"],
-            session_cookie=(
-                clean_optional_str(data.session_cookie)
-                if data.session_cookie is not None else account.session_cookie
-            ),
-            login_username=target_login_username,
-            login_password=target_login_password,
+            session_cookie=clean_optional_str(updates.get("session_cookie", account.session_cookie)),
+            login_username=login_username,
+            login_password=login_password,
             prefer_login=prefer_login,
-            proxy_mode=target_proxy_mode,
-            proxy_url=target_proxy_url,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
         if not resolved:
             raise HTTPException(status_code=400, detail=session_result.get("message", "凭证验证失败"))
+        if not user_id_value:
+            user_id_value = clean_optional_str(session_result.get("user_id"))
+        try:
+            numeric_user_id = int(user_id_value or "")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="User ID 必须是整数") from exc
+        if find_existing_account(
+            db, target_platform.id, anyrouter_user_id=numeric_user_id, exclude_account_id=account.id
+        ):
+            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
 
-        session_cookie = session_result.get("session_cookie", "")
-
-        # 验证新的凭证
         success, user_info = anrouter_service.get_user_info(
-            session_cookie,
-            user_id,
+            session_result.get("session_cookie", ""),
+            str(numeric_user_id),
             platform_config["base_url"],
             user_api=platform_config["user_api"],
             console_url=platform_config["console_url"],
-            proxy_mode=target_proxy_mode,
-            proxy_url=target_proxy_url,
+            proxy_mode=proxy_mode,
+            proxy_url=proxy_url,
         )
         if not success:
             raise HTTPException(status_code=400, detail=user_info.get("message", "凭证验证失败"))
 
-        if credentials_updated or data.platform_id is not None:
-            account.session_cookie = session_cookie
-            account.login_username = target_login_username
-            account.login_password = target_login_password
-        account.anrouter_user_id = int(user_id)
+        account.platform_id = target_platform.id
+        account.session_cookie = session_result.get("session_cookie", "")
+        account.login_username = login_username
+        account.login_password = login_password
+        account.anyrouter_user_id = numeric_user_id
+        account.external_user_id = str(numeric_user_id)
+        account.auth_type = None
+        account.auth_data = None
         account.username = user_info.get("username")
         account.display_name = user_info.get("display_name")
-        # 更新所有缓存字段
         account.cached_quota = user_info.get("quota", 0)
         account.cached_used_quota = user_info.get("used_quota", 0)
         account.cached_request_count = user_info.get("request_count", 0)
@@ -805,60 +779,35 @@ def update_account(
         account.cached_aff_count = user_info.get("aff_count", 0)
         account.cached_aff_history_quota = user_info.get("aff_history_quota", 0)
         account.quota_updated_at = datetime.now()
-        if credentials_updated:
-            changes["credentials"] = "已更新"
+        account.health_status = "healthy"
+        account.health_message = None
+        account.last_health_check = datetime.now()
+        changes["credentials"] = "已更新"
 
-    if proxy_updated:
-        previous_proxy_mode = account.proxy_mode or "direct"
-        previous_proxy_url = account.proxy_url
-        if previous_proxy_mode != target_proxy_mode:
-            changes["proxy_mode"] = f"{previous_proxy_mode} -> {target_proxy_mode}"
-        if previous_proxy_url != target_proxy_url:
-            changes["proxy_url"] = "已更新"
-        account.proxy_mode = target_proxy_mode
-        account.proxy_url = target_proxy_url
-
-    if data.is_active is not None:
-        if account.is_active != data.is_active:
-            changes["is_active"] = f"{account.is_active} -> {data.is_active}"
-        account.is_active = data.is_active
-
-    if data.group_id is not None:
-        if account.group_id != (data.group_id if data.group_id > 0 else None):
-            changes["group_id"] = f"{account.group_id} -> {data.group_id if data.group_id > 0 else None}"
-        account.group_id = data.group_id if data.group_id > 0 else None
-
-    if data.note is not None:
-        if account.note != next_note:
-            changes["note"] = "已更新"
-        account.note = next_note
-
+    account.proxy_mode = proxy_mode
+    account.proxy_url = proxy_url
+    if "is_active" in updates:
+        account.is_active = bool(updates["is_active"])
+    if "group_id" in updates:
+        group_id = updates["group_id"]
+        account.group_id = group_id if group_id and group_id > 0 else None
+    if "note" in updates:
+        account.note = clean_optional_note(updates.get("note"))
     account.updated_at = datetime.now()
     db.commit()
+    db.refresh(account)
+    if adapter.capabilities.supports_tokens:
+        sync_account_tokens(db, account)
 
-    # 记录审计日志
     log_action(
-        db=db,
-        action=AuditAction.ACCOUNT_UPDATE,
-        user_id=current_user.id,
-        username=current_user.username,
-        target_type="account",
-        target_id=account.id,
-        target_name=account.username,
-        detail=changes if changes else None,
-        request=request
+        db=db, action=AuditAction.ACCOUNT_UPDATE, user_id=current_user.id,
+        username=current_user.username, target_type="account", target_id=account.id,
+        target_name=account.username, detail=changes or None, request=request,
     )
-
-    publish_event(
-        "account_changed",
-        {
-            "account_id": account.id,
-            "username": account.username or "",
-            "action": "updated",
-        }
-    )
-
-    return ApiResponse(success=True, message="账号更新成功")
+    publish_event("account_changed", {
+        "account_id": account.id, "username": account.username or "", "action": "updated",
+    })
+    return ApiResponse(success=True, message="账号更新成功", data=build_account_response(db, account))
 
 
 @router.delete("/{account_id}", response_model=ApiResponse)
@@ -918,11 +867,9 @@ def get_account_info(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_user_info", "用户信息查询")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     success, user_info = refresh_account_user_cache(
         db,
@@ -980,6 +927,8 @@ def get_cached_account_info(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    require_adapter_capability(account, "supports_user_info", "用户信息查询")
+
     # 获取本地分组信息
     local_group = None
     if account.group_id:
@@ -1019,11 +968,9 @@ def sync_account_tokens(db: Session, account: Account) -> int:
     Returns:
         int: 同步的 token 数量
     """
+    platform_config = require_adapter_capability(account, "supports_tokens", "Token 管理")
     if not account.anrouter_user_id:
         return 0
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     success, result = execute_with_session_refresh(
         db,
@@ -1096,6 +1043,7 @@ def sync_tokens(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    require_adapter_capability(account, "supports_tokens", "Token 管理")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
 
@@ -1136,35 +1084,44 @@ def check_account_health(db: Session, account: Account) -> HealthCheckResponse:
             }
         )
 
-    if not account.anrouter_user_id:
+    try:
+        ensure_account_platform(account)
+        platform_config = get_account_platform_config(account)
+        adapter = get_platform_adapter(platform_config)
+    except (HTTPException, ValueError) as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        account.health_status = "unhealthy"
+        account.health_message = detail
+        account.last_health_check = now
+        db.commit()
+        emit_health_change()
+        return HealthCheckResponse(
+            account_id=account.id, health_status="unhealthy",
+            health_message=detail, checked_at=now,
+        )
+
+    if not adapter.capabilities.supports_health_check:
+        account.health_status = "unknown"
+        account.health_message = "当前平台未配置独立健康检查，请以最近签到结果为准"
+        account.last_health_check = now
+        db.commit()
+        emit_health_change()
+        return HealthCheckResponse(
+            account_id=account.id, health_status="unknown",
+            health_message=account.health_message, checked_at=now,
+        )
+
+    if adapter.capabilities.requires_external_user_id and not account.anrouter_user_id:
         account.health_status = "unhealthy"
         account.health_message = "缺少 user_id"
         account.last_health_check = now
         db.commit()
         emit_health_change()
         return HealthCheckResponse(
-            account_id=account.id,
-            health_status="unhealthy",
-            health_message="缺少 user_id",
-            checked_at=now
+            account_id=account.id, health_status="unhealthy",
+            health_message=account.health_message, checked_at=now,
         )
 
-    try:
-        ensure_account_platform(account)
-    except HTTPException as e:
-        account.health_status = "unhealthy"
-        account.health_message = e.detail
-        account.last_health_check = now
-        db.commit()
-        emit_health_change()
-        return HealthCheckResponse(
-            account_id=account.id,
-            health_status="unhealthy",
-            health_message=e.detail,
-            checked_at=now
-        )
-
-    platform_config = get_account_platform_config(account)
 
     # 尝试获取用户信息来验证凭证
     success, user_info = refresh_account_user_cache(
@@ -1217,21 +1174,25 @@ def health_check_all_accounts(db: Session = Depends(get_db)):
     results = []
     healthy_count = 0
     unhealthy_count = 0
+    unknown_count = 0
 
     for account in accounts:
         result = check_account_health(db, account)
         results.append(result.model_dump())
         if result.health_status == "healthy":
             healthy_count += 1
-        else:
+        elif result.health_status == "unhealthy":
             unhealthy_count += 1
+        else:
+            unknown_count += 1
 
     return ApiResponse(
         success=True,
-        message=f"健康检查完成: {healthy_count} 个健康, {unhealthy_count} 个异常",
+        message=f"健康检查完成: {healthy_count} 个健康, {unhealthy_count} 个异常, {unknown_count} 个未检查",
         data={
             "healthy_count": healthy_count,
             "unhealthy_count": unhealthy_count,
+            "unknown_count": unknown_count,
             "results": results
         }
     )
@@ -1245,11 +1206,9 @@ def create_account_token(account_id: int, data: CreateTokenRequest, db: Session 
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_tokens", "Token 管理")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     success, result = execute_with_session_refresh(
         db,
@@ -1294,11 +1253,9 @@ def get_account_models(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_models", "模型列表查询")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     success, result = execute_with_session_refresh(
         db,
@@ -1332,11 +1289,9 @@ def get_account_groups(account_id: int, db: Session = Depends(get_db)):
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_groups", "平台分组查询")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     success, result = execute_with_session_refresh(
         db,
@@ -1370,11 +1325,9 @@ def delete_account_token(account_id: int, token_id: int, db: Session = Depends(g
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_tokens", "Token 管理")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     # 尝试远程删除
     success, result = execute_with_session_refresh(
@@ -1417,11 +1370,9 @@ def update_account_token(account_id: int, token_id: int, data: dict, db: Session
     if not account:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    platform_config = require_adapter_capability(account, "supports_tokens", "Token 管理")
     if not account.anrouter_user_id:
         raise HTTPException(status_code=400, detail="账号缺少 user_id")
-
-    ensure_account_platform(account)
-    platform_config = get_account_platform_config(account)
 
     # 确保 token_data 包含必要字段
     data["id"] = token_id
@@ -1468,3 +1419,4 @@ def update_account_token(account_id: int, token_id: int, data: dict, db: Session
         success=True,
         message=result.get("message", "更新成功")
     )
+

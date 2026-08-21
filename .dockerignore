@@ -1,0 +1,33 @@
+# --- 版本控制与 IDE ---
+.git
+.gitignore
+.github
+.idea
+.vscode
+*.md
+
+# --- 前端 ---
+frontend/node_modules
+frontend/dist
+# 残留的 tsc 编译产物：Vite 解析 vite.config.js 优先于 vite.config.ts，
+# 一旦进入构建上下文会静默覆盖真正的 TS 配置。必须排除。
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/*.tsbuildinfo
+
+# --- 后端 ---
+backend/.venv
+backend/venv
+backend/data
+backend/logs
+backend/**/__pycache__
+backend/**/*.pyc
+
+# --- 部署产物与本地运行数据 ---
+data
+logs
+docker-compose*.yml
+# 配置不进镜像，运行时由 compose 的 environment 注入
+.env
+.env.*
+anyrouter.service

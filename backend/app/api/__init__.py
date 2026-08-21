@@ -15,6 +15,7 @@ from .audit import router as audit_router
 from .logs import router as logs_router
 from .platforms import router as platforms_router
 from .events import router as events_router
+from .system import router as system_router
 
 __all__ = [
     "accounts_router",
@@ -30,5 +31,6 @@ __all__ = [
     "audit_router",
     "logs_router",
     "platforms_router",
-    "events_router"
+    "events_router",
+    "system_router"
 ]

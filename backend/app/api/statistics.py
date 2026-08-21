@@ -4,15 +4,29 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, desc, func
+from sqlalchemy import and_, case, desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Account, SignLog
+from app.models import Account, Platform, SignLog
 from app.schemas import ApiResponse
-from app.utils import format_quota
+from app.utils import add_reward_total, format_quota, serialize_reward_totals
 
 router = APIRouter(prefix="/statistics", tags=["统计"])
+
+
+def _collect_reward_totals(rows) -> dict[str, int | float]:
+    totals: dict[str, float] = {}
+    for log, adapter_type in rows:
+        if not log.success:
+            continue
+        add_reward_total(
+            totals,
+            log.reward_quota,
+            log.reward_unit,
+            adapter_type=adapter_type,
+        )
+    return serialize_reward_totals(totals)
 
 
 @router.get("/overview", response_model=ApiResponse)
@@ -36,15 +50,23 @@ def get_overview(db: Session = Depends(get_db)):
     month_success = sum(1 for log in month_logs if log.success)
     month_total = len(month_logs)
 
-    # 累计奖励
-    total_reward = db.query(func.sum(SignLog.reward_quota)).filter(
-        SignLog.success == True
-    ).scalar() or 0
-
-    month_reward = db.query(func.sum(SignLog.reward_quota)).filter(
+    # 原有美元统计只计算 New API quota，通用 HTTP 奖励按自身单位单独聚合。
+    quota_reward_query = db.query(func.sum(SignLog.reward_quota)).join(
+        Account, Account.id == SignLog.account_id
+    ).join(Platform, Platform.id == Account.platform_id).filter(
         SignLog.success == True,
-        SignLog.sign_time >= month_start
-    ).scalar() or 0
+        Platform.adapter_type == "new_api",
+    )
+    total_reward = quota_reward_query.scalar() or 0
+    month_reward = quota_reward_query.filter(SignLog.sign_time >= month_start).scalar() or 0
+
+    reward_rows = db.query(SignLog, Platform.adapter_type).join(
+        Account, Account.id == SignLog.account_id
+    ).outerjoin(Platform, Platform.id == Account.platform_id).filter(SignLog.success == True).all()
+    total_reward_totals = _collect_reward_totals(reward_rows)
+    month_reward_totals = _collect_reward_totals([
+        row for row in reward_rows if row[0].sign_time >= month_start
+    ])
 
     # 签到成功率
     all_logs = db.query(SignLog).count()
@@ -65,6 +87,8 @@ def get_overview(db: Session = Depends(get_db)):
             "total_reward_display": format_quota(total_reward),
             "month_reward": month_reward,
             "month_reward_display": format_quota(month_reward),
+            "total_reward_totals": total_reward_totals,
+            "month_reward_totals": month_reward_totals,
             "success_rate": success_rate,
         }
     )
@@ -90,7 +114,9 @@ def get_daily_stats(
         start = (end - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0)
 
     # 查询每日签到数据
-    logs = db.query(SignLog).filter(
+    logs = db.query(SignLog, Platform.adapter_type).join(
+        Account, Account.id == SignLog.account_id
+    ).outerjoin(Platform, Platform.id == Account.platform_id).filter(
         SignLog.sign_time >= start,
         SignLog.sign_time <= end
     ).all()
@@ -100,15 +126,22 @@ def get_daily_stats(
     current = start
     while current <= end:
         date = current.strftime("%Y-%m-%d")
-        daily_data[date] = {"success": 0, "fail": 0, "reward": 0}
+        daily_data[date] = {"success": 0, "fail": 0, "reward": 0, "reward_totals": {}}
         current += timedelta(days=1)
 
-    for log in logs:
+    for log, adapter_type in logs:
         date = log.sign_time.strftime("%Y-%m-%d")
         if date in daily_data:
             if log.success:
                 daily_data[date]["success"] += 1
-                daily_data[date]["reward"] += log.reward_quota
+                if adapter_type == "new_api":
+                    daily_data[date]["reward"] += log.reward_quota
+                add_reward_total(
+                    daily_data[date]["reward_totals"],
+                    log.reward_quota,
+                    log.reward_unit,
+                    adapter_type=adapter_type,
+                )
             else:
                 daily_data[date]["fail"] += 1
 
@@ -122,7 +155,8 @@ def get_daily_stats(
             "fail": data["fail"],
             "total": data["success"] + data["fail"],
             "reward": data["reward"],
-            "reward_display": format_quota(data["reward"])
+            "reward_display": format_quota(data["reward"]),
+            "reward_totals": serialize_reward_totals(data["reward_totals"])
         })
 
     return ApiResponse(success=True, data=result)
@@ -152,14 +186,21 @@ def get_monthly_stats(
             month_end = datetime(year, month + 1, 1)
 
         # 查询该月数据
-        month_logs = db.query(SignLog).filter(
+        month_logs = db.query(SignLog, Platform.adapter_type).join(
+            Account, Account.id == SignLog.account_id
+        ).outerjoin(Platform, Platform.id == Account.platform_id).filter(
             SignLog.sign_time >= month_start,
             SignLog.sign_time < month_end
         ).all()
 
-        success_count = sum(1 for log in month_logs if log.success)
+        success_count = sum(1 for log, _ in month_logs if log.success)
         fail_count = len(month_logs) - success_count
-        reward = sum(log.reward_quota for log in month_logs if log.success)
+        reward = sum(
+            log.reward_quota
+            for log, adapter_type in month_logs
+            if log.success and adapter_type == "new_api"
+        )
+        reward_totals = _collect_reward_totals(month_logs)
 
         result.append({
             "month": f"{year}-{month:02d}",
@@ -168,7 +209,8 @@ def get_monthly_stats(
             "total": len(month_logs),
             "success_rate": round(success_count / len(month_logs) * 100, 1) if month_logs else 0,
             "reward": reward,
-            "reward_display": format_quota(reward)
+            "reward_display": format_quota(reward),
+            "reward_totals": reward_totals
         })
 
     return ApiResponse(success=True, data=result)
@@ -187,7 +229,7 @@ def get_account_stats(
 
     success_count_expr = func.coalesce(func.sum(case((SignLog.success == True, 1), else_=0)), 0)
     total_signs_expr = func.count(SignLog.id)
-    total_reward_expr = func.coalesce(func.sum(case((SignLog.success == True, SignLog.reward_quota), else_=0)), 0)
+    total_reward_expr = func.coalesce(func.sum(case((and_(SignLog.success == True, Platform.adapter_type == "new_api"), SignLog.reward_quota), else_=0)), 0)
     fail_count_expr = total_signs_expr - success_count_expr
     success_rate_expr = case(
         (total_signs_expr > 0, success_count_expr * 100.0 / total_signs_expr),
@@ -206,6 +248,7 @@ def get_account_stats(
             success_rate_expr.label("success_rate"),
             total_reward_expr.label("total_reward"),
         )
+        .outerjoin(Platform, Platform.id == Account.platform_id)
         .outerjoin(SignLog, SignLog.account_id == Account.id)
         .group_by(Account.id)
     )
@@ -230,6 +273,21 @@ def get_account_stats(
 
     row_account_ids = [row.account_id for row in rows]
     streaks = calculate_streaks(db, row_account_ids)
+    reward_totals_by_account: dict[int, dict[str, float]] = {account_id: {} for account_id in row_account_ids}
+    if row_account_ids:
+        reward_rows = db.query(SignLog, Platform.adapter_type).join(
+            Account, Account.id == SignLog.account_id
+        ).outerjoin(Platform, Platform.id == Account.platform_id).filter(
+            SignLog.account_id.in_(row_account_ids),
+            SignLog.success == True,
+        ).all()
+        for log, adapter_type in reward_rows:
+            add_reward_total(
+                reward_totals_by_account.setdefault(log.account_id, {}),
+                log.reward_quota,
+                log.reward_unit,
+                adapter_type=adapter_type,
+            )
 
     result = []
     for row in rows:
@@ -242,6 +300,7 @@ def get_account_stats(
             "success_rate": round(float(row.success_rate or 0), 1),
             "total_reward": int(row.total_reward or 0),
             "total_reward_display": format_quota(int(row.total_reward or 0)),
+            "reward_totals": serialize_reward_totals(reward_totals_by_account.get(row.account_id, {})),
             "streak_days": streaks.get(row.account_id, 0),
             "is_active": row.is_active,
             "health_status": row.health_status
@@ -367,7 +426,7 @@ def export_stats(
             "account": account.username,
             "success": "成功" if log.success else "失败",
             "message": log.message,
-            "reward": format_quota(log.reward_quota) if log.success else "-"
+            "reward": (log.reward_display or format_quota(log.reward_quota)) if log.success else "-"
         })
 
     if format == "csv":

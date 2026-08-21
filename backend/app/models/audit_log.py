@@ -61,6 +61,9 @@ class AuditAction:
     GROUP_UPDATE = "group_update"
     GROUP_DELETE = "group_delete"
 
+    # 系统相关
+    SYSTEM_UPDATE = "system_update"
+
 
 # 操作类型显示名称
 ACTION_NAMES = {
@@ -83,4 +86,5 @@ ACTION_NAMES = {
     AuditAction.GROUP_CREATE: "创建分组",
     AuditAction.GROUP_UPDATE: "更新分组",
     AuditAction.GROUP_DELETE: "删除分组",
+    AuditAction.SYSTEM_UPDATE: "系统更新",
 }

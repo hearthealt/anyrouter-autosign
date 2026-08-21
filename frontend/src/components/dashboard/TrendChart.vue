@@ -4,7 +4,7 @@
     <div class="trend-legend">
       <span class="legend-item"><span class="dot success"></span>成功</span>
       <span class="legend-item"><span class="dot fail"></span>失败</span>
-      <span class="legend-item"><span class="dot reward"></span>奖励</span>
+      <span class="legend-item"><span class="dot reward"></span>美元奖励</span>
     </div>
   </div>
 </template>
@@ -13,6 +13,7 @@
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import type { DailyTrend } from '../../types'
+import { escapeHtml, formatRewardTotals } from '../../utils'
 
 const props = defineProps<{
   data: DailyTrend[]
@@ -56,6 +57,14 @@ const formatReward = (quota: number | undefined | null): string => {
   return `$${usd.toFixed(2)}`
 }
 
+const getRewardDisplay = (day?: DailyTrend): string => {
+  if (!day) return ''
+  const hasTotals = Object.values(day.reward_totals || {}).some(value => Number(value) !== 0)
+  if (hasTotals) return formatRewardTotals(day.reward_totals, '')
+  if (Number(day.reward || 0) <= 0) return ''
+  return day.reward_display || formatReward(day.reward)
+}
+
 // 格式化短日期
 const formatShortDate = (dateStr: string): string => {
   const parts = dateStr.split('-')
@@ -97,9 +106,9 @@ const updateChart = () => {
         fontSize: 12
       },
       formatter: (params: any) => {
-        const date = params[0]?.axisValue || ''
+        const date = String(params[0]?.axisValue || '')
         const dayData = data.find(d => d.date === date)
-        let html = `<div style="font-weight: 600; margin-bottom: 6px;">${date}</div>`
+        let html = `<div style="font-weight: 600; margin-bottom: 6px;">${escapeHtml(date)}</div>`
         params.forEach((item: any) => {
           if (item.seriesName === '奖励') return
           const color = item.seriesName === '成功' ? theme.successColor : theme.failColor
@@ -108,10 +117,10 @@ const updateChart = () => {
             <span>${item.seriesName}: <b>${item.value}</b></span>
           </div>`
         })
-        const rewardDisplay = dayData?.reward_display || (Number(dayData?.reward || 0) > 0 ? formatReward(dayData?.reward) : '')
+        const rewardDisplay = getRewardDisplay(dayData)
         if (rewardDisplay) {
           html += `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid ${theme.tooltipBorder}; color: ${theme.rewardColor};">
-            奖励: <b>${rewardDisplay}</b>
+            奖励: <b>${escapeHtml(rewardDisplay)}</b>
           </div>`
         }
         return html
