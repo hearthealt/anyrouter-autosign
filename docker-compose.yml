@@ -21,11 +21,16 @@ services:
       WATCHTOWER_URL: http://watchtower:8080
       WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:-}
     labels:
-      # 只有带这个 label 的容器才会被 watchtower 更新
+      # 只有带 enable 标签的容器才会被 watchtower 更新
       - "com.centurylinklabs.watchtower.enable=true"
+      # scope 让本项目的 watchtower 只认自己这个容器，避免和机器上其它
+      # watchtower 实例互相更新对方的容器
+      - "com.centurylinklabs.watchtower.scope=anyrouter"
 
   # 更新执行者。docker.sock 只挂在这里，应用容器本身没有任何宿主机 Docker 权限。
   # --interval 0 表示不做定时轮询，只响应 HTTP API 的手动触发。
+  # 刻意不映射端口到宿主机：app 通过 compose 内部网络访问 http://watchtower:8080 即可，
+  # 既避免和其它项目的 watchtower 抢宿主机端口，也少一个对外暴露面。
   watchtower:
     image: containrrr/watchtower
     container_name: anyrouter-watchtower
@@ -33,13 +38,15 @@ services:
     command: --interval 0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      # 只绑本机，不对外暴露
-      - "127.0.0.1:8081:8080"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
+      # containrrr/watchtower 默认使用 Docker API 1.24，而 Docker Engine 29.4
+      # 只接受 1.40-1.54；不显式指定会报 "client version 1.24 is too old"
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.40}
       WATCHTOWER_HTTP_API_UPDATE: "true"
       WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:-}
       WATCHTOWER_LABEL_ENABLE: "true"
+      # 只处理 scope=anyrouter 的容器，不碰机器上其它项目
+      WATCHTOWER_SCOPE: anyrouter
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_INCLUDE_RESTARTING: "true"

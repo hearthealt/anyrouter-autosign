@@ -61,3 +61,52 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # 打 v* tag 时自动创建 GitHub Release，正文取 CHANGELOG.md 里对应版本那一段。
+  # 依赖 docker job：镜像没构建成功就不该发 release。
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+
+          awk -v ver="## ${VERSION}" '
+            $0 == ver { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+
+          # CHANGELOG 里没有这个版本的条目时给个兜底正文，避免 release 正文为空
+          if [ ! -s notes.md ]; then
+            echo "详见 [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/master/CHANGELOG.md)。" > notes.md
+          fi
+
+          {
+            echo
+            echo '## 镜像'
+            echo
+            echo '```bash'
+            echo "docker pull ${IMAGE}:${VERSION}"
+            echo '```'
+            echo
+            echo "部署与升级见 [DEPLOY.md](https://github.com/${GITHUB_REPOSITORY}/blob/master/DEPLOY.md)。"
+          } >> notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag

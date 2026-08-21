@@ -1,5 +1,11 @@
 # 更新日志
 
+## 1.1.1
+
++ [修复] 为 Watchtower 显式设置 Docker API 1.40，兼容 Docker Engine 最低 API 为 1.40 的服务器
++ [优化] 通过 Watchtower scope 隔离本项目，避免与同机其它项目互相更新
++ [优化] 移除 Watchtower 宿主机端口映射，仅通过 Compose 内部网络提供更新接口
++ [新增] 推送版本 tag 时自动创建 GitHub Release，并附带镜像拉取命令
 ## 1.1.0
 
 + [新增] Docker 单容器部署：前端构建产物由后端直接提供，一条 `docker compose up -d` 起服务

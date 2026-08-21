@@ -124,7 +124,7 @@ docker compose logs -f app
 | 应用端口 | `16168`（改 `.env` 的 `ANYROUTER_PORT`，容器内也是 16168） |
 | 数据库 | `./data/anyrouter.db` |
 | 日志 | `./logs/` |
-| watchtower | 只监听 `127.0.0.1:8081`，不对外暴露 |
+| watchtower | 仅通过 Compose 内部网络访问 `http://watchtower:8080`，不映射宿主机端口 |
 
 `data/` 和 `logs/` 是 bind mount，容器重建不会丢数据。**升级前请先备份 `data/`。**
 
