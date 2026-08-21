@@ -6,9 +6,10 @@ docker.sock 只挂在 watchtower 上，应用容器本身没有任何宿主机 D
 """
 import logging
 import re
+import time
 
 import requests
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -26,6 +27,8 @@ GITHUB_API_BASE = "https://api.github.com"
 GITHUB_TIMEOUT = 15
 # watchtower 会在更新过程中重建本容器，读超时给宽一些
 WATCHTOWER_TIMEOUT = (5, 60)
+# 给反向代理留出时间接收已返回的成功响应，再触发容器重建。
+WATCHTOWER_TRIGGER_DELAY = 1
 
 
 def _changelog_url() -> str:
@@ -122,9 +125,36 @@ def get_latest_version():
     ))
 
 
+def _request_watchtower_update(endpoint: str, token: str) -> None:
+    """在更新接口响应发送完成后，后台通知 watchtower 开始重建容器。"""
+    time.sleep(WATCHTOWER_TRIGGER_DELAY)
+
+    try:
+        response = requests.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=WATCHTOWER_TIMEOUT
+        )
+    except requests.RequestException as exc:
+        # 应用容器可能在这里已经开始被 watchtower 重建；异常只写日志，
+        # 不能再尝试通过已经准备关闭的 HTTP 请求通知客户端。
+        logger.info("后台触发 watchtower 更新时连接中断: %s", exc)
+        return
+
+    if response.status_code == 200:
+        logger.info("watchtower 已接受更新请求")
+    elif response.status_code == 204:
+        logger.info("watchtower 未发现需要更新的镜像")
+    elif response.status_code in (401, 403):
+        logger.error("watchtower 拒绝更新请求，HTTP %s", response.status_code)
+    else:
+        logger.error("watchtower 返回异常状态 %s: %s", response.status_code, response.text[:200])
+
+
 @router.post("/update", response_model=ApiResponse)
 def trigger_update(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -172,46 +202,12 @@ def trigger_update(
 
     endpoint = f"{settings.watchtower_url.rstrip('/')}/v1/update"
 
-    try:
-        response = requests.get(
-            endpoint,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=WATCHTOWER_TIMEOUT
-        )
-    except (requests.Timeout, requests.ConnectionError) as exc:
-        # watchtower 在响应返回前就会把本容器干掉，连接中断恰恰说明更新已经开始。
-        # 但连不上 watchtower（服务没起）也会走到这里，两种情况无法从异常上区分，
-        # 因此这里按「已触发」处理，由前端轮询 /health 来确认服务是否真的回来了。
-        logger.info("触发更新后连接中断（通常意味着容器正在重建）: %s", exc)
-        return ApiResponse(success=True, data=UpdateResult(
-            status="triggered",
-            message="更新已触发，容器将在几秒内重启"
-        ))
-    except requests.RequestException as exc:
-        logger.error("触发更新失败: %s", exc)
-        return ApiResponse(success=True, data=UpdateResult(
-            status="error",
-            message=f"触发更新失败：{type(exc).__name__}"
-        ))
+    # BackgroundTasks 会在当前响应已经发送给浏览器之后执行。
+    # watchtower 会重建 app 容器，必须避免它在本接口响应发出前杀掉当前连接，
+    # 否则经 Cloudflare 访问时浏览器会收到 502，而不是正常的 triggered 响应。
+    background_tasks.add_task(_request_watchtower_update, endpoint, token)
 
-    if response.status_code == 200:
-        return ApiResponse(success=True, data=UpdateResult(
-            status="triggered",
-            message="更新已触发，容器将在几秒内重启"
-        ))
-    if response.status_code == 204:
-        return ApiResponse(success=True, data=UpdateResult(
-            status="no_update",
-            message="当前已是最新镜像，无需更新"
-        ))
-    if response.status_code in (401, 403):
-        return ApiResponse(success=True, data=UpdateResult(
-            status="error",
-            message="watchtower 拒绝了请求，请检查 WATCHTOWER_HTTP_API_TOKEN 两侧是否一致"
-        ))
-
-    logger.error("watchtower 返回异常状态 %s: %s", response.status_code, response.text[:200])
     return ApiResponse(success=True, data=UpdateResult(
-        status="error",
-        message=f"watchtower 返回 HTTP {response.status_code}"
+        status="triggered",
+        message="更新已触发，容器将在几秒内重启"
     ))

@@ -5,7 +5,7 @@ import { useVersionStore } from '../stores'
 import type { UpdateResult } from '../types'
 
 /** 更新触发后预留给新容器启动的时间。倒计时结束后统一刷新页面。 */
-const RELOAD_DELAY_SECONDS = 30
+const RELOAD_DELAY_SECONDS = 10
 
 /**
  * 系统更新流程：调用 watchtower 后等待新容器启动，再刷新当前页面。

@@ -84,7 +84,7 @@
                 v-model:show="confirmingUpdate"
                 preset="dialog"
                 title="确认更新并重启"
-                content="将拉取最新镜像并重建容器，服务会中断约 10-30 秒。确定继续吗？"
+                content="将拉取最新镜像并重建容器，服务会中断约 10 秒。确定继续吗？"
                 positive-text="确定更新"
                 negative-text="取消"
                 :mask-closable="false"
