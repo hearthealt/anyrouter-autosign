@@ -63,7 +63,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   # 打 v* tag 时自动创建 GitHub Release，正文取 CHANGELOG.md 里对应版本那一段。
-  # 依赖 docker job：镜像没构建成功就不该发 release。
+  # 应用以 releases/latest 作为新版本来源；本任务依赖 docker，确保镜像构建、推送
+  # 成功后才发布版本，Docker 失败时客户端不会看到这个新版本。
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: docker

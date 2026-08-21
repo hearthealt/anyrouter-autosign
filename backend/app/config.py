@@ -103,9 +103,8 @@ class Settings(BaseSettings):
     web_dist_dir: str = ""
 
     # ============ 版本检查与容器自更新 ============
-    # 检查新版本时从这个仓库的 raw 地址读取 VERSION / CHANGELOG.md
+    # 检查新版本时读取这个仓库的最新正式 GitHub Release
     github_repo: str = "hearthealt/anyrouter-autosign"
-    update_check_ref: str = "master"
     # 更新由 watchtower 侧车执行，应用容器不接触 docker.sock
     # 默认值是 compose 里的服务名，docker-compose.yml 会显式传入覆盖
     watchtower_url: str = "http://watchtower:8080"

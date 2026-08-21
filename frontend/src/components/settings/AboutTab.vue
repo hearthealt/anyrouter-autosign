@@ -34,15 +34,19 @@
             <template #icon><n-icon :size="14"><CloudDownloadOutline /></n-icon></template>
             检查更新
           </n-button>
-          <n-popconfirm @positive-click="doUpdate">
+          <n-popconfirm v-if="canUpdate" @positive-click="doUpdate">
             <template #trigger>
-              <n-button size="small" :type="hasNewVersion ? 'primary' : 'default'" :disabled="updating">
+              <n-button size="small" type="primary">
                 <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
                 更新并重启
               </n-button>
             </template>
             拉取最新镜像并重建容器，服务会中断约 10-30 秒。确定继续？
           </n-popconfirm>
+          <n-button v-else size="small" disabled>
+            <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+            更新并重启
+          </n-button>
         </div>
       </div>
 
@@ -71,28 +75,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { CloudDownloadOutline, InformationCircleOutline, RefreshOutline } from '@vicons/ionicons5'
-import { systemApi } from '../../api'
 import { useVersionStore } from '../../stores'
 import { apiError } from '../../utils/apiError'
+import { useSystemUpdate } from '../../composables/useSystemUpdate'
 import ExternalLink from '../common/ExternalLink.vue'
-import type { UpdateResult } from '../../types'
-
-const POLL_INTERVAL = 2000
-/** 触发后多久还没观察到服务中断，就认为更新没有真的发生 */
-const DOWN_TIMEOUT = 30_000
-/** 服务中断后等待恢复的上限 */
-const UP_TIMEOUT = 180_000
 
 const versionStore = useVersionStore()
-
-const updating = ref(false)
-const updateSettled = ref(false)
-const updateStage = ref('')
-const updateHint = ref('')
-
-let pollTimer: ReturnType<typeof setTimeout> | null = null
+const {
+  updating,
+  updateSettled,
+  updateStage,
+  updateHint,
+  canUpdate,
+  doUpdate,
+  reloadPage
+} = useSystemUpdate()
 
 const loading = computed(() => versionStore.loading)
 const checking = computed(() => versionStore.checking)
@@ -126,95 +125,10 @@ const checkLatest = async (notify = false) => {
   }
 }
 
-const reloadPage = () => window.location.reload()
-
-/** 直接用 fetch 而不是 axios：重启期间的 401/网络错误不该触发全局跳转登录 */
-const probeHealth = async (): Promise<boolean> => {
-  try {
-    const res = await fetch('/health', { cache: 'no-store' })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-const clearPoll = () => {
-  if (pollTimer) {
-    clearTimeout(pollTimer)
-    pollTimer = null
-  }
-}
-
-/**
- * 等服务先掉线、再恢复，恢复后自动刷新页面。
- * 只等「恢复」是不够的：刚触发时旧容器还活着，会立刻误判成已完成。
- */
-const watchRestart = () => {
-  const startedAt = Date.now()
-  let sawDown = false
-
-  const tick = async () => {
-    const alive = await probeHealth()
-
-    if (!sawDown) {
-      if (!alive) {
-        sawDown = true
-        updateStage.value = '服务已停止，等待新容器启动'
-        updateHint.value = '恢复后会自动刷新页面'
-      } else if (Date.now() - startedAt > DOWN_TIMEOUT) {
-        updateSettled.value = true
-        updateStage.value = '未观察到服务重启'
-        updateHint.value = '可能是 watchtower 容器没有运行，或者远端没有更新的镜像。可执行 docker compose logs watchtower 确认。'
-        return
-      }
-    } else if (alive) {
-      updateStage.value = '更新完成，正在刷新'
-      reloadPage()
-      return
-    } else if (Date.now() - startedAt > UP_TIMEOUT) {
-      updateSettled.value = true
-      updateStage.value = '等待服务恢复超时'
-      updateHint.value = '容器可能启动失败，请执行 docker compose logs app 查看原因。'
-      return
-    }
-
-    pollTimer = setTimeout(tick, POLL_INTERVAL)
-  }
-
-  pollTimer = setTimeout(tick, POLL_INTERVAL)
-}
-
-const doUpdate = async () => {
-  updating.value = true
-  updateSettled.value = false
-  updateStage.value = '正在触发更新'
-  updateHint.value = '正在通知 watchtower 拉取新镜像'
-
-  try {
-    const res = await systemApi.triggerUpdate()
-    const result = res.data as UpdateResult
-
-    if (result.status === 'triggered') {
-      updateStage.value = '更新已触发'
-      updateHint.value = '等待容器重启'
-      watchRestart()
-      return
-    }
-
-    updating.value = false
-    window.$notify(result.message, result.status === 'no_update' ? 'info' : 'error')
-  } catch (e) {
-    updating.value = false
-    window.$notify(apiError(e, '触发更新失败'), 'error')
-  }
-}
-
 onMounted(async () => {
   if (!versionStore.info) await load()
   if (!versionStore.checked) await checkLatest()
 })
-
-onBeforeUnmount(clearPoll)
 
 defineExpose({ load })
 </script>

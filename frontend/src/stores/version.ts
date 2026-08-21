@@ -45,6 +45,8 @@ export const useVersionStore = defineStore('version', () => {
       checked.value = true
 
       if (data.error) {
+        latestVersion.value = ''
+        changelog.value = ''
         error.value = data.error
         return
       }
@@ -52,6 +54,8 @@ export const useVersionStore = defineStore('version', () => {
       latestVersion.value = data.version || ''
       changelog.value = data.changelog || ''
     } catch (e) {
+      latestVersion.value = ''
+      changelog.value = ''
       error.value = apiError(e, '检查更新失败')
     } finally {
       checking.value = false

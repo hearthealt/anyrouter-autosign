@@ -160,7 +160,7 @@ docker image prune -f
 ### 版本号
 
 版本号以仓库根目录的 `VERSION` 文件为唯一来源，构建时打进镜像。
-「检查更新」会读取 GitHub 上 master 分支的 `VERSION` 和 `CHANGELOG.md` 做对比。
+「检查更新」只读取 GitHub 的最新正式 Release。Release 仅在版本镜像构建并推送成功后创建，因此 Docker 发布失败时不会提示该版本，也不能从页面触发更新。
 
 不要在 `.env` 里设置 `APP_VERSION` —— 环境变量优先级更高，会盖住镜像里的真实版本号。
 

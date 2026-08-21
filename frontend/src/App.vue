@@ -10,16 +10,31 @@
           <div class="mobile-overlay" :class="{ show: mobileMenuOpen }" @click="mobileMenuOpen = false"></div>
 
           <aside class="sidebar" :class="{ collapsed, 'mobile-open': mobileMenuOpen }">
-            <button type="button" class="sidebar-brand" aria-label="返回首页" @click="$router.push('/')">
-              <div class="brand-icon" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor"/>
-                  <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+            <div class="sidebar-brand">
+              <button type="button" class="brand-home" aria-label="返回首页" @click="$router.push('/')">
+                <div class="brand-icon" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor"/>
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+              <div class="brand-copy">
+                <span class="brand-text">AnyRouter</span>
+                <button
+                  type="button"
+                  class="brand-version"
+                  :class="{ 'has-update': versionStore.hasNewVersion }"
+                  :title="versionStore.hasNewVersion ? `有新版本 ${versionStore.latestTag}，点击查看` : '查看版本信息'"
+                  @click="showVersionModal = true"
+                >
+                  <span class="version-tag mono">{{ versionStore.currentTag || (versionStore.loading ? '加载中…' : '版本未知') }}</span>
+                  <span v-if="versionStore.hasNewVersion" class="version-dot" aria-hidden="true"></span>
+                  <span v-if="versionStore.hasNewVersion" class="sr-only">有新版本</span>
+                </button>
               </div>
-              <span class="brand-text">AnyRouter</span>
-            </button>
+            </div>
 
             <nav class="sidebar-nav" aria-label="主导航">
               <button
@@ -56,17 +71,6 @@
                   </n-icon>
                 </div>
                 <span class="nav-label">收起</span>
-              </button>
-              <button
-                v-if="versionStore.currentTag"
-                type="button"
-                class="version-btn"
-                :title="versionStore.hasNewVersion ? `有新版本 ${versionStore.latestTag}，点击查看` : '查看版本信息'"
-                @click="$router.push('/settings?tab=about')"
-              >
-                <span class="version-tag mono">{{ versionStore.currentTag }}</span>
-                <span v-if="versionStore.hasNewVersion" class="version-dot" aria-hidden="true"></span>
-                <span v-if="versionStore.hasNewVersion" class="sr-only">有新版本</span>
               </button>
             </div>
           </aside>
@@ -140,6 +144,23 @@
               <div class="header-right">
                 <n-tooltip>
                   <template #trigger>
+                    <n-button
+                      quaternary
+                      size="small"
+                      class="icon-btn version-entry-btn"
+                      :class="{ 'has-update': versionStore.hasNewVersion }"
+                      aria-label="查看版本和更新"
+                      @click="showVersionModal = true"
+                    >
+                      <template #icon><n-icon :size="16"><CloudDownloadOutline /></n-icon></template>
+                      <span v-if="versionStore.hasNewVersion" class="header-version-dot" aria-hidden="true"></span>
+                    </n-button>
+                  </template>
+                  {{ versionStore.hasNewVersion ? `发现新版本 ${versionStore.latestTag}` : '查看版本和更新' }}
+                </n-tooltip>
+
+                <n-tooltip>
+                  <template #trigger>
                     <n-button quaternary size="small" class="icon-btn" aria-label="键盘快捷键帮助" @click="showShortcutsHelp = true">
                       <template #icon><n-icon :size="16"><HelpCircleOutline /></n-icon></template>
                     </n-button>
@@ -191,6 +212,8 @@
 
         <ShortcutsHelpModal v-model:show="showShortcutsHelp" />
 
+        <VersionUpdateModal v-model:show="showVersionModal" />
+
         <CommandPalette v-model:show="showCommandPalette" @request-refresh="refreshBus.trigger()" />
       </n-dialog-provider>
     </n-message-provider>
@@ -198,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NIcon, darkTheme } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
@@ -219,6 +242,7 @@ import {
   MenuOutline,
   SearchOutline,
   HelpCircleOutline,
+  CloudDownloadOutline,
   ServerOutline
 } from '@vicons/ionicons5'
 import { authApi, accountApi, signApi } from './api'
@@ -231,6 +255,7 @@ import PasswordModal from './components/layout/PasswordModal.vue'
 import ShortcutsHelpModal from './components/layout/ShortcutsHelpModal.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
 import NotificationCenter from './components/layout/NotificationCenter.vue'
+import VersionUpdateModal from './components/layout/VersionUpdateModal.vue'
 
 interface GlobalSearchResult {
   type: 'account' | 'log'
@@ -251,6 +276,7 @@ const refreshBus = provideViewRefresh()
 
 const showShortcutsHelp = ref(false)
 const showCommandPalette = ref(false)
+const showVersionModal = ref(false)
 
 const buildLocalDateParam = (value: string) => {
   const date = new Date(value)
@@ -475,21 +501,35 @@ const loadCurrentUser = async () => {
   }
 }
 
-// 侧边栏的版本标签 + 新版本红点。检查云端版本失败不打扰用户，
-// 具体原因在设置页「关于」里展示。
+// 侧边栏和顶部工具栏展示版本入口及新版本红点。检查失败不主动打扰用户，
+// 用户可从任意页面打开版本弹窗查看原因、重新检查或执行更新。
 const loadVersion = async () => {
   if (!isLoggedIn()) return
-  try {
-    await versionStore.loadVersion()
-  } catch (e) {
-    return
+
+  if (!versionStore.info) {
+    try {
+      await versionStore.loadVersion()
+    } catch {
+      return
+    }
   }
-  await versionStore.checkLatest()
+
+  if (!versionStore.checked) {
+    await versionStore.checkLatest()
+  }
 }
 
+watch(
+  () => route.path,
+  (path) => {
+    if (path === '/login' || !isLoggedIn()) return
+    if (!currentUser.value) void loadCurrentUser()
+    void loadVersion()
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
-  loadCurrentUser()
-  loadVersion()
 
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
     const stored = localStorage.getItem('anyrouter-theme')
@@ -547,21 +587,40 @@ const themeOverrides: GlobalThemeOverrides = {
   height: var(--header-height);
   padding: 0 var(--spacing-4);
   border-bottom: 1px solid var(--border-color-light);
-  cursor: pointer;
   color: var(--text-primary);
-  background: transparent;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  font: inherit;
-  text-align: left;
 }
 
+.brand-home {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-inverse);
+  background: transparent;
+  font: inherit;
+}
+
+.brand-home:focus-visible,
+.brand-version:focus-visible,
 .sidebar-brand:focus-visible,
 .nav-item:focus-visible,
 .tabbar-item:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: -2px;
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  transition: opacity var(--transition-fast), width var(--transition-fast);
 }
 
 .sidebar.collapsed .sidebar-brand {
@@ -584,13 +643,37 @@ const themeOverrides: GlobalThemeOverrides = {
   font-family: var(--font-display);
   font-size: var(--text-md);
   font-weight: var(--font-semibold);
+  line-height: 1.1;
   letter-spacing: -0.01em;
   color: var(--text-primary);
   white-space: nowrap;
-  transition: opacity var(--transition-fast);
 }
 
-.sidebar.collapsed .brand-text {
+.brand-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  color: var(--text-quaternary);
+  background: transparent;
+  font: inherit;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.brand-version:hover,
+.brand-version.has-update {
+  color: var(--warning-color);
+}
+
+.brand-version:hover {
+  background: var(--bg-card-hover);
+}
+
+.sidebar.collapsed .brand-copy {
   width: 0;
   opacity: 0;
   overflow: hidden;
@@ -672,27 +755,6 @@ const themeOverrides: GlobalThemeOverrides = {
   border-top: 1px solid var(--border-color-light);
 }
 
-/* 版本标签 */
-.version-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: var(--spacing-1);
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-quaternary);
-  cursor: pointer;
-  transition: color var(--transition-fast), background var(--transition-fast);
-}
-
-.version-btn:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-}
-
 .version-tag {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -708,11 +770,6 @@ const themeOverrides: GlobalThemeOverrides = {
   background: var(--warning-color);
 }
 
-.sidebar.collapsed .version-tag {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
-}
 
 .sr-only {
   position: absolute;
@@ -802,6 +859,25 @@ const themeOverrides: GlobalThemeOverrides = {
 
 .icon-btn:hover {
   color: var(--text-primary);
+}
+
+.version-entry-btn {
+  position: relative;
+}
+
+.version-entry-btn.has-update {
+  color: var(--warning-color);
+}
+
+.header-version-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--bg-header);
+  border-radius: 50%;
+  background: var(--warning-color);
 }
 
 .search-results {
@@ -985,10 +1061,11 @@ const themeOverrides: GlobalThemeOverrides = {
     width: min(var(--sidebar-width), 80vw);
   }
 
-  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .brand-copy,
   .sidebar.collapsed .nav-label {
     width: auto;
     opacity: 1;
+    overflow: visible;
   }
 
   .sidebar-footer .collapse-btn {

@@ -1,5 +1,11 @@
 # 更新日志
 
+## 1.1.2
+
++ [修复] 登录后立即加载并展示当前版本，不再需要先打开“系统设置 → 关于”
++ [优化] 将版本号移动到侧边栏 AnyRouter 标识下方，并可在任意页面打开版本与更新弹窗
++ [修复] 仅在检测到更新且 Docker 镜像已成功发布对应 GitHub Release 时允许“更新并重启”
++ [优化] Docker 镜像发布成功后才创建 GitHub Release，客户端只以正式 Release 判断新版本
 ## 1.1.1
 
 + [修复] 为 Watchtower 显式设置 Docker API 1.40，兼容 Docker Engine 最低 API 为 1.40 的服务器

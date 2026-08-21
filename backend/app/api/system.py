@@ -5,6 +5,7 @@
 docker.sock 只挂在 watchtower 上，应用容器本身没有任何宿主机 Docker 权限。
 """
 import logging
+import re
 
 import requests
 from fastapi import APIRouter, Depends, Request
@@ -21,14 +22,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system", tags=["系统"])
 
-RAW_BASE = "https://raw.githubusercontent.com"
+GITHUB_API_BASE = "https://api.github.com"
 GITHUB_TIMEOUT = 15
 # watchtower 会在更新过程中重建本容器，读超时给宽一些
 WATCHTOWER_TIMEOUT = (5, 60)
 
 
 def _changelog_url() -> str:
-    return f"https://github.com/{settings.github_repo}/blob/{settings.update_check_ref}/CHANGELOG.md"
+    return f"https://github.com/{settings.github_repo}/releases/latest"
+
+
+_VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
+
+
+def _version_parts(value: str) -> tuple[int, int, int] | None:
+    match = _VERSION_PATTERN.match(str(value or "").strip())
+    if not match:
+        return None
+    return tuple(map(int, match.groups()))
+
+
+def _is_newer_version(latest: str, current: str) -> bool:
+    latest_parts = _version_parts(latest)
+    current_parts = _version_parts(current)
+    return bool(latest_parts and current_parts and latest_parts > current_parts)
 
 
 @router.get("/version", response_model=ApiResponse)
@@ -48,33 +65,60 @@ def get_latest_version():
     由后端代理请求 GitHub，而不是让浏览器直连 —— 服务器通常能访问 GitHub，
     用户本地不一定能。取不到时通过 error 字段返回可读原因，不抛 5xx。
     """
-    prefix = f"{RAW_BASE}/{settings.github_repo}/{settings.update_check_ref}"
+    # releases/latest 只会返回已经创建成功的正式 Release。发布工作流中 Release
+    # 又依赖 Docker 镜像任务，因此镜像构建或推送失败时，这里不会提前暴露新版本。
+    endpoint = f"{GITHUB_API_BASE}/repos/{settings.github_repo}/releases/latest"
 
     try:
-        version_resp = requests.get(f"{prefix}/VERSION", timeout=GITHUB_TIMEOUT)
+        release_resp = requests.get(
+            endpoint,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": f"anyrouter-autosign/{settings.app_version}",
+            },
+            timeout=GITHUB_TIMEOUT,
+        )
     except requests.RequestException as exc:
-        logger.warning("检查最新版本失败: %s", exc)
+        logger.warning("检查最新发布版本失败: %s", exc)
         return ApiResponse(success=True, data=LatestVersionInfo(
             error=f"无法访问 GitHub：{type(exc).__name__}"
         ))
 
-    if version_resp.status_code != 200:
+    if release_resp.status_code == 404:
         return ApiResponse(success=True, data=LatestVersionInfo(
-            error=f"获取版本号失败：HTTP {version_resp.status_code}"
+            error="GitHub 上还没有可用的正式发布版本"
+        ))
+    if release_resp.status_code != 200:
+        return ApiResponse(success=True, data=LatestVersionInfo(
+            error=f"获取最新发布版本失败：HTTP {release_resp.status_code}"
         ))
 
-    # CHANGELOG 只是锦上添花，取不到不影响版本比较
-    changelog = ""
     try:
-        changelog_resp = requests.get(f"{prefix}/CHANGELOG.md", timeout=GITHUB_TIMEOUT)
-        if changelog_resp.status_code == 200:
-            changelog = changelog_resp.text
-    except requests.RequestException as exc:
-        logger.warning("获取 CHANGELOG 失败: %s", exc)
+        release = release_resp.json()
+    except ValueError as exc:
+        logger.warning("解析 GitHub Release 响应失败: %s", exc)
+        return ApiResponse(success=True, data=LatestVersionInfo(
+            error="GitHub 返回的发布信息格式无效"
+        ))
+
+    if not isinstance(release, dict):
+        return ApiResponse(success=True, data=LatestVersionInfo(
+            error="GitHub 返回的发布信息格式无效"
+        ))
+
+    version = str(release.get("tag_name") or "").strip()
+    if not version:
+        return ApiResponse(success=True, data=LatestVersionInfo(
+            error="GitHub 最新发布缺少版本标签"
+        ))
+
+    changelog = release.get("body")
+    if not isinstance(changelog, str):
+        changelog = ""
 
     return ApiResponse(success=True, data=LatestVersionInfo(
-        version=version_resp.text.strip(),
-        changelog=changelog
+        version=version,
+        changelog=changelog.strip()
     ))
 
 
@@ -95,13 +139,34 @@ def trigger_update(
             message="未配置 WATCHTOWER_HTTP_API_TOKEN，请在部署目录的 .env 中设置后重启服务"
         ))
 
+    # 后端再次以正式 Release 为准，不能只依赖前端按钮状态。
+    latest = get_latest_version().data
+    if latest.error:
+        return ApiResponse(success=True, data=UpdateResult(
+            status="error",
+            message=f"无法确认可更新版本：{latest.error}"
+        ))
+    if not _version_parts(latest.version) or not _version_parts(settings.app_version):
+        return ApiResponse(success=True, data=UpdateResult(
+            status="error",
+            message="当前版本或最新发布版本的格式无效"
+        ))
+    if not _is_newer_version(latest.version, settings.app_version):
+        return ApiResponse(success=True, data=UpdateResult(
+            status="no_update",
+            message="当前已是最新正式发布版本，无需更新"
+        ))
+
     log_action(
         db=db,
         action=AuditAction.SYSTEM_UPDATE,
         user_id=current_user.id,
         username=current_user.username,
         target_type="system",
-        detail={"current_version": settings.app_version},
+        detail={
+            "current_version": settings.app_version,
+            "target_version": latest.version,
+        },
         request=request
     )
 
