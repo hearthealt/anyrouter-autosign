@@ -556,7 +556,9 @@ const themeOverrides: GlobalThemeOverrides = {
 <style scoped>
 .layout {
   display: flex;
+  width: 100%;
   min-height: 100vh;
+  min-width: 0;
   background: var(--bg-color);
 }
 
@@ -790,6 +792,7 @@ const themeOverrides: GlobalThemeOverrides = {
   flex-direction: column;
   margin-left: var(--sidebar-width);
   min-height: 100vh;
+  min-width: 0;
   transition: margin-left var(--transition-normal);
 }
 
@@ -802,11 +805,11 @@ const themeOverrides: GlobalThemeOverrides = {
   top: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: auto minmax(240px, 360px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 360px) auto;
   align-items: center;
   gap: var(--spacing-3);
   height: var(--header-height);
-  padding: 0 var(--spacing-5);
+  padding: 0 var(--spacing-4);
   background: var(--bg-header);
   border-bottom: 1px solid var(--border-color-light);
 }
@@ -964,7 +967,9 @@ const themeOverrides: GlobalThemeOverrides = {
 .content {
   flex: 1;
   width: 100%;
-  padding: var(--spacing-5) var(--spacing-6);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--spacing-4) var(--spacing-5);
 }
 
 .cpk-hint {
@@ -1086,7 +1091,7 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 
   .content {
-    padding: var(--spacing-4) var(--spacing-4) calc(var(--tabbar-height) + 16px);
+    padding: var(--spacing-3) var(--spacing-3) calc(var(--tabbar-height) + 14px);
   }
 
   .mobile-tabbar {

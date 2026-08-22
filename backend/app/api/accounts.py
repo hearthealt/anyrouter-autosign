@@ -416,7 +416,17 @@ def apply_account_status_filter(
     if not status:
         return query
 
+    if status == "normal":
+        # 正常包含已启用且当前没有异常标记的账号；unknown/未检查不再单独作为账号状态。
+        return query.filter(
+            Account.is_active == True,
+            or_(
+                Account.health_status != "unhealthy",
+                Account.health_status.is_(None),
+            ),
+        )
     if status == "healthy":
+        # 兼容旧客户端的筛选参数。
         return query.filter(Account.is_active == True, Account.health_status == "healthy")
     if status == "unhealthy":
         return query.filter(Account.is_active == True, Account.health_status == "unhealthy")
@@ -443,11 +453,17 @@ def build_accounts_summary(
     summary_query = base_query.order_by(None)
     active_query = summary_query.filter(Account.is_active == True)
 
+    active_count = active_query.count()
+    unhealthy_count = active_query.filter(Account.health_status == "unhealthy").count()
+
     return {
         "total": summary_query.count(),
-        "active_count": active_query.count(),
+        "active_count": active_count,
+        # 三种账号状态：正常、异常、禁用。正常优先覆盖 unknown/未检查。
+        "normal_count": active_count - unhealthy_count,
+        # 保留旧字段，避免旧客户端读取摘要时出现兼容问题。
         "healthy_count": active_query.filter(Account.health_status == "healthy").count(),
-        "unhealthy_count": active_query.filter(Account.health_status == "unhealthy").count(),
+        "unhealthy_count": unhealthy_count,
         "disabled_count": summary_query.filter(Account.is_active == False).count(),
         "pending_count": active_query.filter(or_(
             last_sign_subquery.c.last_sign_time.is_(None),
@@ -489,9 +505,7 @@ def apply_account_sort(
         sort_column = case(
             (Account.is_active == False, 0),
             (Account.health_status == "unhealthy", 1),
-            (Account.health_status == "unknown", 2),
-            (Account.health_status == "healthy", 3),
-            else_=2
+            else_=2,
         )
     else:
         return query.order_by(Account.created_at.desc(), Account.id.desc())

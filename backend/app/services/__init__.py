@@ -12,7 +12,7 @@ from .account_session import (
 )
 from .account_cache import apply_account_user_info, refresh_account_user_cache
 from .notify import NotifyFactory, NotifyBase
-from .signing import execute_sign_request, refresh_account_cache_after_sign
+from .signing import execute_account_sign, execute_sign_batch, execute_sign_request, refresh_account_cache_after_sign
 
 anyrouter_service = anrouter_service
 
@@ -30,6 +30,8 @@ __all__ = [
     "resolve_session_cookie",
     "apply_account_user_info",
     "refresh_account_user_cache",
+    "execute_account_sign",
+    "execute_sign_batch",
     "execute_sign_request",
     "refresh_account_cache_after_sign",
 ]

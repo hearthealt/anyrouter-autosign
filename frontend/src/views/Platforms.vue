@@ -1,11 +1,14 @@
 <template>
   <div class="platforms-page">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">平台</h1>
-        <p class="page-subtitle">{{ platforms.length }} 个平台 · 默认 {{ defaultPlatform?.name || '未设置' }} · 关联 {{ totalAccounts }} 账号</p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">平台 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
+        <div class="toolbar-stats">
+          <span class="toolbar-stat">默认 <strong>{{ defaultPlatform?.name || '未设置' }}</strong></span>
+          <span class="toolbar-stat">关联账号 <strong>{{ totalAccounts }}</strong></span>
+        </div>
       </div>
-      <div class="head-actions">
+      <div class="toolbar-actions">
         <n-button size="small" :loading="loading" @click="loadPlatforms(pagination.page)">
           <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
@@ -17,7 +20,8 @@
       </div>
     </div>
 
-    <div class="filter-bar">
+    <div class="control-strip">
+      <div class="filter-strip">
       <n-input
         v-model:value="searchKeyword"
         size="small"
@@ -30,9 +34,10 @@
         <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
       </n-input>
       <n-button size="small" :loading="loading" @click="loadPlatforms(1)">查询</n-button>
+      </div>
     </div>
 
-    <div class="platforms-card">
+    <div class="platforms-card data-surface">
       <div v-if="loading || platforms.length > 0" class="table-wrap">
         <n-data-table
           :columns="columns"
@@ -660,13 +665,9 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 </script>
 
 <style scoped>
-.platforms-page { display: flex; flex-direction: column; gap: var(--spacing-4); }
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-4); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--border-color-light); }
-.page-title { font-size: var(--text-xl); font-weight: var(--font-semibold); margin: 0; }
-.page-subtitle { margin-top: 2px; font-size: var(--text-sm); color: var(--text-tertiary); }
-.head-actions, .filter-bar { display: flex; gap: var(--spacing-2); flex-wrap: wrap; }
-.search-input { max-width: 360px; }
-.platforms-card { background: var(--bg-card); border: 1px solid var(--border-color-light); border-radius: var(--radius-md); overflow: hidden; }
+.platforms-page { display: flex; flex-direction: column; gap: var(--spacing-3); }
+.search-input { width: min(440px, 100%); }
+.platforms-card { overflow: hidden; }
 .table-wrap :deep(.n-data-table) { border: none; border-radius: 0; }
 .pagination-wrap { display: flex; justify-content: flex-end; padding: var(--spacing-3) var(--spacing-4); border-top: 1px solid var(--border-color-light); background: var(--bg-card-hover); }
 .empty-state { padding: var(--spacing-12) var(--spacing-5); }
@@ -702,7 +703,6 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 .platform-form :deep(.n-form-item-feedback-wrapper) { min-height: 0; }
 .platform-form :deep(.n-input-number) { width: 100%; }
 @media (max-width: 900px) {
-  .page-head { flex-direction: column; align-items: stretch; }
   .base-grid, .endpoint-grid, .request-grid, .response-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {

@@ -61,7 +61,9 @@ class DashboardResponse(BaseModel):
     """仪表盘数据"""
     account_count: int
     active_account_count: int
+    normal_account_count: int = 0
     unhealthy_account_count: int = 0
+    disabled_account_count: int = 0
     today_sign_count: int
     today_sign_success: int
     total_quota: int

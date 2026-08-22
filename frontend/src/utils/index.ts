@@ -14,6 +14,17 @@ export function formatQuota(quota: number): string {
 
 export type RewardTotals = Record<string, number>
 
+/**
+ * 统一账号状态：禁用优先，其次只有明确的 unhealthy 才算异常，其余启用账号均视为正常。
+ * 这样可以避免禁用账号保留历史健康检查结果时继续显示为异常。
+ */
+export type AccountStatus = 'normal' | 'unhealthy' | 'disabled'
+
+export function getAccountStatus(account: { is_active: boolean; health_status?: string | null }): AccountStatus {
+  if (!account.is_active) return 'disabled'
+  return account.health_status === 'unhealthy' ? 'unhealthy' : 'normal'
+}
+
 function formatRewardNumber(value: number, minimumFractionDigits = 0): string {
   const rounded = Math.round(value * 10000) / 10000
   return rounded.toLocaleString('zh-CN', {

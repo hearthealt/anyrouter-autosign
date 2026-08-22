@@ -1,11 +1,14 @@
 <template>
   <div class="statistics-page">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">统计</h1>
-        <p class="page-subtitle">签到趋势、月度成功率、日历分布、账号排行</p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">数据统计</div>
+        <div class="toolbar-stats">
+          <span class="toolbar-stat">本月签到 <strong>{{ overview.month_success || 0 }}/{{ overview.month_total || 0 }}</strong></span>
+          <span class="toolbar-stat success">成功率 <strong>{{ overview.month_success_rate || 0 }}%</strong></span>
+        </div>
       </div>
-      <div class="head-actions">
+      <div class="toolbar-actions">
         <n-button size="small" :loading="loadingAccounts" @click="loadAccountStats">
           <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
@@ -178,7 +181,7 @@ import {
 import { statisticsApi } from '../api'
 import { useViewRefresh } from '../composables'
 import * as echarts from 'echarts'
-import { escapeHtml, formatRewardTotals } from '../utils'
+import { escapeHtml, formatRewardTotals, getAccountStatus } from '../utils'
 
 const overview = ref<any>({})
 const dailyData = ref<any[]>([])
@@ -374,13 +377,21 @@ const accountColumns = [
   {
     title: '账号',
     key: 'username',
-    render: (row: any) =>
-      h('div', { class: 'cell-account' }, [
+    render: (row: any) => {
+      const status = getAccountStatus(row)
+      return h('div', { class: 'cell-account' }, [
         h('span', { class: 'account-name' }, row.username),
-        row.health_status === 'unhealthy'
-          ? h(NTag, { type: 'error', size: 'tiny', bordered: false }, { default: () => '异常' })
-          : null
+        h(
+          NTag,
+          {
+            type: status === 'normal' ? 'success' : status === 'unhealthy' ? 'error' : 'default',
+            size: 'tiny',
+            bordered: false
+          },
+          { default: () => status === 'normal' ? '正常' : status === 'unhealthy' ? '异常' : '禁用' }
+        )
       ])
+    }
   },
   {
     title: '连签',
@@ -793,33 +804,7 @@ onUnmounted(() => {
 .statistics-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin: 0;
-}
-
-.page-subtitle {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.head-actions {
-  display: flex;
-  gap: var(--spacing-2);
+  gap: var(--spacing-3);
 }
 
 .trend-controls {
@@ -841,7 +826,7 @@ onUnmounted(() => {
 }
 
 .stat-card {
-  padding: var(--spacing-4);
+  padding: var(--spacing-3);
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
@@ -916,8 +901,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-3);
-  height: 44px;
-  padding: 0 var(--spacing-4);
+  min-height: 40px;
+  padding: 0 var(--spacing-3);
   border-bottom: 1px solid var(--border-color-light);
 }
 

@@ -267,7 +267,9 @@ export interface ApiEndpoint {
 export interface DashboardData {
   account_count: number
   active_account_count?: number
+  normal_account_count?: number
   unhealthy_account_count: number
+  disabled_account_count?: number
   today_sign_count: number
   today_sign_success: number
   success_rate?: number

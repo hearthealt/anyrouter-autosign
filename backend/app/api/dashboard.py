@@ -4,7 +4,7 @@
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.database import get_db
 from app.models import Account, Platform, SignLog
@@ -20,7 +20,19 @@ def get_dashboard(db: Session = Depends(get_db)):
     # 账号统计
     account_count = db.query(Account).count()
     active_account_count = db.query(Account).filter(Account.is_active == True).count()
-    unhealthy_account_count = db.query(Account).filter(Account.health_status == "unhealthy").count()
+    # 禁用账号即使保留了历史异常状态，也只能归类为“禁用”，不能计入异常。
+    unhealthy_account_count = db.query(Account).filter(
+        Account.is_active == True,
+        Account.health_status == "unhealthy",
+    ).count()
+    normal_account_count = db.query(Account).filter(
+        Account.is_active == True,
+        or_(
+            Account.health_status != "unhealthy",
+            Account.health_status.is_(None),
+        ),
+    ).count()
+    disabled_account_count = db.query(Account).filter(Account.is_active == False).count()
 
     # 今日签到统计
     today = date.today()
@@ -133,7 +145,9 @@ def get_dashboard(db: Session = Depends(get_db)):
         data=DashboardResponse(
             account_count=account_count,
             active_account_count=active_account_count,
+            normal_account_count=normal_account_count,
             unhealthy_account_count=unhealthy_account_count,
+            disabled_account_count=disabled_account_count,
             today_sign_count=today_sign_count,
             today_sign_success=today_sign_success,
             total_quota=total_quota,

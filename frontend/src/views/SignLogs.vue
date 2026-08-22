@@ -1,27 +1,23 @@
 <template>
   <div class="sign-logs-page page-shell">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">签到日志</h1>
-        <p class="page-subtitle">所有账号的签到结果、奖励和错误信息</p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">签到日志 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
+        <div class="toolbar-stats">
+          <span class="toolbar-stat success">成功 <strong>{{ summary.success_count }}</strong></span>
+          <span class="toolbar-stat error">失败 <strong>{{ summary.fail_count }}</strong></span>
+        </div>
       </div>
-      <div class="metrics">
-        <div class="metric">
-          <span class="metric-label">总记录</span>
-          <span class="metric-value">{{ pagination.itemCount }}</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">成功</span>
-          <span class="metric-value success">{{ summary.success_count }}</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">失败</span>
-          <span class="metric-value error">{{ summary.fail_count }}</span>
-        </div>
+      <div class="toolbar-actions">
+        <n-button size="small" @click="loadLogs(1)" :loading="loading">
+          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+          刷新
+        </n-button>
       </div>
     </div>
 
-    <div class="filter-bar">
+    <div class="control-strip">
+      <div class="filter-strip logs-filter">
       <n-select
         v-model:value="filters.account_id"
         :options="accountOptions"
@@ -48,13 +44,10 @@
         class="filter-date"
         @update:value="loadLogs(1)"
       />
-      <n-button size="small" @click="loadLogs(1)" :loading="loading">
-        <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
-        刷新
-      </n-button>
+      </div>
     </div>
 
-    <div class="logs-card">
+    <div class="logs-card data-surface">
       <div v-if="loading || logs.length > 0" class="table-wrap">
         <n-data-table
           :columns="columns"
@@ -402,41 +395,11 @@ useViewRefresh(() => loadLogs(pagination.value.page))
 .sign-logs-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
 }
 
-.metrics {
-  display: flex;
-  gap: var(--spacing-5);
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-end;
-}
-
-.metric-value {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.metric-value.success {
-  color: var(--success-color);
-}
-
-.metric-value.error {
-  color: var(--error-color);
-}
-
-.filter-bar {
-  display: flex;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
+.logs-filter {
+  width: 100%;
 }
 
 .filter-item {
@@ -448,9 +411,6 @@ useViewRefresh(() => loadLogs(pagination.value.page))
 }
 
 .logs-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -503,24 +463,9 @@ useViewRefresh(() => loadLogs(pagination.value.page))
   font-size: 10px;
 }
 
-@media (max-width: 900px) {
-  .page-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .metrics {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .metric {
-    align-items: flex-start;
-  }
-}
-
 @media (max-width: 640px) {
-  .filter-bar {
+  .logs-filter {
+    align-items: stretch;
     flex-direction: column;
   }
 

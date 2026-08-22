@@ -1,24 +1,22 @@
 <template>
   <div class="dashboard">
-    <!-- 页头 + 快捷操作 -->
-    <div class="dashboard-head">
-      <div class="head-main">
-        <h1 class="page-title">概览</h1>
-        <p class="page-subtitle">
-          {{ accounts.length }} 个账号 ·
-          健康 {{ healthyCount }} ·
-          异常 {{ unhealthyCount }} ·
-          待签到 {{ pendingCount }}
-        </p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">今日运行 <span class="toolbar-count">{{ accounts.length }}</span></div>
+        <div class="toolbar-stats" aria-label="账号运行状态">
+          <span class="toolbar-stat success">正常 <strong>{{ normalCount }}</strong></span>
+          <span class="toolbar-stat error">异常 <strong>{{ unhealthyCount }}</strong></span>
+          <span class="toolbar-stat">禁用 <strong>{{ disabledCount }}</strong></span>
+        </div>
       </div>
-      <div class="head-actions">
-        <n-button size="small" @click="showAddModal">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
-          添加账号
-        </n-button>
+      <div class="toolbar-actions">
         <n-button size="small" @click="refreshData" :loading="refreshing">
           <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
+        </n-button>
+        <n-button size="small" @click="showAddModal">
+          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+          添加账号
         </n-button>
         <n-button size="small" type="primary" @click="handleBatchSign" :loading="batchSigning">
           <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
@@ -45,13 +43,10 @@
       <div class="metric-card interactive" @click="$router.push('/accounts')">
         <div class="metric-label">账号总数</div>
         <div class="metric-value">{{ dashboard?.account_count || 0 }}</div>
-        <div class="metric-foot" v-if="(dashboard?.unhealthy_account_count ?? 0) > 0">
-          <span class="metric-delta down">
-            {{ dashboard?.unhealthy_account_count }} 异常
-          </span>
-        </div>
-        <div class="metric-foot" v-else>
-          <span class="metric-delta up">全部健康</span>
+        <div class="metric-foot account-status-foot">
+          <span class="metric-delta up">正常 {{ normalCount }}</span>
+          <span v-if="unhealthyCount > 0" class="metric-delta down">异常 {{ unhealthyCount }}</span>
+          <span v-if="disabledCount > 0" class="metric-sub-label">禁用 {{ disabledCount }}</span>
         </div>
       </div>
 
@@ -124,12 +119,12 @@
           <div class="status-chips">
             <button
               class="status-chip"
-              :class="{ active: statusFilter === 'healthy' }"
-              :aria-pressed="statusFilter === 'healthy'"
-              @click="filterByStatus('healthy')"
+              :class="{ active: statusFilter === 'normal' }"
+              :aria-pressed="statusFilter === 'normal'"
+              @click="filterByStatus('normal')"
             >
               <span class="status-dot success" aria-hidden="true"></span>
-              健康 <b>{{ healthyCount }}</b>
+              正常 <b>{{ normalCount }}</b>
             </button>
             <button
               class="status-chip"
@@ -140,15 +135,7 @@
               <span class="status-dot error" aria-hidden="true"></span>
               异常 <b>{{ unhealthyCount }}</b>
             </button>
-            <button
-              class="status-chip"
-              :class="{ active: statusFilter === 'pending' }"
-              :aria-pressed="statusFilter === 'pending'"
-              @click="filterByStatus('pending')"
-            >
-              <span class="status-dot warning" aria-hidden="true"></span>
-              待签到 <b>{{ pendingCount }}</b>
-            </button>
+
             <button
               v-if="disabledCount > 0"
               class="status-chip"
@@ -165,7 +152,7 @@
               v-for="account in displayAccounts.slice(0, 6)"
               :key="account.id"
               class="account-row"
-              :class="{ alert: account.health_status === 'unhealthy' || isLowQuota(account) }"
+              :class="{ alert: getAccountStatus(account) === 'unhealthy' || isLowQuota(account) }"
               @click="$router.push(`/account/${account.id}`)"
             >
               <div class="row-avatar" :class="{ inactive: !account.is_active }">
@@ -178,9 +165,8 @@
                     v-if="account.is_active"
                     class="row-status-dot"
                     :class="{
-                      success: account.health_status === 'healthy',
-                      error: account.health_status === 'unhealthy',
-                      default: account.health_status === 'unknown'
+                      success: getAccountStatus(account) === 'normal',
+                      error: getAccountStatus(account) === 'unhealthy'
                     }"
                   ></span>
                 </div>
@@ -350,7 +336,7 @@ import { useEventStream, useFormat } from '../composables'
 import { useClipboard } from '../composables/useClipboard'
 import { useViewRefresh } from '../composables'
 import type { SystemSettings } from '../types'
-import { formatRewardTotals } from '../utils'
+import { formatRewardTotals, getAccountStatus } from '../utils'
 
 const { formatRelativeTime } = useFormat()
 const { copy } = useClipboard()
@@ -370,7 +356,9 @@ const selectedPlatformId = ref<number | null>(null)
 const loadingPlatforms = ref(false)
 const initialLoading = ref(true)
 const trendDays = ref(7)
-const statusFilter = ref<string | null>(null)
+type AccountStatusFilter = 'normal' | 'unhealthy' | 'disabled'
+
+const statusFilter = ref<AccountStatusFilter | null>(null)
 const quotaWarningThreshold = ref(5)
 let eventRefreshTimer: number | null = null
 
@@ -381,10 +369,9 @@ const platformOptions = computed<SelectOption<number>[]>(() =>
   }))
 )
 
-const healthyCount = computed(() => accounts.value.filter(a => a.is_active && a.health_status === 'healthy').length)
-const unhealthyCount = computed(() => accounts.value.filter(a => a.is_active && a.health_status === 'unhealthy').length)
-const pendingCount = computed(() => accounts.value.filter(a => a.is_active && (!a.last_sign || !isToday(a.last_sign.time))).length)
-const disabledCount = computed(() => accounts.value.filter(a => !a.is_active).length)
+const normalCount = computed(() => accounts.value.filter(a => getAccountStatus(a) === 'normal').length)
+const unhealthyCount = computed(() => accounts.value.filter(a => getAccountStatus(a) === 'unhealthy').length)
+const disabledCount = computed(() => accounts.value.filter(a => getAccountStatus(a) === 'disabled').length)
 const lowQuotaAccounts = computed(() =>
   accounts.value.filter(account => account.is_active && isLowQuota(account))
 )
@@ -395,13 +382,11 @@ const monthRewardDisplay = computed(() => formatRewardTotals(
 
 const displayAccounts = computed(() => {
   if (!statusFilter.value) return accounts.value
-  if (statusFilter.value === 'pending') {
-    return accounts.value.filter(a => a.is_active && (!a.last_sign || !isToday(a.last_sign.time)))
-  }
+
   if (statusFilter.value === 'disabled') {
-    return accounts.value.filter(a => !a.is_active)
+    return accounts.value.filter(a => getAccountStatus(a) === 'disabled')
   }
-  return accounts.value.filter(a => a.is_active && a.health_status === statusFilter.value)
+  return accounts.value.filter(a => getAccountStatus(a) === statusFilter.value)
 })
 
 const recentActivities = computed(() => {
@@ -420,17 +405,12 @@ const recentActivities = computed(() => {
   return activities.slice(0, 8)
 })
 
-const isToday = (dateStr: string) => {
-  const date = new Date(dateStr)
-  const today = new Date()
-  return date.toDateString() === today.toDateString()
-}
 
-const filterByStatus = (status: string) => {
+const filterByStatus = (status: AccountStatusFilter) => {
   statusFilter.value = statusFilter.value === status ? null : status
 }
 
-const isLowQuota = (account: Account) => (account.cached_quota || 0) < quotaWarningThreshold.value * 500000
+const isLowQuota = (account: Account) => account.is_active && (account.cached_quota || 0) < quotaWarningThreshold.value * 500000
 
 const copyEndpoint = (url: string) => {
   copy(url)
@@ -844,35 +824,7 @@ watch(trendDays, (newDays) => {
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-/* 页头 */
-.dashboard-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.head-main .page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin: 0;
-}
-
-.head-main .page-subtitle {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.head-actions {
-  display: flex;
-  gap: var(--spacing-2);
-  flex-shrink: 0;
+  gap: var(--spacing-3);
 }
 
 .warning-banner {
@@ -902,11 +854,11 @@ watch(trendDays, (newDays) => {
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--spacing-3);
+  gap: var(--spacing-2);
 }
 
 .metric-card {
-  padding: var(--spacing-4);
+  padding: var(--spacing-3);
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
@@ -1025,8 +977,8 @@ watch(trendDays, (newDays) => {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-3);
-  height: 44px;
-  padding: 0 var(--spacing-4);
+  height: 40px;
+  padding: 0 var(--spacing-3);
   border-bottom: 1px solid var(--border-color-light);
 }
 
@@ -1363,22 +1315,9 @@ watch(trendDays, (newDays) => {
 }
 
 @media (max-width: 768px) {
-  .dashboard-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .warning-banner {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .head-actions {
-    width: 100%;
-  }
-
-  .head-actions :deep(.n-button) {
-    flex: 1 1 0;
   }
 
   .metrics-grid {

@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     request_timeout: int = 30
     retry_times: int = 3
     retry_interval: int = 3
+    sign_concurrency: int = 8
     allow_private_platform_urls: bool = False
 
     # ============ Web 安全配置 ============

@@ -11,6 +11,7 @@ import type {
   HealthCheckResult,
   BatchHealthCheckResult
 } from '../types'
+import { getAccountStatus } from '../utils'
 
 export const useAccountStore = defineStore('account', () => {
   // 状态
@@ -27,16 +28,23 @@ export const useAccountStore = defineStore('account', () => {
     return accounts.value.filter(a => a.group_id === selectedGroupId.value)
   })
 
-  const healthyAccounts = computed(() =>
-    accounts.value.filter(a => a.health_status === 'healthy')
+  const normalAccounts = computed(() =>
+    accounts.value.filter(a => getAccountStatus(a) === 'normal')
   )
 
+  // 保留旧名称，兼容现有调用方。
+  const healthyAccounts = normalAccounts
+
   const unhealthyAccounts = computed(() =>
-    accounts.value.filter(a => a.health_status === 'unhealthy')
+    accounts.value.filter(a => getAccountStatus(a) === 'unhealthy')
+  )
+
+  const disabledAccounts = computed(() =>
+    accounts.value.filter(a => getAccountStatus(a) === 'disabled')
   )
 
   const activeAccounts = computed(() =>
-    accounts.value.filter(a => a.is_active)
+    accounts.value.filter(a => getAccountStatus(a) !== 'disabled')
   )
 
   const accountCount = computed(() => accounts.value.length)
@@ -217,8 +225,10 @@ export const useAccountStore = defineStore('account', () => {
 
     // 计算属性
     filteredAccounts,
+    normalAccounts,
     healthyAccounts,
     unhealthyAccounts,
+    disabledAccounts,
     activeAccounts,
     accountCount,
     groupOptions,

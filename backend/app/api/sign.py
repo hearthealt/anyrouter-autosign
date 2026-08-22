@@ -13,7 +13,10 @@ from app.schemas import (
     SignResult, SignLogResponse, BatchSignResult, BatchSignResponse, ApiResponse
 )
 from app.services import execute_sign_request
-from app.services.signing import refresh_account_cache_after_sign as refresh_cache_after_sign
+from app.services.signing import (
+    execute_sign_batch,
+    refresh_account_cache_after_sign as refresh_cache_after_sign,
+)
 from app.services.events import publish_event
 from app.utils import format_quota, get_account_platform_config
 
@@ -126,57 +129,67 @@ def sign_account(account_id: int, db: Session = Depends(get_db)):
 
 @router.post("/sign/batch", response_model=ApiResponse)
 def batch_sign(db: Session = Depends(get_db)):
-    """批量签到所有启用账号"""
-    accounts = db.query(Account).filter(
-        Account.is_active == True,
-        Account.platform_id.isnot(None)
-    ).all()
+    """并发签到所有启用账号。"""
+    account_ids = [
+        account_id
+        for (account_id,) in db.query(Account.id).filter(
+            Account.is_active == True,
+            Account.platform_id.isnot(None)
+        ).all()
+    ]
+
+    # 结束查询事务后再启动各自持有独立 Session 的签到线程，避免共享 Session。
+    db.commit()
+    sign_results = execute_sign_batch(account_ids)
+    existing_account_ids = {
+        account_id
+        for (account_id,) in db.query(Account.id).filter(Account.id.in_(account_ids)).all()
+    } if account_ids else set()
 
     results = []
     success_count = 0
     fail_count = 0
     already_signed_count = 0
 
-    for account in accounts:
-        platform_config = get_account_platform_config(account)
-        request_success, result = perform_sign_request(db, account, platform_config)
-        sign_success = request_success and result.get("success", False)
-        message = result.get("message", "")
-        reward_quota = result.get("reward_quota", 0)
-        reward_display = result.get("reward_display") or format_quota(reward_quota)
-        reward_unit = result.get("reward_unit") or ("quota" if platform_config.get("adapter_type") == "new_api" else "count")
-        already_signed = bool(result.get("already_signed", False))
+    for sign_result in sign_results:
+        account_id = sign_result["account_id"]
+        username = sign_result.get("username") or f"账号 {account_id}"
+        sign_success = bool(sign_result.get("success", False))
+        already_signed = bool(sign_result.get("already_signed", False))
+        message = sign_result.get("message", "")
+        reward_quota = sign_result.get("reward_quota", 0)
+        reward_display = sign_result.get("reward_display") or format_quota(reward_quota)
+        reward_unit = sign_result.get("reward_unit") or "quota"
 
-        refresh_account_cache_after_sign(db, account, platform_config, request_success)
-
-        if already_signed:
+        if sign_result.get("skipped"):
+            log_message = message or "账号已跳过"
+            log_status = "failed"
+            fail_count += 1
+        elif already_signed:
             log_message = "今日已签到"
             log_status = "already_signed"
+            already_signed_count += 1
         elif sign_success:
             log_message = message
             log_status = "success"
+            success_count += 1
         else:
             log_message = message
             log_status = "failed"
-
-        log = SignLog(
-            account_id=account.id,
-            success=sign_success,
-            message=log_message,
-            reward_quota=reward_quota,
-            reward_display=reward_display,
-            reward_unit=reward_unit,
-            retry_count=0,
-            status=log_status
-        )
-        db.add(log)
-
-        if sign_success and not already_signed:
-            success_count += 1
-        elif already_signed:
-            already_signed_count += 1
-        else:
             fail_count += 1
+
+        # 账号可能在并发执行期间被删除；这种情况下仅返回结果，不写入失效外键日志。
+        if account_id in existing_account_ids:
+            db.add(SignLog(
+                account_id=account_id,
+                success=sign_success,
+                message=log_message,
+                reward_quota=reward_quota,
+                reward_display=reward_display,
+                reward_unit=reward_unit,
+                retry_count=0,
+                status=log_status
+            ))
 
         if already_signed:
             result_message = "今日已签到"
@@ -186,8 +199,8 @@ def batch_sign(db: Session = Depends(get_db)):
             result_message = message or "签到失败"
 
         results.append(BatchSignResult(
-            account_id=account.id,
-            username=account.username or "",
+            account_id=account_id,
+            username=username,
             success=sign_success,
             message=result_message,
             reward_quota=reward_quota,

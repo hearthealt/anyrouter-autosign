@@ -17,6 +17,7 @@ from app.services import (
     execute_with_session_refresh,
     refresh_account_cache_after_sign,
 )
+from app.services.signing import execute_sign_batch
 from app.services.events import publish_event
 from app.services.notify import NotifyFactory
 from app.utils import add_reward_total, format_quota, format_reward_totals, get_account_platform_config
@@ -212,12 +213,15 @@ def auto_sign_job():
             logger.info("自动签到未启用，跳过")
             return
 
-        accounts = db.query(Account).filter(
-            Account.is_active == True,
-            Account.platform_id.isnot(None)
-        ).all()
+        account_ids = [
+            account_id
+            for (account_id,) in db.query(Account.id).filter(
+                Account.is_active == True,
+                Account.platform_id.isnot(None)
+            ).all()
+        ]
 
-        if not accounts:
+        if not account_ids:
             logger.info("没有可签到的账号")
             return
 
@@ -234,92 +238,84 @@ def auto_sign_job():
         retry_accounts = []
         event_payloads = []
 
-        for account in accounts:
-            try:
-                result = execute_sign(db, account)
-                if result.get("skipped"):
-                    continue
-                sign_success = result["success"]
-                already_signed = result["already_signed"]
-                message = result["message"]
-                reward_quota = result["reward_quota"]
-                reward_display = result.get("reward_display") or format_quota(reward_quota)
-                reward_unit = result.get("reward_unit") or "quota"
+        # 先结束设置和账号列表查询事务，再由线程池中的独立 Session 并发签到。
+        db.commit()
+        sign_results = execute_sign_batch(account_ids)
 
-                if already_signed:
-                    log_message = "今日已签到"
-                    log_status = "already_signed"
-                    skip_count += 1
-                else:
-                    log_message = build_sign_message(message, reward_quota, reward_display=reward_display)
-                    log_status = "success" if sign_success else "failed"
-                    if sign_success:
-                        success_count += 1
-                        add_reward_total(reward_totals, reward_quota, reward_unit)
-                        if reward_unit == "quota":
-                            total_reward_quota += reward_quota
-                    else:
-                        fail_count += 1
-                        failed_items.append({
-                            "username": account.username or f"账号 {account.id}",
-                            "message": log_message,
-                        })
-
-                log = SignLog(
-                    account_id=account.id,
-                    success=sign_success,
-                    message=log_message,
-                    reward_quota=reward_quota,
-                    reward_display=reward_display,
-                    reward_unit=reward_unit,
-                    retry_count=0,
-                    status=log_status
+        for result in sign_results:
+            if result.get("skipped"):
+                logger.info(
+                    "账号 %s 跳过签到: %s",
+                    result.get("username") or result.get("account_id"),
+                    result.get("message", "账号不可用"),
                 )
-                db.add(log)
-                db.flush()
+                continue
 
-                logger.info(f"账号 {account.username} 签到: {log_message}")
+            account_id = result["account_id"]
+            username = result.get("username") or f"账号 {account_id}"
+            sign_success = bool(result.get("success", False))
+            already_signed = bool(result.get("already_signed", False))
+            message = result.get("message", "")
+            reward_quota = result.get("reward_quota", 0)
+            reward_display = result.get("reward_display") or format_quota(reward_quota)
+            reward_unit = result.get("reward_unit") or "quota"
 
-                if retry_enabled and not sign_success and not already_signed:
-                    retry_accounts.append({
-                        "account_id": account.id,
-                        "retry_count": 0,
-                        "log_id": log.id,
-                    })
-
-                event_payloads.append({
-                    "account_id": account.id,
-                    "username": account.username or "",
-                    "success": sign_success,
-                    "already_signed": already_signed,
-                    "message": log_message,
-                    "reward_quota": reward_quota,
-                    "reward_display": reward_display,
-                    "reward_unit": reward_unit,
-                })
-
-            except Exception as e:
-                logger.error(f"账号 {account.username} 签到异常: {e}")
+            if already_signed:
+                log_message = "今日已签到"
+                log_status = "already_signed"
+                skip_count += 1
+            elif sign_success:
+                log_message = build_sign_message(
+                    message,
+                    reward_quota,
+                    reward_display=reward_display,
+                )
+                log_status = "success"
+                success_count += 1
+                add_reward_total(reward_totals, reward_quota, reward_unit)
+                if reward_unit == "quota":
+                    total_reward_quota += reward_quota
+            else:
+                log_message = message or "签到失败"
+                log_status = "failed"
                 fail_count += 1
                 failed_items.append({
-                    "username": account.username or f"账号 {account.id}",
-                    "message": str(e),
+                    "username": username,
+                    "message": log_message,
                 })
-                if retry_enabled:
-                    retry_accounts.append({
-                        "account_id": account.id,
-                        "retry_count": 0
-                    })
-                event_payloads.append({
-                    "account_id": account.id,
-                    "username": account.username or "",
-                    "success": False,
-                    "already_signed": False,
-                    "message": str(e),
-                    "reward_quota": 0,
-                    "reward_display": format_quota(0),
-                    "reward_unit": "quota" if getattr(account.platform, "adapter_type", "new_api") == "new_api" else "count",
+
+            log = SignLog(
+                account_id=account_id,
+                success=sign_success,
+                message=log_message,
+                reward_quota=reward_quota,
+                reward_display=reward_display,
+                reward_unit=reward_unit,
+                retry_count=0,
+                status=log_status,
+            )
+            db.add(log)
+            db.flush()
+
+            logger.info("账号 %s 签到: %s", username, log_message)
+
+            if retry_enabled and not sign_success and not already_signed:
+                retry_accounts.append({
+                    "account_id": account_id,
+                    "retry_count": 0,
+                    "log_id": log.id,
                 })
+
+            event_payloads.append({
+                "account_id": account_id,
+                "username": username,
+                "success": sign_success,
+                "already_signed": already_signed,
+                "message": log_message,
+                "reward_quota": reward_quota,
+                "reward_display": reward_display,
+                "reward_unit": reward_unit,
+            })
 
         db.commit()
         for payload in event_payloads:
@@ -365,7 +361,7 @@ def schedule_retry_sign(accounts: list, max_retries: int, retry_interval: int):
 
 
 def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
-    """重试签到任务"""
+    """并发执行失败账号的重试签到任务。"""
     logger.info(f"开始执行重试签到任务，共 {len(accounts)} 个账号...")
     db = SessionLocal()
 
@@ -379,142 +375,117 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
         retry_accounts = []
         event_payloads = []
 
-        for item in accounts:
+        retry_items = [
+            {
+                "account_id": int(item["account_id"]),
+                "retry_count": int(item.get("retry_count", 0)) + 1,
+                "log_id": item.get("log_id"),
+            }
+            for item in accounts
+        ]
+
+        # 签到线程各自创建 Session；当前 Session 只负责更新原签到日志和通知统计。
+        sign_results = execute_sign_batch(item["account_id"] for item in retry_items)
+
+        for item, result in zip(retry_items, sign_results):
             account_id = item["account_id"]
-            retry_count = item["retry_count"] + 1
+            retry_count = item["retry_count"]
             log_id = item.get("log_id")
 
-            account = db.query(Account).filter(
-                Account.id == account_id,
-                Account.is_active == True
-            ).first()
-
-            if not account or not account.platform_id:
+            if result.get("skipped"):
+                logger.info(
+                    "账号 %s 跳过重试签到: %s",
+                    result.get("username") or account_id,
+                    result.get("message", "账号不可用"),
+                )
                 continue
 
-            try:
-                result = execute_sign(db, account)
-                if result.get("skipped"):
-                    continue
-                sign_success = result["success"]
-                already_signed = result["already_signed"]
-                message = result["message"]
-                reward_quota = result["reward_quota"]
-                reward_display = result.get("reward_display") or format_quota(reward_quota)
-                reward_unit = result.get("reward_unit") or "quota"
-                log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
+            username = result.get("username") or f"账号 {account_id}"
+            sign_success = bool(result.get("success", False))
+            already_signed = bool(result.get("already_signed", False))
+            message = result.get("message", "")
+            reward_quota = result.get("reward_quota", 0)
+            reward_display = result.get("reward_display") or format_quota(reward_quota)
+            reward_unit = result.get("reward_unit") or "quota"
+            log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
 
-                if already_signed:
-                    log_message = f"重试{retry_count}次后: 今日已签到"
-                    log_status = "already_signed"
-                    already_signed_count += 1
-                elif sign_success:
-                    log_message = f"重试{retry_count}次后: {build_sign_message(message, reward_quota, reward_display=reward_display)}"
-                    log_status = "success"
-                    success_count += 1
-                    add_reward_total(reward_totals, reward_quota, reward_unit)
-                    if reward_unit == "quota":
-                        total_reward_quota += reward_quota
-                else:
-                    log_message = f"重试{retry_count}次后: {message}"
-                    log_status = "failed"
-                    fail_count += 1
-                    failed_items.append({
-                        "username": account.username or f"账号 {account.id}",
-                        "message": log_message,
-                    })
-                    if retry_count < max_retries:
-                        retry_accounts.append({
-                            "account_id": account_id,
-                            "retry_count": retry_count,
-                            "log_id": log_id,
-                        })
-
-                if log:
-                    log.sign_time = datetime.now()
-                    log.success = sign_success
-                    log.message = log_message
-                    log.reward_quota = reward_quota
-                    log.reward_display = reward_display
-                    log.reward_unit = reward_unit
-                    log.retry_count = retry_count
-                    log.status = log_status
-                else:
-                    log = SignLog(
-                        account_id=account.id,
-                        success=sign_success,
-                        message=log_message,
-                        reward_quota=reward_quota,
-                        reward_display=reward_display,
-                        reward_unit=reward_unit,
-                        retry_count=retry_count,
-                        status=log_status
-                    )
-                    db.add(log)
-                    db.flush()
-                    log_id = log.id
-
-                logger.info(f"账号 {account.username} 重试签到(第{retry_count}次): {log_message}")
-
-                event_payloads.append({
-                    "account_id": account.id,
-                    "username": account.username or "",
-                    "success": sign_success,
-                    "already_signed": already_signed,
-                    "message": log_message,
-                    "reward_quota": reward_quota,
-                    "reward_display": reward_display,
-                    "reward_unit": reward_unit,
-                })
-
-            except Exception as e:
-                logger.error(f"账号 {account.username} 重试签到异常: {e}")
+            if already_signed:
+                log_message = f"重试{retry_count}次后: 今日已签到"
+                log_status = "already_signed"
+                already_signed_count += 1
+            elif sign_success:
+                log_message = (
+                    f"重试{retry_count}次后: "
+                    f"{build_sign_message(message, reward_quota, reward_display=reward_display)}"
+                )
+                log_status = "success"
+                success_count += 1
+                add_reward_total(reward_totals, reward_quota, reward_unit)
+                if reward_unit == "quota":
+                    total_reward_quota += reward_quota
+            else:
+                log_message = f"重试{retry_count}次后: {message or '签到失败'}"
+                log_status = "failed"
                 fail_count += 1
                 failed_items.append({
-                    "username": account.username or f"账号 {account.id}",
-                    "message": str(e),
+                    "username": username,
+                    "message": log_message,
                 })
-                log = db.query(SignLog).filter(SignLog.id == log_id).first() if log_id else None
-                if log:
-                    log.sign_time = datetime.now()
-                    log.success = False
-                    log.message = f"重试{retry_count}次后: {e}"
-                    log.reward_quota = 0
-                    log.retry_count = retry_count
-                    log.status = "failed"
-                else:
-                    log = SignLog(
-                        account_id=account.id,
-                        success=False,
-                        message=f"重试{retry_count}次后: {e}",
-                        reward_quota=0,
-                        retry_count=retry_count,
-                        status="failed"
-                    )
-                    db.add(log)
-                    db.flush()
-                    log_id = log.id
                 if retry_count < max_retries:
                     retry_accounts.append({
                         "account_id": account_id,
                         "retry_count": retry_count,
                         "log_id": log_id,
                     })
-                event_payloads.append({
-                    "account_id": account.id,
-                    "username": account.username or "",
-                    "success": False,
-                    "already_signed": False,
-                    "message": str(e),
-                    "reward_quota": 0,
-                    "reward_display": format_quota(0),
-                    "reward_unit": "quota" if getattr(account.platform, "adapter_type", "new_api") == "new_api" else "count",
-                })
+
+            if log:
+                log.sign_time = datetime.now()
+                log.success = sign_success
+                log.message = log_message
+                log.reward_quota = reward_quota
+                log.reward_display = reward_display
+                log.reward_unit = reward_unit
+                log.retry_count = retry_count
+                log.status = log_status
+            else:
+                log = SignLog(
+                    account_id=account_id,
+                    success=sign_success,
+                    message=log_message,
+                    reward_quota=reward_quota,
+                    reward_display=reward_display,
+                    reward_unit=reward_unit,
+                    retry_count=retry_count,
+                    status=log_status,
+                )
+                db.add(log)
+                db.flush()
+                log_id = log.id
+                if retry_accounts and retry_accounts[-1]["account_id"] == account_id:
+                    retry_accounts[-1]["log_id"] = log_id
+
+            logger.info("账号 %s 重试签到(第%s次): %s", username, retry_count, log_message)
+
+            event_payloads.append({
+                "account_id": account_id,
+                "username": username,
+                "success": sign_success,
+                "already_signed": already_signed,
+                "message": log_message,
+                "reward_quota": reward_quota,
+                "reward_display": reward_display,
+                "reward_unit": reward_unit,
+            })
 
         db.commit()
         for payload in event_payloads:
             publish_event("sign_completed", payload)
-        logger.info(f"重试签到完成: 成功 {success_count}, 失败 {fail_count}")
+        logger.info(
+            "重试签到完成: 成功 %s, 已签 %s, 失败 %s",
+            success_count,
+            already_signed_count,
+            fail_count,
+        )
         send_sign_summary_notification(
             db,
             "定时签到重试汇总",
@@ -531,6 +502,7 @@ def retry_sign_job(accounts: list, max_retries: int, retry_interval: int):
             schedule_retry_sign(retry_accounts, max_retries, retry_interval)
 
     except Exception as e:
+        db.rollback()
         logger.error(f"重试签到任务异常: {e}")
     finally:
         db.close()

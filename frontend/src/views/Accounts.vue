@@ -1,11 +1,16 @@
 <template>
   <div class="accounts-page">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">账号</h1>
-        <p class="page-subtitle">{{ pagination.itemCount }} 个账号 · 健康率 {{ healthRatio }}% · 待签到 {{ pendingCount }}</p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">账号 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
+        <div class="toolbar-stats" aria-label="账号状态统计">
+          <span class="toolbar-stat success">正常 <strong>{{ normalCount }}</strong></span>
+          <span class="toolbar-stat error">异常 <strong>{{ unhealthyCount }}</strong></span>
+          <span class="toolbar-stat">禁用 <strong>{{ disabledCount }}</strong></span>
+          <span class="toolbar-stat">正常率 <strong>{{ healthRatio }}%</strong></span>
+        </div>
       </div>
-      <div class="head-actions">
+      <div class="toolbar-actions">
         <n-button size="small" :loading="loading" @click="handleRefresh">
           <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
           刷新
@@ -29,48 +34,52 @@
       </div>
     </div>
 
-    <div class="filter-bar">
-      <n-input
-        v-model:value="searchKeyword"
-        size="small"
-        clearable
-        placeholder="搜索用户名、平台或 User ID"
-        class="search-input"
-      >
-        <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
-      </n-input>
+    <div class="control-strip">
+      <div class="filter-strip accounts-filter">
+        <n-input
+          v-model:value="searchKeyword"
+          size="small"
+          clearable
+          placeholder="搜索用户名、平台或 User ID"
+          class="search-input"
+        >
+          <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
+        </n-input>
 
-      <n-select
-        v-model:value="selectedPlatformId"
-        :options="platformOptions"
-        size="small"
-        clearable
-        placeholder="全部平台"
-        class="filter-item"
-      />
+        <n-select
+          v-model:value="selectedPlatformId"
+          :options="platformOptions"
+          size="small"
+          clearable
+          placeholder="全部平台"
+          class="filter-item"
+        />
 
-      <n-select
-        v-model:value="selectedGroupId"
-        :options="groupOptions"
-        size="small"
-        clearable
-        placeholder="全部分组"
-        class="filter-item"
-      />
-    </div>
+        <n-select
+          v-model:value="selectedGroupId"
+          :options="groupOptions"
+          size="small"
+          clearable
+          placeholder="全部分组"
+          class="filter-item"
+        />
 
-    <div class="status-tabs" role="group" aria-label="账号状态筛选">
-      <button
-        v-for="pill in quickStatusPills"
-        :key="pill.key"
-        class="status-tab"
-        :class="{ active: (pill.value === null && selectedStatus === null) || selectedStatus === pill.value }"
-        :aria-pressed="(pill.value === null && selectedStatus === null) || selectedStatus === pill.value"
-        @click="setStatusFilter(pill.value)"
-      >
-        <span v-if="pill.value" class="status-dot" :class="pill.tone" aria-hidden="true"></span>
-        {{ pill.label }} <b>{{ pill.count }}</b>
-      </button>
+        <n-button v-if="hasActiveFilters" size="small" quaternary @click="resetFilters">重置</n-button>
+      </div>
+
+      <div class="status-tabs" role="group" aria-label="账号状态筛选">
+        <button
+          v-for="pill in quickStatusPills"
+          :key="pill.key"
+          class="status-tab"
+          :class="{ active: (pill.value === null && selectedStatus === null) || selectedStatus === pill.value }"
+          :aria-pressed="(pill.value === null && selectedStatus === null) || selectedStatus === pill.value"
+          @click="setStatusFilter(pill.value)"
+        >
+          <span v-if="pill.value" class="status-dot" :class="pill.tone" aria-hidden="true"></span>
+          {{ pill.label }} <b>{{ pill.count }}</b>
+        </button>
+      </div>
     </div>
 
     <div v-if="selectedAccounts.length > 0" class="bulk-bar">
@@ -247,8 +256,9 @@ import { AccountModal, BatchImportModal, ExternalLink, TokensModal } from '../co
 import { accountApi, groupsApi, notifyApi, platformApi, settingsApi, signApi } from '../api'
 import { useEventStream, useFormat, useViewRefresh } from '../composables'
 import type { Account, AccountAuthType, AccountGroup, AccountProxyMode, ApiToken, CreateTokenParams, Platform, SelectOption } from '../types'
+import { getAccountStatus } from '../utils'
 
-type StatusFilter = 'healthy' | 'unhealthy' | 'pending' | 'disabled'
+type StatusFilter = 'normal' | 'unhealthy' | 'disabled'
 type SortKey = 'username' | 'platform' | 'group' | 'quota' | 'last_sign' | 'health'
 
 const router = useRouter()
@@ -286,6 +296,7 @@ const quotaWarningThreshold = ref(5)
 const listSummary = ref({
   total: 0,
   active_count: 0,
+  normal_count: 0,
   healthy_count: 0,
   unhealthy_count: 0,
   disabled_count: 0,
@@ -305,11 +316,10 @@ let eventRefreshTimer: number | null = null
 let searchDebounceTimer: number | null = null
 
 const activeCount = computed(() => listSummary.value.active_count)
-const healthyCount = computed(() => listSummary.value.healthy_count)
+const normalCount = computed(() => listSummary.value.normal_count || listSummary.value.healthy_count)
 const unhealthyCount = computed(() => listSummary.value.unhealthy_count)
 const disabledCount = computed(() => listSummary.value.disabled_count)
-const pendingCount = computed(() => listSummary.value.pending_count)
-const healthRatio = computed(() => (activeCount.value > 0 ? Math.round((healthyCount.value / activeCount.value) * 100) : 0))
+const healthRatio = computed(() => (activeCount.value > 0 ? Math.round((normalCount.value / activeCount.value) * 100) : 0))
 
 const platformOptions = computed<SelectOption<number>[]>(() =>
   platforms.value.map(platform => ({ label: platform.name, value: platform.id }))
@@ -331,9 +341,8 @@ const hasActiveFilters = computed(() =>
 
 const quickStatusPills = computed(() => [
   { key: 'all', label: '全部', count: listSummary.value.total, value: null as StatusFilter | null, tone: 'default' },
-  { key: 'healthy', label: '健康', count: healthyCount.value, value: 'healthy' as StatusFilter, tone: 'success' },
+  { key: 'normal', label: '正常', count: normalCount.value, value: 'normal' as StatusFilter, tone: 'success' },
   { key: 'unhealthy', label: '异常', count: unhealthyCount.value, value: 'unhealthy' as StatusFilter, tone: 'error' },
-  { key: 'pending', label: '待签到', count: pendingCount.value, value: 'pending' as StatusFilter, tone: 'warning' },
   { key: 'disabled', label: '禁用', count: disabledCount.value, value: 'disabled' as StatusFilter, tone: 'default' }
 ])
 
@@ -347,6 +356,13 @@ const setStatusFilter = (status: StatusFilter | null) => {
   selectedStatus.value = selectedStatus.value === status ? null : status
 }
 
+const resetFilters = () => {
+  searchKeyword.value = ''
+  selectedPlatformId.value = null
+  selectedGroupId.value = null
+  selectedStatus.value = null
+}
+
 const isNewApiAccount = (account: Account) => account.platform?.adapter_type !== 'http'
 const getUserId = (account: Account) => account.external_user_id
   ?? (account.anyrouter_user_id != null ? String(account.anyrouter_user_id) : '-')
@@ -355,17 +371,17 @@ const getPlatformUrl = (account: Account) => account.platform?.base_url || ''
 const getGroupInfo = (account: Account) => account.group || groups.value.find(group => group.id === account.group_id)
 
 const getHealthTone = (account: Account) => {
-  if (!account.is_active) return 'default'
-  if (account.health_status === 'healthy') return 'success'
-  if (account.health_status === 'unhealthy') return 'error'
-  return 'warning'
+  const status = getAccountStatus(account)
+  if (status === 'disabled') return 'default'
+  if (status === 'unhealthy') return 'error'
+  return 'success'
 }
 
 const getHealthLabel = (account: Account) => {
-  if (!account.is_active) return '已禁用'
-  if (account.health_status === 'healthy') return '健康'
-  if (account.health_status === 'unhealthy') return '异常'
-  return '未检查'
+  const status = getAccountStatus(account)
+  if (status === 'disabled') return '已禁用'
+  if (status === 'unhealthy') return '异常'
+  return '正常'
 }
 
 const getQuotaRatio = (account: Account) => {
@@ -374,11 +390,12 @@ const getQuotaRatio = (account: Account) => {
   return Math.max(0, Math.min(100, ratio))
 }
 
-const isLowQuota = (account: Account) => isNewApiAccount(account)
+const isLowQuota = (account: Account) => account.is_active
+  && isNewApiAccount(account)
   && (account.cached_quota || 0) < quotaWarningValue.value
 
 const getRowClassName = (account: Account) => {
-  if (account.health_status === 'unhealthy') return 'account-row-alert'
+  if (getAccountStatus(account) === 'unhealthy') return 'account-row-alert'
   if (isLowQuota(account)) return 'account-row-warning'
   return ''
 }
@@ -703,6 +720,37 @@ const handleCheckedRowKeysChange = (keys: Array<string | number>) => {
   checkedRowKeys.value = keys.map(key => Number(key)).filter(key => !Number.isNaN(key))
 }
 
+const BULK_CONCURRENCY = 8
+
+const runBulkActions = async (
+  items: Account[],
+  action: (account: Account) => Promise<unknown>
+): Promise<PromiseSettledResult<unknown>[]> => {
+  const results: PromiseSettledResult<unknown>[] = new Array(items.length)
+  let nextIndex = 0
+
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex++
+      try {
+        results[currentIndex] = {
+          status: 'fulfilled',
+          value: await action(items[currentIndex])
+        }
+      } catch (reason) {
+        results[currentIndex] = {
+          status: 'rejected',
+          reason
+        }
+      }
+    }
+  }
+
+  const workerCount = Math.min(BULK_CONCURRENCY, items.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
 const runBulkOperation = async (
   loadingKey: NonNullable<typeof bulkLoading.value>,
   items: Account[],
@@ -720,7 +768,7 @@ const runBulkOperation = async (
     const executable = skippedPredicate ? items.filter(account => !skippedPredicate(account)) : items
     const skippedCount = items.length - executable.length
 
-    const results = await Promise.allSettled(executable.map(account => action(account)))
+    const results = await runBulkActions(executable, action)
     const successCount = results.filter(result => result.status === 'fulfilled').length
     const failCount = results.length - successCount
 
@@ -879,6 +927,7 @@ const loadData = async (page = pagination.value.page) => {
     listSummary.value = responseData.summary || {
       total: total,
       active_count: 0,
+      normal_count: 0,
       healthy_count: 0,
       unhealthy_count: 0,
       disabled_count: 0,
@@ -1153,40 +1202,11 @@ useViewRefresh(() => handleRefresh())
 .accounts-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
+  gap: var(--spacing-3);
 }
 
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin: 0;
-}
-
-.page-subtitle {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-
-.head-actions {
-  display: flex;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
-}
-
-.filter-bar {
-  display: flex;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
+.accounts-filter {
+  width: 100%;
 }
 
 .search-input {
@@ -1203,6 +1223,8 @@ useViewRefresh(() => handleRefresh())
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-1);
+  padding-top: var(--spacing-2);
+  border-top: 1px solid var(--border-color-light);
 }
 
 .bulk-bar {
@@ -1526,11 +1548,6 @@ useViewRefresh(() => handleRefresh())
 }
 
 @media (max-width: 900px) {
-  .page-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .search-input {
     max-width: none;
   }
@@ -1546,7 +1563,8 @@ useViewRefresh(() => handleRefresh())
 }
 
 @media (max-width: 640px) {
-  .filter-bar {
+  .accounts-filter {
+    align-items: stretch;
     flex-direction: column;
   }
 
@@ -1559,4 +1577,3 @@ useViewRefresh(() => handleRefresh())
   }
 }
 </style>
-

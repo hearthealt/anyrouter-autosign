@@ -1,15 +1,13 @@
 <template>
   <div class="settings-page">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">设置</h1>
-        <p class="page-subtitle">
-          自动签到 <span :class="['status', { on: autoSignEnabled }]">{{ autoSignEnabled ? '已开启' : '未开启' }}</span>
-          <span class="sep">·</span>
-          {{ channelCount }} 个推送渠道
-          <span class="sep">·</span>
-          {{ groupCount }} 个分组
-        </p>
+    <div class="workspace-toolbar">
+      <div class="toolbar-summary">
+        <div class="toolbar-label">系统设置</div>
+        <div class="toolbar-stats">
+          <span class="toolbar-stat" :class="{ success: autoSignEnabled }">自动签到 <strong>{{ autoSignEnabled ? '已开启' : '未开启' }}</strong></span>
+          <span class="toolbar-stat">推送渠道 <strong>{{ channelCount }}</strong></span>
+          <span class="toolbar-stat">账号分组 <strong>{{ groupCount }}</strong></span>
+        </div>
       </div>
     </div>
 
@@ -121,49 +119,11 @@ useViewRefresh(async () => {
 .settings-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.page-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.page-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  margin: 0;
-}
-
-.page-subtitle {
-  margin-top: 4px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.page-subtitle .status {
-  color: var(--text-tertiary);
-}
-
-.page-subtitle .status.on {
-  color: var(--success-color);
-  font-weight: var(--font-medium);
-}
-
-.page-subtitle .sep {
-  color: var(--text-quaternary);
+  gap: var(--spacing-3);
 }
 
 .settings-tabs :deep(.n-tabs-nav) {
-  margin-bottom: var(--spacing-5);
+  margin-bottom: var(--spacing-3);
 }
 
 .settings-tabs :deep(.n-tabs-rail) {

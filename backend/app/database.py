@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # 创建数据库引擎
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False}  # SQLite 需要
+    connect_args={"check_same_thread": False, "timeout": 30}  # SQLite 需要
 )
 
 # 创建会话工厂
