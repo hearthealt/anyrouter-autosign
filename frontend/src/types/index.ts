@@ -513,4 +513,32 @@ export interface LatestVersionInfo {
 export interface UpdateResult {
   status: 'triggered' | 'no_update' | 'error'
   message: string
+  update_id?: string | null
+  current_version?: string
+  target_version?: string
+  poll_interval_seconds?: number
+  timeout_seconds?: number
+}
+
+export interface UpdateStatus {
+  update_id: string
+  status: 'unknown' | 'triggered' | 'updating' | 'ready' | 'no_update' | 'failed'
+  message: string
+  healthy: boolean
+  ready: boolean
+  current_version: string
+  target_version: string
+  elapsed_seconds: number
+}
+
+export interface SystemHealthInfo {
+  status: string
+  healthy: boolean
+  version: string
+  update_id?: string | null
+  update_status: string
+  target_version: string
+  message: string
+  ready: boolean
+  elapsed_seconds: number
 }

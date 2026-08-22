@@ -294,8 +294,7 @@ export const logsApi = {
 export const systemApi = {
   getVersion: () => api.get('/system/version'),
   getLatestVersion: () => api.get('/system/latest-version'),
-  triggerUpdate: () => api.post('/system/update')
+  triggerUpdate: (updateId: string) => api.post('/system/update', { update_id: updateId }),
+  getHealth: (updateId?: string) => api.get('/system/health', { params: updateId ? { update_id: updateId } : undefined, timeout: 5000 }),
+  getUpdateStatus: (updateId: string) => api.get('/system/update-status', { params: { update_id: updateId }, timeout: 5000 })
 }
-
-
-

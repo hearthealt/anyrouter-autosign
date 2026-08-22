@@ -14,7 +14,7 @@
           <div class="update-actions">
             <div v-if="reloadCountdown > 0" class="update-countdown">
               <strong>{{ reloadCountdown }}</strong>
-              <span>秒后自动刷新页面</span>
+              <span>秒，正在确认服务恢复</span>
             </div>
             <n-button size="small" @click="reloadPage">立即刷新</n-button>
           </div>
@@ -84,7 +84,7 @@
                 v-model:show="confirmingUpdate"
                 preset="dialog"
                 title="确认更新并重启"
-                content="更新准备会随机等待 15-30 秒，成功后再等待 10 秒让服务重启并自动刷新页面。确定继续吗？"
+                content="更新会在后台执行，页面将每 3 秒检查服务状态。确认新版本服务恢复后会自动刷新页面，最长等待约 3 分钟。确定继续吗？"
                 positive-text="确定更新"
                 negative-text="取消"
                 :mask-closable="false"
