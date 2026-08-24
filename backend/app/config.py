@@ -110,6 +110,14 @@ class Settings(BaseSettings):
     # 默认值是 compose 里的服务名，docker-compose.yml 会显式传入覆盖
     watchtower_url: str = "http://watchtower:8080"
     watchtower_http_api_token: str = ""
+    # 提示新版本前先确认镜像仓库里真的有这个版本的镜像。只有推送 v* tag 触发的
+    # 发布工作流才会产出 latest/<version> 镜像标签；手工创建 Release 会让页面
+    # 提示一个 Watchtower 根本拉不到的版本，更新必然静默失败。
+    verify_update_image: bool = True
+    update_registry: str = "ghcr.io"
+    # 留空则取 github_repo 的小写形式（发布工作流的镜像名与仓库名一致）。
+    # 私有仓库或改过 IMAGE_NAME 的 fork 才需要显式配置。
+    update_image_repo: str = ""
 
     class Config:
         # 仓库根目录的 .env；优先级：系统环境变量 > .env > 代码默认值

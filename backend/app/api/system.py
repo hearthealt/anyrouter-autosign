@@ -36,6 +36,15 @@ router = APIRouter(prefix="/system", tags=["系统"])
 
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_TIMEOUT = 15
+REGISTRY_TIMEOUT = 10
+# 查 manifest 必须声明能接受的所有 media type，否则 registry 会拒绝或
+# 只回退到旧版 schema，多架构镜像还会直接 404。
+REGISTRY_MANIFEST_ACCEPT = ", ".join((
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+))
 # watchtower 会在更新过程中重建本容器，读超时给宽一些
 WATCHTOWER_TIMEOUT = (5, 60)
 # 给反向代理留出时间接收已返回的成功响应，再触发容器重建。
@@ -73,6 +82,113 @@ def _version_at_least(current: str, target: str) -> bool:
     current_parts = _version_parts(current)
     target_parts = _version_parts(target)
     return bool(current_parts and target_parts and current_parts >= target_parts)
+
+
+def _update_image_repo() -> str:
+    """镜像在 registry 上的路径；registry 只接受小写。"""
+    return (settings.update_image_repo or settings.github_repo).strip("/").lower()
+
+
+def _registry_pull_token(repo: str) -> str | None:
+    """取匿名 pull token —— 公开镜像也必须带 token 才能查 manifest。"""
+    registry = settings.update_registry
+    try:
+        resp = requests.get(
+            f"https://{registry}/token",
+            params={"scope": f"repository:{repo}:pull", "service": registry},
+            timeout=REGISTRY_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        logger.warning("获取镜像仓库 token 失败: %s", exc)
+        return None
+
+    if resp.status_code != 200:
+        logger.warning("获取镜像仓库 token 失败：HTTP %s", resp.status_code)
+        return None
+
+    try:
+        token = resp.json().get("token")
+    except ValueError as exc:
+        logger.warning("解析镜像仓库 token 响应失败: %s", exc)
+        return None
+
+    return token if isinstance(token, str) and token else None
+
+
+def _manifest_digest(repo: str, tag: str, token: str) -> tuple[bool | None, str]:
+    """查某个镜像 tag 的 manifest，返回 (是否存在, digest)。
+
+    是否存在为 None 表示查不动（网络异常、鉴权失败、registry 5xx）；调用方
+    必须按"无法确认"处理，不能据此判定镜像缺失。
+    """
+    try:
+        resp = requests.head(
+            f"https://{settings.update_registry}/v2/{repo}/manifests/{tag}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": REGISTRY_MANIFEST_ACCEPT,
+            },
+            timeout=REGISTRY_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        logger.warning("查询镜像 %s:%s 失败: %s", repo, tag, exc)
+        return None, ""
+
+    if resp.status_code == 200:
+        return True, resp.headers.get("Docker-Content-Digest", "")
+    if resp.status_code == 404:
+        return False, ""
+
+    logger.warning("查询镜像 %s:%s 返回 HTTP %s", repo, tag, resp.status_code)
+    return None, ""
+
+
+def _verify_release_image(version: str) -> str | None:
+    """确认 Release 对应的镜像真的已经推上去了。
+
+    发布工作流里 latest/<version> 这些镜像标签都由 `refs/tags/v*` 门控，只有
+    推 tag 触发的那次运行才会产出。手工创建 Release（或 tag 推送没触发工作流）
+    会让页面提示一个拉不到的版本：Watchtower 拉 latest 发现 digest 没变，什么
+    都不做，前端却以为更新已经开始。v0.0.3 就是这么静默失败的。
+
+    返回错误文案表示确认镜像不可用；返回 None 表示放行。查不动时一律放行，
+    避免 registry 抖动把真实可用的更新藏起来。
+    """
+    if not settings.verify_update_image:
+        return None
+
+    repo = _update_image_repo()
+    token = _registry_pull_token(repo)
+    if not token:
+        return None
+
+    # 发布工作流同时推 semver 的 0.0.3 和 tag 的 v0.0.3，任一存在即可。
+    bare = version.lstrip("vV")
+    digest = ""
+    for tag in (bare, f"v{bare}"):
+        exists, tag_digest = _manifest_digest(repo, tag, token)
+        if exists is None:
+            return None
+        if exists:
+            digest = tag_digest
+            break
+    else:
+        return (
+            f"{version} 的镜像还没发布到 {settings.update_registry}/{repo}，"
+            "现在更新会失败。镜像标签由推送 v* tag 触发，请确认发布工作流已跑完"
+        )
+
+    # Watchtower 实际拉的是部署里那个移动标签（compose 默认 latest）。版本镜像
+    # 在、但 latest 还指向旧 digest 时，更新同样不会发生。
+    if digest:
+        latest_exists, latest_digest = _manifest_digest(repo, "latest", token)
+        if latest_exists and latest_digest and latest_digest != digest:
+            return (
+                f"{version} 的镜像已发布，但 {repo}:latest 仍指向旧镜像，"
+                "Watchtower 拉不到新版本，请重新触发发布工作流"
+            )
+
+    return None
 
 
 def _read_update_state() -> dict | None:
@@ -199,8 +315,10 @@ def get_latest_version():
     由后端代理请求 GitHub，而不是让浏览器直连 —— 服务器通常能访问 GitHub，
     用户本地不一定能。取不到时通过 error 字段返回可读原因，不抛 5xx。
     """
-    # releases/latest 只会返回已经创建成功的正式 Release。发布工作流中 Release
-    # 又依赖 Docker 镜像任务，因此镜像构建或推送失败时，这里不会提前暴露新版本。
+    # releases/latest 只会返回已经创建成功的正式 Release。发布工作流里 Release
+    # 依赖 Docker 镜像任务，正常流程下镜像推失败就不会有新 Release —— 但这个保证
+    # 只在"推 v* tag 触发工作流"时成立，手工创建的 Release 会绕过它，所以下面
+    # 还要用 _verify_release_image 直接核对镜像。
     endpoint = f"{GITHUB_API_BASE}/repos/{settings.github_repo}/releases/latest"
 
     try:
@@ -249,6 +367,14 @@ def get_latest_version():
     changelog = release.get("body")
     if not isinstance(changelog, str):
         changelog = ""
+
+    # 只在确实比当前版本新时才查 registry：同版本没必要多查两次，也避免
+    # registry 抖动给一个本来就没事的状态挂上错误提示。
+    if _is_newer_version(version, settings.app_version):
+        image_error = _verify_release_image(version)
+        if image_error:
+            logger.warning("最新 Release %s 的镜像不可用：%s", version, image_error)
+            return ApiResponse(success=True, data=LatestVersionInfo(error=image_error))
 
     return ApiResponse(success=True, data=LatestVersionInfo(
         version=version,
