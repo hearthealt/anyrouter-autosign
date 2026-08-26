@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.schemas import ApiResponse
 from app.services.audit import log_action
+from app.services.newapi_credentials import SCHEME_REFRESH
 from app.utils.platform import (
     ADAPTER_TYPE_HTTP,
     DEFAULT_CHECKIN_API,
@@ -62,7 +63,9 @@ MAX_ACCOUNTS = 10_000
 MAX_SIGN_LOGS = 100_000
 MAX_NOTIFY_CHANNELS = 500
 MAX_ACCOUNT_NOTIFIES = 50_000
-VALID_AUTH_TYPES = {"none", "custom", "bearer", "cookie", "header", "basic"}
+VALID_AUTH_TYPES = {"none", "custom", "bearer", "cookie", "header", "basic", SCHEME_REFRESH}
+# New API 平台只用到其中两种令牌方案，其余一律视为旧的 session cookie 方案
+VALID_NEW_API_AUTH_TYPES = {"none", "cookie", "bearer", SCHEME_REFRESH}
 
 
 
@@ -490,8 +493,20 @@ async def import_backup(
                     existing = existing_query.filter(Account.external_user_id == imported_external_id).first()
                 else:
                     existing = None
-                auth_type = None
-                auth_data = None
+                # New API 账号也可能用 PAT / refresh token，不能一律清空，
+                # 否则令牌方案的账号恢复后会丢掉唯一的凭证。
+                auth_type = str(item.get("auth_type") or "none").strip().lower()
+                if auth_type not in VALID_NEW_API_AUTH_TYPES:
+                    raise HTTPException(status_code=400, detail=f"账号 {old_id} 的认证方式无效")
+                if auth_type in ("none", "cookie"):
+                    auth_type = None
+                auth_data = parse_auth_data(item.get("auth_data")) if credentials_included else None
+                if not credentials_included and existing:
+                    auth_type = existing.auth_type or auth_type
+                    auth_data = existing.auth_data
+                if not auth_data:
+                    # 没有令牌内容就退回旧方案，避免留下一个空壳 auth_type
+                    auth_type = None
             else:
                 existing_query = db.query(Account).filter(Account.platform_id == mapped_platform_id)
                 existing = existing_query.filter(Account.external_user_id == imported_external_id).first() if imported_external_id else None
@@ -508,7 +523,12 @@ async def import_backup(
                 proxy_url = existing.proxy_url
             supplied_session_cookie = credentials_included and "session_cookie" in item
             supplied_login = credentials_included and ("login_username" in item or "login_password" in item)
-            has_new_api_credentials = bool(item.get("session_cookie")) or bool(item.get("login_username") and item.get("login_password"))
+            has_new_api_credentials = (
+                bool(item.get("session_cookie"))
+                or bool(item.get("login_username") and item.get("login_password"))
+                # 令牌方案不需要 session cookie 也不需要账号密码
+                or bool(auth_data)
+            )
             has_http_credentials = auth_type == "none" or bool(auth_data)
             requested_active = bool(item.get("is_active", True))
             credentials_available = has_http_credentials if adapter_type == ADAPTER_TYPE_HTTP else has_new_api_credentials
@@ -536,8 +556,8 @@ async def import_backup(
                 account_values.update({
                     "anyrouter_user_id": imported_user_id,
                     "external_user_id": imported_external_id,
-                    "auth_type": None,
-                    "auth_data": None,
+                    "auth_type": auth_type,
+                    "auth_data": auth_data,
                 })
 
             if existing:

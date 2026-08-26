@@ -1,5 +1,5 @@
 <template>
-  <n-modal
+  <UiModal
     :show="show"
     :mask-closable="!updating"
     :close-on-esc="!updating"
@@ -8,7 +8,7 @@
     <div class="version-modal">
       <template v-if="updating">
         <div class="update-state">
-          <n-spin :size="28" />
+          <UiLoading :size="28" />
           <div class="update-title">{{ updateStage }}</div>
           <div class="update-hint">{{ updateHint }}</div>
           <div class="update-actions">
@@ -16,7 +16,7 @@
               <strong>{{ reloadCountdown }}</strong>
               <span>秒，正在确认服务恢复</span>
             </div>
-            <n-button size="small" @click="reloadPage">立即刷新</n-button>
+            <UiButton size="small" @click="reloadPage">立即刷新</UiButton>
           </div>
         </div>
       </template>
@@ -24,15 +24,15 @@
       <template v-else>
         <div class="modal-head">
           <div class="modal-title-wrap">
-            <div class="modal-icon"><n-icon :size="18"><InformationCircleOutline /></n-icon></div>
+            <div class="modal-icon"><Info :size="18" /></div>
             <div>
               <h3>版本信息</h3>
               <p>检查正式发布版本并直接更新</p>
             </div>
           </div>
-          <n-button text aria-label="关闭" @click="close">
-            <template #icon><n-icon :size="18"><CloseOutline /></n-icon></template>
-          </n-button>
+          <UiButton text aria-label="关闭" @click="close">
+            <template #icon><X :size="18" /></template>
+          </UiButton>
         </div>
 
         <div class="modal-body">
@@ -50,11 +50,11 @@
           </div>
 
           <div v-if="hasNewVersion" class="release-badge">
-            <n-icon :size="16"><CloudDownloadOutline /></n-icon>
+            <CloudDownload :size="16" />
             <span>发现新版本 {{ latestTag }}</span>
           </div>
           <div v-else-if="checked && !latestError" class="release-badge is-latest">
-            <n-icon :size="16"><CheckmarkCircleOutline /></n-icon>
+            <CircleCheck :size="16" />
             <span>当前已是最新正式版本</span>
           </div>
 
@@ -67,20 +67,20 @@
         <div class="modal-footer">
           <ExternalLink :href="version?.changelog_url" label="在 GitHub 查看完整日志" />
           <div class="footer-actions">
-            <n-button size="small" :loading="checking" @click="checkLatest(true)">
-              <template #icon><n-icon :size="14"><CloudDownloadOutline /></n-icon></template>
+            <UiButton size="small" :loading="checking" @click="checkLatest(true)">
+              <template #icon><CloudDownload :size="14" /></template>
               检查更新
-            </n-button>
+            </UiButton>
             <template v-if="canUpdate">
-              <n-button
+              <UiButton
                 size="small"
                 type="primary"
                 @click="confirmingUpdate = true"
               >
-                <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+                <template #icon><RefreshCw :size="14" /></template>
                 更新并重启
-              </n-button>
-              <n-modal
+              </UiButton>
+              <UiModal
                 v-model:show="confirmingUpdate"
                 preset="dialog"
                 title="确认更新并重启"
@@ -91,26 +91,21 @@
                 @positive-click="confirmUpdate"
               />
             </template>
-            <n-button v-else size="small" disabled>
-              <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+            <UiButton v-else size="small" disabled>
+              <template #icon><RefreshCw :size="14" /></template>
               更新并重启
-            </n-button>
+            </UiButton>
           </div>
         </div>
       </template>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiLoading, UiModal } from '../../ui'
 import { computed, ref, watch } from 'vue'
-import {
-  CheckmarkCircleOutline,
-  CloudDownloadOutline,
-  CloseOutline,
-  InformationCircleOutline,
-  RefreshOutline
-} from '@vicons/ionicons5'
+import { CircleCheck, CloudDownload, Info, RefreshCw, X } from 'lucide-vue-next'
 import ExternalLink from '../common/ExternalLink.vue'
 import { useVersionStore } from '../../stores'
 import { apiError } from '../../utils/apiError'

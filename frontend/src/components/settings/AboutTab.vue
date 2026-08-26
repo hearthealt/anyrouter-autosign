@@ -1,15 +1,15 @@
 <template>
-  <n-spin :show="loading">
+  <UiLoading :show="loading">
     <div class="about-grid">
       <div class="setting-card">
         <div class="setting-card-header">
           <div class="setting-card-icon version">
-            <n-icon :size="20"><InformationCircleOutline /></n-icon>
+            <Info :size="20" />
           </div>
           <div class="setting-card-title">
             <span>版本信息</span>
-            <n-tag v-if="hasNewVersion" size="small" type="warning">有新版本</n-tag>
-            <n-tag v-else-if="checked && !latestError" size="small" type="success">已是最新</n-tag>
+            <UiTag v-if="hasNewVersion" size="small" type="warning">有新版本</UiTag>
+            <UiTag v-else-if="checked && !latestError" size="small" type="success">已是最新</UiTag>
           </div>
         </div>
 
@@ -30,16 +30,16 @@
         </div>
 
         <div class="setting-card-footer actions">
-          <n-button size="small" :loading="checking" @click="checkLatest(true)">
-            <template #icon><n-icon :size="14"><CloudDownloadOutline /></n-icon></template>
+          <UiButton size="small" :loading="checking" @click="checkLatest(true)">
+            <template #icon><CloudDownload :size="14" /></template>
             检查更新
-          </n-button>
+          </UiButton>
           <template v-if="canUpdate">
-            <n-button size="small" type="primary" @click="confirmingUpdate = true">
-              <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+            <UiButton size="small" type="primary" @click="confirmingUpdate = true">
+              <template #icon><RefreshCw :size="14" /></template>
               更新并重启
-            </n-button>
-            <n-modal
+            </UiButton>
+            <UiModal
               v-model:show="confirmingUpdate"
               preset="dialog"
               title="确认更新并重启"
@@ -50,10 +50,10 @@
               @positive-click="confirmUpdate"
             />
           </template>
-          <n-button v-else size="small" disabled>
-            <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+          <UiButton v-else size="small" disabled>
+            <template #icon><RefreshCw :size="14" /></template>
             更新并重启
-          </n-button>
+          </UiButton>
         </div>
       </div>
 
@@ -67,9 +67,9 @@
       </div>
     </div>
 
-    <n-modal :show="updating" :mask-closable="false" :close-on-esc="false">
+    <UiModal :show="updating" :mask-closable="false" :close-on-esc="false">
       <div class="update-overlay">
-        <n-spin :size="28" />
+        <UiLoading :size="28" />
         <div class="update-title">{{ updateStage }}</div>
         <div class="update-hint">{{ updateHint }}</div>
         <div class="update-actions">
@@ -77,16 +77,17 @@
             <strong>{{ reloadCountdown }}</strong>
             <span>秒，正在确认服务恢复</span>
           </div>
-          <n-button size="small" @click="reloadPage">立即刷新</n-button>
+          <UiButton size="small" @click="reloadPage">立即刷新</UiButton>
         </div>
       </div>
-    </n-modal>
-  </n-spin>
+    </UiModal>
+  </UiLoading>
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiLoading, UiModal, UiTag } from '../../ui'
 import { computed, onMounted, ref } from 'vue'
-import { CloudDownloadOutline, InformationCircleOutline, RefreshOutline } from '@vicons/ionicons5'
+import { CloudDownload, Info, RefreshCw } from 'lucide-vue-next'
 import { useVersionStore } from '../../stores'
 import { apiError } from '../../utils/apiError'
 import { useSystemUpdate } from '../../composables/useSystemUpdate'

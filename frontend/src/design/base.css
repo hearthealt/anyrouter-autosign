@@ -1,0 +1,244 @@
+/**
+ * 基础层 —— 重置、材质、排版工具。
+ *
+ * 材质是这套设计的层次来源：噪点、极细网格、扫描线、发光描边。
+ * 它们都做成可复用类，因为门面页要叠三四层，数据页只叠一层。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* 巨字排版需要开启标准连字与上下文替代 */
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fn-md);
+  line-height: var(--leading-normal);
+  color: var(--ink);
+  background: var(--surface-page);
+}
+
+#app {
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--track-tight);
+  color: var(--ink-max);
+}
+
+p { margin: 0; }
+
+a {
+  color: var(--signal-deep);
+  text-decoration: none;
+}
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+code, pre, kbd {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-variant-ligatures: none;
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+
+/* 焦点：只在键盘导航时出现，且用信号色 */
+:focus { outline: none; }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+/* ─────────────────────────────────────────────── 滚动条 */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track { background: transparent; }
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--r-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ─────────────────────────────────────────────── 材质 */
+
+/**
+ * 噪点。SVG feTurbulence 内联成 data URI，比位图小得多且不失真。
+ * 用 ::after 叠加并 pointer-events: none，不影响交互。
+ */
+.material-noise { position: relative; }
+
+.material-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* soft-light 而非 overlay：overlay 在接近纯白/纯黑的底色上几乎不产生变化，
+     实测下来噪点等于不存在。soft-light 在两端都留得住颗粒。 */
+  mix-blend-mode: soft-light;
+}
+
+/** 极细工程网格。用 background-image 而非伪元素，方便和噪点叠加。 */
+.material-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.material-grid-fine {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/** 信号色发光描边。用于强调态的容器。 */
+.material-glow {
+  box-shadow: 0 0 0 1px var(--signal-glow), 0 0 32px -8px var(--signal-glow);
+}
+
+/** 从底部淡出的遮罩，用于长列表底缘和 hero 收边。 */
+.material-fade-b {
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+}
+
+/* ─────────────────────────────────────────────── 排版 */
+
+/**
+ * 巨字。可变字重 + 负字距 + 表格数字。
+ * `--display-weight` 可以被动效改写来做字重动画。
+ */
+.display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight, 680);
+  font-variation-settings: "wght" var(--display-weight, 680), "opsz" 32;
+  line-height: var(--leading-none);
+  letter-spacing: var(--track-display);
+  color: var(--ink-max);
+  /* 巨字必须用表格数字，否则数值刷新时宽度会跳 */
+  font-variant-numeric: tabular-nums;
+}
+
+.display-xs { font-size: var(--display-xs); }
+.display-sm { font-size: var(--display-sm); }
+.display-md { font-size: var(--display-md); }
+.display-lg { font-size: var(--display-lg); }
+.display-xl { font-size: var(--display-xl); }
+
+/** 数据表数字：等宽对齐是可扫读的前提。 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/** 小标签：全大写 + 宽字距。仪器面板的标注语言。 */
+.kicker {
+  font-size: var(--fn-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/** 溢出裁切的巨字：允许被容器边缘切掉，制造版式张力。 */
+.bleed {
+  margin-inline: calc(var(--s6) * -1);
+  padding-inline: var(--s6);
+  overflow: clip;
+}
+
+/* ─────────────────────────────────────────────── 分隔 */
+
+/** 1px 分隔线，retina 上仍然是 1 物理像素。 */
+.hairline {
+  border: 0;
+  border-top: 1px solid var(--line-faint);
+  margin: 0;
+}
+
+@media (min-resolution: 2dppx) {
+  .hairline { border-top-width: 0.5px; }
+}
+
+/* ─────────────────────────────────────────────── 动效降级
+ *
+ * 关掉动效后不是"变快"，而是彻底不动。
+ * data-motion 由 design/useMotionPreference.ts 写到 <html> 上。
+ */
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* 无障碍：仅屏幕阅读器可见 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

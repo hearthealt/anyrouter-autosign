@@ -11,22 +11,17 @@
       </div>
     </div>
 
-    <n-tabs v-model:value="activeTab" type="segment" animated class="settings-tabs">
-      <n-tab-pane name="general" tab="常规" display-directive="show:lazy">
+    <UiSegment v-model:value="activeTab" class="settings-tabs" :options="[{ label: '常规', value: 'general' }, { label: '通知', value: 'notify' }, { label: '数据', value: 'data' }, { label: '日志', value: 'logs' }, { label: '关于', value: 'about' }]" />
+    <div v-show="activeTab === 'general'" class="tab-panel">
         <GeneralSettingsTab ref="generalRef" @update:auto-sign-enabled="autoSignEnabled = $event" />
-      </n-tab-pane>
-
-      <n-tab-pane name="notify" tab="通知" display-directive="show:lazy">
+          </div>
+    <div v-show="activeTab === 'notify'" class="tab-panel">
         <NotifyChannelsTab ref="notifyRef" @update:count="channelCount = $event" />
-      </n-tab-pane>
-
-      <n-tab-pane name="data" tab="数据" display-directive="show:lazy">
+          </div>
+    <div v-show="activeTab === 'data'" class="tab-panel">
         <div class="sub-section">
           <div class="sub-section-nav">
-            <n-radio-group v-model:value="dataSection" size="small">
-              <n-radio-button value="groups">分组管理</n-radio-button>
-              <n-radio-button value="backup">数据备份</n-radio-button>
-            </n-radio-group>
+            <UiSegment v-model:value="dataSection" size="small" :options="[{ label: '分组管理', value: 'groups' }, { label: '数据备份', value: 'backup' }]" />
           </div>
           <div class="sub-section-body">
             <GroupsTab
@@ -41,31 +36,26 @@
             />
           </div>
         </div>
-      </n-tab-pane>
-
-      <n-tab-pane name="logs" tab="日志" display-directive="show:lazy">
+          </div>
+    <div v-show="activeTab === 'logs'" class="tab-panel">
         <div class="sub-section">
           <div class="sub-section-nav">
-            <n-radio-group v-model:value="logSection" size="small">
-              <n-radio-button value="audit">审计日志</n-radio-button>
-              <n-radio-button value="system">系统日志</n-radio-button>
-            </n-radio-group>
+            <UiSegment v-model:value="logSection" size="small" :options="[{ label: '审计日志', value: 'audit' }, { label: '系统日志', value: 'system' }]" />
           </div>
           <div class="sub-section-body">
             <AuditLogsTab v-if="logSection === 'audit'" ref="auditRef" />
             <SystemLogsTab v-else-if="logSection === 'system'" />
           </div>
         </div>
-      </n-tab-pane>
-
-      <n-tab-pane name="about" tab="关于" display-directive="show:lazy">
+          </div>
+    <div v-show="activeTab === 'about'" class="tab-panel">
         <AboutTab ref="aboutRef" />
-      </n-tab-pane>
-    </n-tabs>
+          </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { UiSegment } from '../ui'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useViewRefresh } from '../composables'

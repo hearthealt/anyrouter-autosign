@@ -1,6 +1,6 @@
 <template>
-  <n-card class="settings-panel">
-    <n-spin :show="loading">
+  <div class="card settings-panel">
+    <UiLoading :show="loading">
       <div class="backup-section">
         <div class="backup-header">
           <div class="backup-header-info">
@@ -9,7 +9,7 @@
           </div>
         </div>
 
-        <n-divider style="margin: 16px 0;" />
+        <UiDivider style="margin: 16px 0;" />
 
         <div class="backup-stats">
           <div class="stat-item">
@@ -30,7 +30,7 @@
           </div>
         </div>
 
-        <n-divider style="margin: 16px 0;" />
+        <UiDivider style="margin: 16px 0;" />
 
         <div class="backup-action-section">
           <div class="action-info">
@@ -38,18 +38,18 @@
             <div class="action-desc">将账号、设置、推送渠道等数据导出为 JSON 文件</div>
           </div>
           <div class="action-controls">
-            <n-checkbox v-model:checked="exportIncludeLogs">包含签到日志（最近1000条）</n-checkbox>
-            <n-checkbox v-model:checked="exportIncludeCredentials">
+            <UiCheckbox v-model:checked="exportIncludeLogs">包含签到日志（最近1000条）</UiCheckbox>
+            <UiCheckbox v-model:checked="exportIncludeCredentials">
               包含敏感凭证
-            </n-checkbox>
-            <n-button type="primary" @click="handleExport" :loading="exporting">
-              <template #icon><n-icon><DownloadOutline /></n-icon></template>
+            </UiCheckbox>
+            <UiButton type="primary" @click="handleExport" :loading="exporting">
+              <template #icon><Download /></template>
               导出备份
-            </n-button>
+            </UiButton>
           </div>
         </div>
 
-        <n-divider style="margin: 16px 0;" />
+        <UiDivider style="margin: 16px 0;" />
 
         <div class="backup-action-section">
           <div class="action-info">
@@ -57,35 +57,32 @@
             <div class="action-desc">从备份文件恢复数据（支持 JSON 格式）</div>
           </div>
           <div class="action-controls">
-            <n-checkbox v-model:checked="importOverwrite">覆盖现有数据</n-checkbox>
-            <n-upload
-              :show-file-list="false"
-              accept=".json"
-              @change="handleImportFile"
-            >
-              <n-button :loading="importing">
-                <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+            <UiCheckbox v-model:checked="importOverwrite">覆盖现有数据</UiCheckbox>
+            <UiFileDrop accept=".json" @select="handleImportFile">
+              <UiButton :loading="importing">
+                <template #icon><CloudUpload :size="14" /></template>
                 选择文件导入
-              </n-button>
-            </n-upload>
+              </UiButton>
+            </UiFileDrop>
           </div>
         </div>
 
         <div class="backup-tip">
-          <n-icon><InformationCircleOutline /></n-icon>
+          <Info />
           <span>
             默认备份不包含 Cookie、Token、登录密码、代理地址和推送渠道配置；
             勾选“包含敏感凭证”后可完整迁移，但请妥善保管导出的文件。
           </span>
         </div>
       </div>
-    </n-spin>
-  </n-card>
+    </UiLoading>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { UiFileDrop, UiButton, UiCheckbox, UiDivider, UiLoading } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
-import { DownloadOutline, CloudUploadOutline, InformationCircleOutline } from '@vicons/ionicons5'
+import { CloudUpload, Download, Info } from 'lucide-vue-next'
 import { backupApi } from '../../api'
 import { getToken } from '../../utils/auth'
 import { apiError } from '../../utils/apiError'
@@ -144,11 +141,12 @@ const handleExport = async () => {
   }
 }
 
-const handleImportFile = async ({ file }: { file: { file: File } }) => {
-  if (!file.file) return
+// UiFileDrop 直接给原生 File，不再包 { file: { file } } 那层
+const handleImportFile = async (rawFile: File) => {
+  if (!rawFile) return
   importing.value = true
   try {
-    const res = await backupApi.import(file.file, importOverwrite.value)
+    const res = await backupApi.import(rawFile, importOverwrite.value)
     const data = res.data
     const warningText = Array.isArray(data.warnings) && data.warnings.length
       ? `；${data.warnings.join('；')}`

@@ -17,14 +17,23 @@ from app.schemas import (
 from app.schemas.account import NotifyChannelBrief, HealthCheckResponse, GroupBrief, CreateTokenRequest, PlatformBrief
 from app.services import (
     anrouter_service,
+    build_transient_credential,
     execute_with_session_refresh,
     has_login_credentials,
+    load_auth_data,
     refresh_account_user_cache,
     resolve_session_cookie,
 )
 from app.services.adapters import adapter_registry
 from app.services.audit import log_action
 from app.services.events import publish_event
+from app.services.newapi_credentials import (
+    ROTATE_KEY_ACCESS_EXPIRES_AT,
+    ROTATE_KEY_ACCESS_TOKEN,
+    ROTATE_KEY_REFRESH_TOKEN,
+    SCHEME_REFRESH,
+    decode_access_token_expiry,
+)
 from app.utils import (
     format_quota,
     format_quota_percent,
@@ -164,7 +173,7 @@ def clean_account_proxy(proxy_mode: Optional[str], proxy_url: Optional[str]) -> 
     return mode, None
 
 
-VALID_AUTH_TYPES = {"none", "custom", "bearer", "cookie", "header", "basic"}
+VALID_AUTH_TYPES = {"none", "custom", "bearer", "cookie", "header", "basic", SCHEME_REFRESH}
 MAX_AUTH_DATA_LENGTH = 64 * 1024
 
 
@@ -198,6 +207,8 @@ def prepare_http_auth(
 
     if auth_type == "bearer" and not clean_optional_secret(auth_data.get("token")):
         raise HTTPException(status_code=400, detail="Bearer 认证需要 auth_data.token")
+    if auth_type == SCHEME_REFRESH and not clean_optional_secret(auth_data.get(ROTATE_KEY_REFRESH_TOKEN)):
+        raise HTTPException(status_code=400, detail="Refresh 认证需要 auth_data.refresh_token")
     if auth_type == "cookie" and not (auth_data.get("cookie") or isinstance(auth_data.get("cookies"), dict)):
         raise HTTPException(status_code=400, detail="Cookie 认证需要 Session Cookie、auth_data.cookie 或 auth_data.cookies")
     if auth_type == "header" and not (isinstance(auth_data.get("headers"), dict) or auth_data.get("name")):
@@ -207,6 +218,45 @@ def prepare_http_auth(
 
     _, serialized = serialize_auth_data(auth_data)
     return auth_type, serialized
+
+
+def prepare_new_api_auth(
+    auth_type_value: Optional[str],
+    auth_data_value: Optional[Dict[str, Any]],
+) -> tuple[Optional[str], Optional[str], Dict[str, Any]]:
+    """解析 new_api 平台的面板凭证。
+
+    新版 new-api 支持两种可直接使用的凭证：系统访问令牌（PAT，永不过期）和
+    ``new_api_refresh`` cookie（每次刷新都会轮换）。未指定时返回 ``(None, None, {})``，
+    走旧的 ``session`` cookie 方案，行为与改造前一致。
+
+    :return: ``(auth_type, serialized_auth_data, auth_data_dict)``
+    """
+    auth_type = (auth_type_value or "").strip().lower()
+    incoming = dict(auth_data_value or {})
+
+    if auth_type == "bearer":
+        token = clean_optional_secret(incoming.get("token"))
+        if not token:
+            raise HTTPException(status_code=400, detail="系统访问令牌认证需要 auth_data.token")
+        auth_data = {"token": token}
+    elif auth_type == SCHEME_REFRESH:
+        refresh_token = clean_optional_secret(incoming.get(ROTATE_KEY_REFRESH_TOKEN))
+        if not refresh_token:
+            raise HTTPException(status_code=400, detail="Refresh 认证需要 auth_data.refresh_token")
+        auth_data = {ROTATE_KEY_REFRESH_TOKEN: refresh_token}
+        # 允许一并粘贴当前 access_token，省掉首次刷新
+        access_token = clean_optional_secret(incoming.get(ROTATE_KEY_ACCESS_TOKEN))
+        if access_token:
+            auth_data[ROTATE_KEY_ACCESS_TOKEN] = access_token
+            auth_data[ROTATE_KEY_ACCESS_EXPIRES_AT] = decode_access_token_expiry(access_token)
+    elif auth_type in ("", "none", "cookie"):
+        return None, None, {}
+    else:
+        raise HTTPException(status_code=400, detail=f"New API 平台不支持的认证方式: {auth_type}")
+
+    _, serialized = serialize_auth_data(auth_data)
+    return auth_type, serialized, auth_data
 
 
 def get_platform_adapter(platform_config: Dict[str, Any]):
@@ -258,32 +308,62 @@ def _create_account_record(db: Session, data: Any) -> Account:
         session_cookie = clean_optional_str(data.session_cookie)
         login_username = clean_optional_str(data.login_username)
         login_password = clean_optional_secret(data.login_password)
+        new_api_auth_type, new_api_auth_data, auth_data_dict = prepare_new_api_auth(
+            data.auth_type, data.auth_data
+        )
         if bool(login_username) != bool(login_password):
             raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
-        if not user_id and not (login_username and login_password):
-            raise HTTPException(status_code=400, detail="请填写 User ID，或填写登录账号和密码")
+        # User ID 只在手填 Session Cookie 时是必需的 —— cookie 本身不带身份，
+        # 旧版 new-api 要靠 new-api-user 头。其余方式都能从服务端拿到 ID：
+        # 登录响应带 data.id / data.user.id，PAT 和 refresh 令牌本身就携带身份。
+        if not new_api_auth_type and not (login_username and login_password) and not (user_id and session_cookie):
+            raise HTTPException(
+                status_code=400,
+                detail="请填写登录账号和密码，或提供系统访问令牌 / refresh token，或同时填写 User ID 和 Session Cookie",
+            )
 
-        resolved, session_result = resolve_session_cookie(
-            base_url=platform_config["base_url"],
-            session_cookie=session_cookie,
-            login_username=login_username,
-            login_password=login_password,
-            prefer_login=not user_id and bool(login_username and login_password),
+        if new_api_auth_type:
+            # 直接给了 PAT 或 refresh token：不需要 session cookie，也不需要先登录
+            session_result: Dict[str, Any] = {}
+        else:
+            resolved, session_result = resolve_session_cookie(
+                base_url=platform_config["base_url"],
+                session_cookie=session_cookie,
+                login_username=login_username,
+                login_password=login_password,
+                prefer_login=not user_id and bool(login_username and login_password),
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
+            )
+            if not resolved:
+                raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
+            # 登录时若识别为新版方案，改走 refresh 凭证而不是 session cookie
+            if session_result.get("auth_scheme") == SCHEME_REFRESH:
+                new_api_auth_type = SCHEME_REFRESH
+                auth_data_dict = {
+                    ROTATE_KEY_REFRESH_TOKEN: session_result.get(ROTATE_KEY_REFRESH_TOKEN) or "",
+                    ROTATE_KEY_ACCESS_TOKEN: session_result.get(ROTATE_KEY_ACCESS_TOKEN) or "",
+                    ROTATE_KEY_ACCESS_EXPIRES_AT: int(session_result.get(ROTATE_KEY_ACCESS_EXPIRES_AT) or 0),
+                }
+                _, new_api_auth_data = serialize_auth_data(auth_data_dict)
+            if not user_id:
+                user_id = clean_optional_str(session_result.get("user_id"))
+
+        # 校验 refresh 凭证会让服务端当场轮换，必须把轮换后的新值收下来落库
+        rotated: Dict[str, Any] = {}
+        credential = build_transient_credential(
+            platform_config["base_url"],
+            new_api_auth_type,
+            auth_data_dict,
+            session_result.get("session_cookie", ""),
+            user_id=user_id or None,
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
+            on_rotate=rotated.update,
         )
-        if not resolved:
-            raise HTTPException(status_code=400, detail=session_result.get("message", "凭证解析失败"))
-        if not user_id:
-            user_id = clean_optional_str(session_result.get("user_id"))
-        try:
-            numeric_user_id = int(user_id or "")
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="User ID 必须是整数") from exc
-
         success, user_info = anrouter_service.get_user_info(
-            session_result.get("session_cookie", ""),
-            str(numeric_user_id),
+            credential,
+            user_id or "",
             platform_config["base_url"],
             user_api=platform_config["user_api"],
             console_url=platform_config["console_url"],
@@ -292,8 +372,25 @@ def _create_account_record(db: Session, data: Any) -> Account:
         )
         if not success:
             raise HTTPException(status_code=400, detail=user_info.get("message", "验证失败"))
+
+        # 令牌方案走到这里才知道 User ID：从校验响应里回填
+        if not user_id:
+            resolved_id = user_info.get("id")
+            user_id = clean_optional_str(str(resolved_id)) if resolved_id is not None else None
+        try:
+            numeric_user_id = int(user_id or "")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="未能从平台确定 User ID，请手动填写",
+            ) from exc
+
         if find_existing_account(db, platform.id, anyrouter_user_id=numeric_user_id):
             raise HTTPException(status_code=400, detail="该平台下该账号已存在")
+
+        if rotated:
+            auth_data_dict.update(rotated)
+            _, new_api_auth_data = serialize_auth_data(auth_data_dict)
 
         now = datetime.now()
         account = Account(
@@ -302,6 +399,8 @@ def _create_account_record(db: Session, data: Any) -> Account:
             login_password=login_password,
             anyrouter_user_id=numeric_user_id,
             external_user_id=str(numeric_user_id),
+            auth_type=new_api_auth_type,
+            auth_data=new_api_auth_data,
             username=user_info.get("username"),
             display_name=user_info.get("display_name"),
             note=note,
@@ -741,31 +840,61 @@ def update_account(
             raise HTTPException(status_code=400, detail="登录账号和密码需要同时填写")
 
         prefer_login = "login_username" in updates or "login_password" in updates
-        resolved, session_result = resolve_session_cookie(
-            base_url=platform_config["base_url"],
-            session_cookie=clean_optional_str(updates.get("session_cookie", account.session_cookie)),
-            login_username=login_username,
-            login_password=login_password,
-            prefer_login=prefer_login,
+
+        # 解析面板凭证：显式清除 → 回落 session cookie；未提及 → 保持原样
+        if updates.get("clear_auth_data"):
+            new_api_auth_type, new_api_auth_data, auth_data_dict = None, None, {}
+        elif "auth_type" in updates or "auth_data" in updates:
+            current_auth_data = load_auth_data(account) if "auth_data" not in updates else None
+            new_api_auth_type, new_api_auth_data, auth_data_dict = prepare_new_api_auth(
+                updates.get("auth_type", account.auth_type),
+                updates.get("auth_data", current_auth_data),
+            )
+        else:
+            new_api_auth_type = account.auth_type
+            new_api_auth_data = account.auth_data
+            auth_data_dict = load_auth_data(account)
+
+        if new_api_auth_type and not prefer_login:
+            # 已有 PAT / refresh token，不需要 session cookie 也不需要登录
+            session_result: Dict[str, Any] = {}
+        else:
+            resolved, session_result = resolve_session_cookie(
+                base_url=platform_config["base_url"],
+                session_cookie=clean_optional_str(updates.get("session_cookie", account.session_cookie)),
+                login_username=login_username,
+                login_password=login_password,
+                prefer_login=prefer_login,
+                proxy_mode=proxy_mode,
+                proxy_url=proxy_url,
+            )
+            if not resolved:
+                raise HTTPException(status_code=400, detail=session_result.get("message", "凭证验证失败"))
+            if session_result.get("auth_scheme") == SCHEME_REFRESH:
+                new_api_auth_type = SCHEME_REFRESH
+                auth_data_dict = {
+                    ROTATE_KEY_REFRESH_TOKEN: session_result.get(ROTATE_KEY_REFRESH_TOKEN) or "",
+                    ROTATE_KEY_ACCESS_TOKEN: session_result.get(ROTATE_KEY_ACCESS_TOKEN) or "",
+                    ROTATE_KEY_ACCESS_EXPIRES_AT: int(session_result.get(ROTATE_KEY_ACCESS_EXPIRES_AT) or 0),
+                }
+                _, new_api_auth_data = serialize_auth_data(auth_data_dict)
+            if not user_id_value:
+                user_id_value = clean_optional_str(session_result.get("user_id"))
+
+        rotated: Dict[str, Any] = {}
+        credential = build_transient_credential(
+            platform_config["base_url"],
+            new_api_auth_type,
+            auth_data_dict,
+            session_result.get("session_cookie", ""),
+            user_id=user_id_value or None,
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
+            on_rotate=rotated.update,
         )
-        if not resolved:
-            raise HTTPException(status_code=400, detail=session_result.get("message", "凭证验证失败"))
-        if not user_id_value:
-            user_id_value = clean_optional_str(session_result.get("user_id"))
-        try:
-            numeric_user_id = int(user_id_value or "")
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="User ID 必须是整数") from exc
-        if find_existing_account(
-            db, target_platform.id, anyrouter_user_id=numeric_user_id, exclude_account_id=account.id
-        ):
-            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
-
         success, user_info = anrouter_service.get_user_info(
-            session_result.get("session_cookie", ""),
-            str(numeric_user_id),
+            credential,
+            user_id_value or "",
             platform_config["base_url"],
             user_api=platform_config["user_api"],
             console_url=platform_config["console_url"],
@@ -775,14 +904,31 @@ def update_account(
         if not success:
             raise HTTPException(status_code=400, detail=user_info.get("message", "凭证验证失败"))
 
+        # 令牌方案走到这里才知道 User ID：从校验响应里回填
+        if not user_id_value:
+            resolved_id = user_info.get("id")
+            user_id_value = clean_optional_str(str(resolved_id)) if resolved_id is not None else None
+        try:
+            numeric_user_id = int(user_id_value or "")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="未能从平台确定 User ID，请手动填写") from exc
+        if find_existing_account(
+            db, target_platform.id, anyrouter_user_id=numeric_user_id, exclude_account_id=account.id
+        ):
+            raise HTTPException(status_code=400, detail="该平台下该账号已存在")
+
+        if rotated:
+            auth_data_dict.update(rotated)
+            _, new_api_auth_data = serialize_auth_data(auth_data_dict)
+
         account.platform_id = target_platform.id
         account.session_cookie = session_result.get("session_cookie", "")
         account.login_username = login_username
         account.login_password = login_password
         account.anyrouter_user_id = numeric_user_id
         account.external_user_id = str(numeric_user_id)
-        account.auth_type = None
-        account.auth_data = None
+        account.auth_type = new_api_auth_type
+        account.auth_data = new_api_auth_data
         account.username = user_info.get("username")
         account.display_name = user_info.get("display_name")
         account.cached_quota = user_info.get("quota", 0)

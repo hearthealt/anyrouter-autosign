@@ -11,42 +11,42 @@
         </div>
       </div>
       <div class="toolbar-actions">
-        <n-button size="small" :loading="loading" @click="handleRefresh">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        <UiButton size="small" :loading="loading" @click="handleRefresh">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
-        <n-button size="small" :loading="batchChecking" @click="handleBatchHealthCheck">
-          <template #icon><n-icon :size="14"><PulseOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" :loading="batchChecking" @click="handleBatchHealthCheck">
+          <template #icon><Activity :size="14" /></template>
           批量检查
-        </n-button>
-        <n-button size="small" :loading="batchSigning" @click="handleBatchSign">
-          <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" :loading="batchSigning" @click="handleBatchSign">
+          <template #icon><Zap :size="14" /></template>
           一键签到
-        </n-button>
-        <n-button size="small" @click="showBatchImportModal = true">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" @click="showBatchImportModal = true">
+          <template #icon><Plus :size="14" /></template>
           批量导入
-        </n-button>
-        <n-button size="small" type="primary" @click="showAddModal">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" type="primary" @click="showAddModal">
+          <template #icon><Plus :size="14" /></template>
           添加账号
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
     <div class="control-strip">
       <div class="filter-strip accounts-filter">
-        <n-input
+        <UiInput
           v-model:value="searchKeyword"
           size="small"
           clearable
           placeholder="搜索用户名、平台或 User ID"
           class="search-input"
         >
-          <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
-        </n-input>
+          <template #prefix><Search :size="14" /></template>
+        </UiInput>
 
-        <n-select
+        <UiSelect
           v-model:value="selectedPlatformId"
           :options="platformOptions"
           size="small"
@@ -55,7 +55,7 @@
           class="filter-item"
         />
 
-        <n-select
+        <UiSelect
           v-model:value="selectedGroupId"
           :options="groupOptions"
           size="small"
@@ -64,7 +64,7 @@
           class="filter-item"
         />
 
-        <n-button v-if="hasActiveFilters" size="small" quaternary @click="resetFilters">重置</n-button>
+        <UiButton v-if="hasActiveFilters" size="small" quaternary @click="resetFilters">重置</UiButton>
       </div>
 
       <div class="status-tabs" role="group" aria-label="账号状态筛选">
@@ -87,19 +87,19 @@
         已选择 <strong>{{ selectedAccounts.length }}</strong> 个账号
       </div>
       <div class="bulk-bar-actions">
-        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'sign'" @click="handleSelectedSign">
+        <UiButton size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'sign'" @click="handleSelectedSign">
           批量签到
-        </n-button>
-        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'health'" @click="handleSelectedHealthCheck">
+        </UiButton>
+        <UiButton size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'health'" @click="handleSelectedHealthCheck">
           健康检查
-        </n-button>
-        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'enable'" @click="handleBulkToggleActive(true)">
+        </UiButton>
+        <UiButton size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'enable'" @click="handleBulkToggleActive(true)">
           启用
-        </n-button>
-        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'disable'" @click="handleBulkToggleActive(false)">
+        </UiButton>
+        <UiButton size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'disable'" @click="handleBulkToggleActive(false)">
           禁用
-        </n-button>
-        <n-select
+        </UiButton>
+        <UiSelect
           v-model:value="bulkTargetPlatformId"
           :options="platformOptions"
           size="small"
@@ -107,10 +107,10 @@
           class="bulk-select"
           :disabled="bulkDisabled"
         />
-        <n-button size="small" :disabled="bulkDisabled || !bulkTargetPlatformId" :loading="bulkLoading === 'platform'" @click="handleBulkMovePlatform">
+        <UiButton size="small" :disabled="bulkDisabled || !bulkTargetPlatformId" :loading="bulkLoading === 'platform'" @click="handleBulkMovePlatform">
           应用平台
-        </n-button>
-        <n-select
+        </UiButton>
+        <UiSelect
           v-model:value="bulkTargetGroupId"
           :options="groupOptions"
           size="small"
@@ -119,35 +119,35 @@
           class="bulk-select"
           :disabled="bulkDisabled"
         />
-        <n-button size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'group'" @click="handleBulkAssignGroup">
+        <UiButton size="small" :disabled="bulkDisabled" :loading="bulkLoading === 'group'" @click="handleBulkAssignGroup">
           应用分组
-        </n-button>
-        <n-popconfirm
+        </UiButton>
+        <UiConfirm
           positive-text="删除"
           negative-text="取消"
           @positive-click="handleBulkDelete"
         >
           <template #trigger>
-            <n-button size="small" type="error" ghost :disabled="bulkDisabled" :loading="bulkLoading === 'delete'">
+            <UiButton size="small" type="error" ghost :disabled="bulkDisabled" :loading="bulkLoading === 'delete'">
               批量删除
-            </n-button>
+            </UiButton>
           </template>
           确定删除选中的 {{ selectedAccounts.length }} 个账号？
-        </n-popconfirm>
-        <n-button size="small" quaternary :disabled="bulkDisabled" @click="clearSelection">
+        </UiConfirm>
+        <UiButton size="small" quaternary :disabled="bulkDisabled" @click="clearSelection">
           清空选择
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
     <div class="accounts-card">
       <div v-if="initialLoading" class="loading-state" aria-busy="true" aria-label="正在加载账号">
-        <n-spin size="small" />
+        <UiLoading size="small" />
         <div class="loading-text">正在加载账号...</div>
       </div>
 
       <div v-else-if="loading || accounts.length > 0" class="table-wrap">
-        <n-data-table
+        <DataGrid
           :columns="columns"
           :data="accounts"
           :row-key="getAccountRowKey"
@@ -165,28 +165,28 @@
       </div>
 
       <div v-else-if="!loading" class="empty-state">
-        <n-icon :size="32" color="var(--text-quaternary)"><PeopleOutline /></n-icon>
+        <Users :size="32" />
         <div class="empty-title">{{ hasActiveFilters ? '没有匹配的账号' : '还没有账号' }}</div>
         <div class="empty-desc">
           {{ hasActiveFilters ? '当前筛选条件下没有结果，试试清空筛选或更换关键词。' : '先去平台页确认配置，再添加账号或批量导入，避免后续校验失败。' }}
         </div>
         <div class="empty-actions">
-          <n-button v-if="!hasActiveFilters" size="small" @click="router.push('/platforms')">
+          <UiButton v-if="!hasActiveFilters" size="small" @click="router.push('/platforms')">
             去平台页检查配置
-          </n-button>
-          <n-button size="small" @click="showBatchImportModal = true">
-            <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+          </UiButton>
+          <UiButton size="small" @click="showBatchImportModal = true">
+            <template #icon><Plus :size="14" /></template>
             批量导入
-          </n-button>
-          <n-button size="small" type="primary" @click="showAddModal">
-            <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+          </UiButton>
+          <UiButton size="small" type="primary" @click="showAddModal">
+            <template #icon><Plus :size="14" /></template>
             添加账号
-          </n-button>
+          </UiButton>
         </div>
       </div>
 
       <div v-if="pagination.itemCount > 0" class="pagination-wrap">
-        <n-pagination
+        <UiPagination
           v-model:page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :item-count="pagination.itemCount"
@@ -232,26 +232,8 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  NButton,
-  NIcon,
-  NPopconfirm,
-  NSwitch,
-  NTooltip,
-  type DataTableColumns,
-  type DataTableSortOrder,
-  type DataTableSortState
-} from 'naive-ui'
-import {
-  AddOutline,
-  AlertCircleOutline,
-  DocumentTextOutline,
-  FlashOutline,
-  PeopleOutline,
-  PulseOutline,
-  RefreshOutline,
-  SearchOutline,
-} from '@vicons/ionicons5'
+import { DataGrid, UiButton, UiConfirm, UiInput, UiLoading, UiPagination, UiSelect, UiSwitch, UiTooltip, type GridColumns, type GridSortState, type SortOrder } from '../ui'
+import { Activity, AlertCircle, FileText, Plus, RefreshCw, Search, Users, Zap } from 'lucide-vue-next'
 import { AccountModal, BatchImportModal, ExternalLink, TokensModal } from '../components'
 import { accountApi, groupsApi, notifyApi, platformApi, settingsApi, signApi } from '../api'
 import { useEventStream, useFormat, useViewRefresh } from '../composables'
@@ -308,7 +290,7 @@ const pagination = ref({
   itemCount: 0,
   pageSizes: [10, 20, 50, 100]
 })
-const sortState = ref<{ columnKey: SortKey | null; order: DataTableSortOrder }>({
+const sortState = ref<{ columnKey: SortKey | null; order: SortOrder }>({
   columnKey: null,
   order: false
 })
@@ -632,6 +614,15 @@ const handleAccountSubmit = async (data: {
       } else {
         if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
         if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+        // 令牌凭证：切到 PAT / refresh 时下发 auth_type + auth_data；
+        // 切回账号密码时下发 clear_auth_data 把旧令牌清掉
+        const usesToken = data.auth_type === 'bearer' || data.auth_type === 'new_api_refresh'
+        if (data.clear_auth_data) {
+          updateData.clear_auth_data = true
+        } else if (usesToken) {
+          updateData.auth_type = data.auth_type
+          if (data.auth_data) updateData.auth_data = data.auth_data
+        }
         if (data.clear_login_credentials) {
           updateData.clear_login_credentials = true
         } else {
@@ -685,6 +676,12 @@ const handleAccountSubmit = async (data: {
         payload.user_id = data.user_id.trim() || undefined
         payload.login_username = data.login_username.trim() || undefined
         payload.login_password = data.login_password || undefined
+        // New API 平台也支持令牌凭证（PAT / refresh token），auth_type 为
+        // none/cookie 时后端回落到旧的 session cookie 方案
+        if (data.auth_type && data.auth_type !== 'none') {
+          payload.auth_type = data.auth_type
+          payload.auth_data = data.auth_data
+        }
       }
 
       const res: any = await accountApi.create(payload)
@@ -954,10 +951,10 @@ const handlePageSizeChange = (pageSize: number) => {
   void loadData(1)
 }
 
-const getSortOrder = (columnKey: SortKey): DataTableSortOrder =>
+const getSortOrder = (columnKey: SortKey): SortOrder =>
   sortState.value.columnKey === columnKey ? sortState.value.order : false
 
-const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | null) => {
+const handleSorterChange = (sorter: GridSortState | GridSortState[] | null) => {
   const nextSorter = Array.isArray(sorter) ? (sorter[0] ?? null) : sorter
 
   if (!nextSorter?.columnKey || !nextSorter.order) {
@@ -973,7 +970,7 @@ const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | 
   void loadData(1)
 }
 
-const columns = computed<DataTableColumns<Account>>(() => [
+const columns = computed<GridColumns<Account>>(() => [
   {
     type: 'selection',
     width: 44,
@@ -992,12 +989,12 @@ const columns = computed<DataTableColumns<Account>>(() => [
             h('div', { class: 'account-name', onClick: () => openAccountDetail(account) }, account.username || '-'),
             account.note
               ? h(
-                  NTooltip,
+                  UiTooltip,
                   null,
                   {
                     trigger: () =>
                       h('span', { class: 'note-badge' }, [
-                        h(NIcon, { size: 12 }, { default: () => h(DocumentTextOutline) })
+                        h(FileText, { size: 12 })
                       ]),
                     default: () => account.note
                   }
@@ -1045,12 +1042,12 @@ const columns = computed<DataTableColumns<Account>>(() => [
         h('div', { class: 'quota-main' }, [
           isLowQuota(account)
             ? h(
-                NTooltip,
+                UiTooltip,
                 null,
                 {
                   trigger: () =>
                     h('span', { class: 'quota-alert-icon' }, [
-                      h(NIcon, { size: 12 }, { default: () => h(AlertCircleOutline) })
+                      h(AlertCircle, { size: 12 })
                     ]),
                   default: () => `低于告警阈值 $${quotaWarningThreshold.value.toFixed(2)}`
                 }
@@ -1089,7 +1086,7 @@ const columns = computed<DataTableColumns<Account>>(() => [
     render: account =>
       h('div', { class: 'status-cell' }, [
         h('span', { class: `tag ${getHealthTone(account)}` }, getHealthLabel(account)),
-        h(NSwitch, {
+        h(UiSwitch, {
           size: 'small',
           value: account.is_active,
           disabled: togglingActiveId.value !== null && togglingActiveId.value !== account.id,
@@ -1105,13 +1102,13 @@ const columns = computed<DataTableColumns<Account>>(() => [
     width: 240,
     render: account =>
       h('div', { class: 'actions' }, [
-        h(NButton, { size: 'tiny', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
-        h(NButton, { size: 'tiny', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
+        h(UiButton, { size: 'tiny', quaternary: true, onClick: () => openAccountDetail(account) }, { default: () => '详情' }),
+        h(UiButton, { size: 'tiny', quaternary: true, onClick: () => showEditModal(account) }, { default: () => '编辑' }),
         isNewApiAccount(account)
-          ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' })
+          ? h(UiButton, { size: 'tiny', quaternary: true, onClick: () => showTokens(account) }, { default: () => 'Token' })
           : null,
         h(
-          NButton,
+          UiButton,
           {
             size: 'tiny',
             quaternary: true,
@@ -1123,7 +1120,7 @@ const columns = computed<DataTableColumns<Account>>(() => [
           { default: () => (signingId.value === account.id ? '' : '签到') }
         ),
         h(
-          NButton,
+          UiButton,
           {
             size: 'tiny',
             quaternary: true,
@@ -1134,14 +1131,14 @@ const columns = computed<DataTableColumns<Account>>(() => [
           { default: () => (checkingId.value === account.id ? '' : '检查') }
         ),
         h(
-          NPopconfirm,
+          UiConfirm,
           {
             onPositiveClick: () => handleDeleteAccount(account),
             positiveText: '删除',
             negativeText: '取消',
           },
           {
-            trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
+            trigger: () => h(UiButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
             default: () => `确定删除账号 "${account.username || '-'}" ？`
           }
         )

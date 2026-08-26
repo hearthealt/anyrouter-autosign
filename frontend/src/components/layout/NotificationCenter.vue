@@ -1,5 +1,5 @@
 <template>
-  <n-popover
+  <UiPopover
     trigger="click"
     placement="bottom-end"
     :width="320"
@@ -7,16 +7,16 @@
     @update:show="handleToggle"
   >
     <template #trigger>
-      <n-badge :value="unreadCount" :max="99" :show="unreadCount > 0" :offset="[-2, 4]">
-        <n-button quaternary size="small" class="icon-btn" aria-label="通知中心">
-          <template #icon><n-icon :size="16"><NotificationsOutline /></n-icon></template>
-        </n-button>
-      </n-badge>
+      <UiBadge :value="unreadCount" :max="99" :show="unreadCount > 0" :offset="[-2, 4]">
+        <UiButton quaternary size="small" class="icon-btn" aria-label="通知中心">
+          <template #icon><Bell :size="16" /></template>
+        </UiButton>
+      </UiBadge>
     </template>
     <div class="notification-panel">
       <div class="notification-header">
         <span>通知中心</span>
-        <n-button text size="tiny" @click="clearNotifications">清空</n-button>
+        <UiButton text size="tiny" @click="clearNotifications">清空</UiButton>
       </div>
       <div class="notification-list" v-if="notifications.length > 0">
         <div
@@ -27,34 +27,32 @@
           @click="handleNotificationClick(notif)"
         >
           <div class="notif-icon" :class="notif.type">
-            <n-icon :size="12">
-              <CheckmarkCircleOutline v-if="notif.type === 'success'" />
-              <AlertCircleOutline v-else-if="notif.type === 'warning'" />
-              <CloseCircleOutline v-else-if="notif.type === 'error'" />
-              <InformationCircleOutline v-else />
-            </n-icon>
+            <CircleCheck v-if="notif.type === 'success'" :size="12" />
+              <AlertCircle v-else-if="notif.type === 'warning'" :size="12" />
+              <CircleX v-else-if="notif.type === 'error'" :size="12" />
+              <Info v-else :size="12" />
           </div>
           <div class="notif-content">
             <div class="notif-title">{{ notif.title }}</div>
             <div class="notif-time">{{ notif.time }}</div>
           </div>
-          <n-button
+          <UiButton
             text
             size="tiny"
             @click.stop="notifications.splice(index, 1)"
             class="notif-close"
             aria-label="移除此通知"
           >
-            <template #icon><n-icon :size="12"><CloseOutline /></n-icon></template>
-          </n-button>
+            <template #icon><X :size="12" /></template>
+          </UiButton>
         </div>
       </div>
       <div class="notification-empty" v-else>
-        <n-icon :size="24" color="var(--text-quaternary)"><NotificationsOffOutline /></n-icon>
+        <BellOff :size="24" />
         <span>暂无通知</span>
       </div>
     </div>
-  </n-popover>
+  </UiPopover>
 
   <Teleport to="body">
     <div class="toast-stack">
@@ -67,23 +65,21 @@
           @click="dismissToast(toast.id)"
         >
           <div class="toast-icon">
-            <n-icon :size="14">
-              <CheckmarkCircleOutline v-if="toast.type === 'success'" />
-              <AlertCircleOutline v-else-if="toast.type === 'warning'" />
-              <CloseCircleOutline v-else-if="toast.type === 'error'" />
-              <InformationCircleOutline v-else />
-            </n-icon>
+            <CircleCheck v-if="toast.type === 'success'" :size="14" />
+              <AlertCircle v-else-if="toast.type === 'warning'" :size="14" />
+              <CircleX v-else-if="toast.type === 'error'" :size="14" />
+              <Info v-else :size="14" />
           </div>
           <div class="toast-title">{{ toast.title }}</div>
-          <n-button
+          <UiButton
             text
             size="tiny"
             class="toast-close"
             @click.stop="dismissToast(toast.id)"
             aria-label="关闭"
           >
-            <template #icon><n-icon :size="12"><CloseOutline /></n-icon></template>
-          </n-button>
+            <template #icon><X :size="12" /></template>
+          </UiButton>
         </div>
       </transition-group>
     </div>
@@ -91,13 +87,10 @@
 </template>
 
 <script setup lang="ts">
+import { UiBadge, UiButton, UiPopover } from '../../ui'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  NotificationsOutline, NotificationsOffOutline,
-  CheckmarkCircleOutline, AlertCircleOutline, CloseCircleOutline,
-  CloseOutline, InformationCircleOutline
-} from '@vicons/ionicons5'
+import { AlertCircle, Bell, BellOff, CircleCheck, CircleX, Info, X } from 'lucide-vue-next'
 
 type NotificationTone = 'success' | 'warning' | 'error' | 'info'
 

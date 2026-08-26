@@ -1,145 +1,121 @@
 <template>
-  <n-modal :show="show" @update:show="(v: boolean) => emit('update:show', v)">
-    <div class="shortcuts-modal">
-      <div class="modal-head">
-        <h3>快捷键</h3>
-        <n-button text @click="emit('update:show', false)" aria-label="关闭">
-          <n-icon :size="16"><CloseOutline /></n-icon>
-        </n-button>
-      </div>
-      <div class="modal-body">
-        <div class="shortcut-section">
-          <div class="section-title">全局</div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">打开命令面板</span>
-            <div class="keys"><kbd>⌘</kbd><kbd>K</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">刷新当前视图</span>
-            <div class="keys"><kbd>R</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">显示快捷键帮助</span>
-            <div class="keys"><kbd>?</kbd></div>
+  <UiModal
+    :show="show"
+    kicker="Keyboard"
+    title="快捷键"
+    size="sm"
+    @update:show="(v: boolean) => emit('update:show', v)"
+  >
+    <div class="sc">
+      <section v-for="group in groups" :key="group.title" class="sc__group">
+        <h3 class="sc__group-title kicker">
+          <span>{{ group.title }}</span>
+          <span v-if="group.note" class="sc__group-note">{{ group.note }}</span>
+        </h3>
+        <div class="sc__rows">
+          <div v-for="item in group.items" :key="item.desc" class="sc__row">
+            <span class="sc__desc">{{ item.desc }}</span>
+            <span class="sc__keys">
+              <kbd v-for="key in item.keys" :key="key">{{ key }}</kbd>
+            </span>
           </div>
         </div>
-        <div class="shortcut-section">
-          <div class="section-title">跳转（按 <kbd>G</kbd> 后再按下一键）</div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">总览面板</span>
-            <div class="keys"><kbd>G</kbd><kbd>D</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">账号管理</span>
-            <div class="keys"><kbd>G</kbd><kbd>A</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">签到记录</span>
-            <div class="keys"><kbd>G</kbd><kbd>L</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">数据统计</span>
-            <div class="keys"><kbd>G</kbd><kbd>S</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">平台管理</span>
-            <div class="keys"><kbd>G</kbd><kbd>P</kbd></div>
-          </div>
-          <div class="shortcut-row">
-            <span class="shortcut-desc">系统设置</span>
-            <div class="keys"><kbd>G</kbd><kbd>C</kbd></div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
-import { NModal, NButton, NIcon } from 'naive-ui'
-import { CloseOutline } from '@vicons/ionicons5'
+import { UiModal } from '../../ui'
 
 defineProps<{ show: boolean }>()
 const emit = defineEmits<{ (e: 'update:show', v: boolean): void }>()
+
+// 从模板里提出来成数据：新增快捷键时只动这一处
+const groups = [
+  {
+    title: '全局',
+    items: [
+      { desc: '打开命令面板', keys: ['⌘', 'K'] },
+      { desc: '刷新当前视图', keys: ['R'] },
+      { desc: '显示快捷键帮助', keys: ['?'] },
+    ],
+  },
+  {
+    title: '跳转',
+    note: '按 G 后再按下一键',
+    items: [
+      { desc: '总览面板', keys: ['G', 'D'] },
+      { desc: '账号管理', keys: ['G', 'A'] },
+      { desc: '签到记录', keys: ['G', 'L'] },
+      { desc: '数据统计', keys: ['G', 'S'] },
+      { desc: '平台管理', keys: ['G', 'P'] },
+      { desc: '系统设置', keys: ['G', 'C'] },
+    ],
+  },
+]
 </script>
 
 <style scoped>
-.shortcuts-modal {
-  width: min(92vw, 480px);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+.sc {
+  display: grid;
+  gap: var(--s6);
 }
 
-.modal-head {
+.sc__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.sc__group-note {
+  color: var(--ink-ghost);
+  letter-spacing: var(--track-normal);
+  text-transform: none;
+  font-weight: var(--weight-normal);
+}
+
+.sc__rows {
+  display: grid;
+  margin-top: var(--s2);
+}
+
+.sc__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
+  gap: var(--s4);
+  height: 30px;
 }
 
-.modal-head h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+.sc__desc {
+  color: var(--ink);
+  font-size: var(--fn-sm);
 }
 
-.modal-body {
-  padding: var(--spacing-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.shortcut-section .section-title {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: var(--spacing-2);
-}
-
-.shortcut-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px dashed var(--border-color-light);
-}
-
-.shortcut-row:last-child {
-  border-bottom: none;
-}
-
-.shortcut-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.keys {
+.sc__keys {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xs);
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  /* 底缘加深一层描边，做出物理键帽的厚度 */
+  border-bottom-width: 2px;
+  border-radius: var(--r-xs);
+  background: var(--surface-inset);
+  color: var(--ink-strong);
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
+  font-size: var(--fn-xs);
+  font-weight: var(--weight-medium);
 }
 </style>

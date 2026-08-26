@@ -41,7 +41,7 @@ export interface PlatformBrief {
   adapter_type?: PlatformAdapterType
 }
 
-export type AccountAuthType = 'none' | 'custom' | 'bearer' | 'cookie' | 'header' | 'basic'
+export type AccountAuthType = 'none' | 'custom' | 'bearer' | 'cookie' | 'header' | 'basic' | 'new_api_refresh'
 export type AccountProxyMode = 'direct' | 'custom'
 
 export interface Account {

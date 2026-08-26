@@ -9,16 +9,16 @@
         </div>
       </div>
       <div class="toolbar-actions">
-        <n-button size="small" @click="loadLogs(1)" :loading="loading">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        <UiButton size="small" @click="loadLogs(1)" :loading="loading">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
     <div class="control-strip">
       <div class="filter-strip logs-filter">
-      <n-select
+      <UiSelect
         v-model:value="filters.account_id"
         :options="accountOptions"
         placeholder="全部账号"
@@ -27,7 +27,7 @@
         class="filter-item"
         @update:value="loadLogs(1)"
       />
-      <n-select
+      <UiSelect
         v-model:value="filters.success"
         :options="statusOptions"
         placeholder="全部状态"
@@ -36,7 +36,7 @@
         class="filter-item"
         @update:value="loadLogs(1)"
       />
-      <n-date-picker
+      <UiDateRange
         v-model:value="filters.dateRange"
         type="daterange"
         size="small"
@@ -49,7 +49,7 @@
 
     <div class="logs-card data-surface">
       <div v-if="loading || logs.length > 0" class="table-wrap">
-        <n-data-table
+        <DataGrid
           :columns="columns"
           :data="logs"
           :row-key="(row: SignLogRow) => row.id"
@@ -63,13 +63,13 @@
       </div>
 
       <div v-else class="empty-state">
-        <n-icon :size="32" color="var(--text-quaternary)"><DocumentTextOutline /></n-icon>
+        <FileText :size="32" />
         <div class="empty-title">暂无签到记录</div>
         <div class="empty-desc">当前筛选条件下没有匹配数据</div>
       </div>
 
       <div v-if="pagination.itemCount > 0" class="pagination-wrap">
-        <n-pagination
+        <UiPagination
           v-model:page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :item-count="pagination.itemCount"
@@ -87,16 +87,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, h, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  NTag,
-  type DataTableColumns,
-  type DataTableSortOrder,
-  type DataTableSortState
-} from 'naive-ui'
-import {
-  RefreshOutline,
-  DocumentTextOutline,
-} from '@vicons/ionicons5'
+import { DataGrid, UiButton, UiDateRange, UiPagination, UiSelect, UiTag, type GridColumns, type GridSortState, type SortOrder } from '../ui'
+import { FileText, RefreshCw } from 'lucide-vue-next'
 import { signApi, accountApi } from '../api'
 import { useFormat, useViewRefresh } from '../composables'
 import { formatRewardAmount } from '../utils'
@@ -131,7 +123,7 @@ const pagination = ref({
 })
 type LogSortKey = 'username' | 'platform' | 'status' | 'reward' | 'sign_time'
 
-const sortState = ref<{ columnKey: LogSortKey; order: DataTableSortOrder }>({
+const sortState = ref<{ columnKey: LogSortKey; order: SortOrder }>({
   columnKey: 'sign_time',
   order: 'descend'
 })
@@ -220,10 +212,10 @@ const getRewardDisplay = (row: SignLogRow) => {
 
 const getPlatformName = (row: SignLogRow) => row.platform?.name || row.platform_name || '未配置平台'
 const getPlatformUrl = (row: SignLogRow) => row.platform?.base_url || ''
-const getSortOrder = (columnKey: LogSortKey): DataTableSortOrder =>
+const getSortOrder = (columnKey: LogSortKey): SortOrder =>
   sortState.value.columnKey === columnKey ? sortState.value.order : false
 
-const columns = computed<DataTableColumns<SignLogRow>>(() => [
+const columns = computed<GridColumns<SignLogRow>>(() => [
   {
     title: '账号',
     key: 'username',
@@ -257,7 +249,7 @@ const columns = computed<DataTableColumns<SignLogRow>>(() => [
     sortOrder: getSortOrder('status'),
     render: row =>
       h(
-        NTag,
+        UiTag,
         {
           type: getStatusTagType(row.status),
           size: 'small',
@@ -349,7 +341,7 @@ const handlePageSizeChange = (pageSize: number) => {
   loadLogs(1)
 }
 
-const handleSorterChange = (sorter: DataTableSortState | DataTableSortState[] | null) => {
+const handleSorterChange = (sorter: GridSortState | GridSortState[] | null) => {
   const nextSorter = Array.isArray(sorter) ? (sorter[0] ?? null) : sorter
 
   if (!nextSorter?.columnKey || !nextSorter.order) {

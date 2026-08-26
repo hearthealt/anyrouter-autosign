@@ -10,18 +10,18 @@
         </div>
       </div>
       <div class="toolbar-actions">
-        <n-button size="small" @click="refreshData" :loading="refreshing">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        <UiButton size="small" @click="refreshData" :loading="refreshing">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
-        <n-button size="small" @click="showAddModal">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" @click="showAddModal">
+          <template #icon><Plus :size="14" /></template>
           添加账号
-        </n-button>
-        <n-button size="small" type="primary" @click="handleBatchSign" :loading="batchSigning">
-          <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" type="primary" @click="handleBatchSign" :loading="batchSigning">
+          <template #icon><Zap :size="14" /></template>
           一键签到
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
@@ -33,9 +33,9 @@
           {{ lowQuotaAccounts.slice(0, 4).map(account => `${account.username || '未命名'} ${account.quota_display || '$0.00'}`).join(' · ') }}
         </div>
       </div>
-      <n-button size="small" type="warning" @click="$router.push('/accounts')">
+      <UiButton size="small" type="warning" @click="$router.push('/accounts')">
         去账号页处理
-      </n-button>
+      </UiButton>
     </div>
 
     <!-- 指标卡 -->
@@ -82,9 +82,9 @@
     </div>
     <div class="metrics-grid" v-else aria-busy="true" aria-label="加载中">
       <div v-for="i in 4" :key="i" class="metric-card">
-        <n-skeleton text :width="64" :height="12" />
-        <n-skeleton text :width="96" :height="28" style="margin-top: 12px" />
-        <n-skeleton text :width="80" :height="12" style="margin-top: 12px" />
+        <UiSkeleton text :width="64" :height="12" />
+        <UiSkeleton text :width="96" :height="28" style="margin-top: 12px" />
+        <UiSkeleton text :width="80" :height="12" style="margin-top: 12px" />
       </div>
     </div>
 
@@ -96,11 +96,7 @@
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">签到趋势</div>
-            <n-radio-group v-model:value="trendDays" size="small">
-              <n-radio-button :value="7">7 天</n-radio-button>
-              <n-radio-button :value="30">30 天</n-radio-button>
-              <n-radio-button :value="60">60 天</n-radio-button>
-            </n-radio-group>
+            <UiSegment v-model:value="trendDays" size="small" :options="[{ label: '7 天', value: 7 }, { label: '30 天', value: 30 }, { label: '60 天', value: 60 }]" />
           </div>
           <div class="panel-body chart-body">
             <TrendChart :data="dashboard?.daily_trend || []" :is-dark="isDarkMode" />
@@ -111,10 +107,10 @@
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">账号状态</div>
-            <n-button text size="small" @click="$router.push('/accounts')">
+            <UiButton text size="small" @click="$router.push('/accounts')">
               全部账号
-              <template #icon><n-icon :size="12"><ChevronForwardOutline /></n-icon></template>
-            </n-button>
+              <template #icon><ChevronRight :size="12" /></template>
+            </UiButton>
           </div>
           <div class="status-chips">
             <button
@@ -179,34 +175,34 @@
                 </div>
               </div>
               <div class="row-actions" @click.stop>
-                <n-tooltip trigger="hover">
+                <UiTooltip trigger="hover">
                   <template #trigger>
-                    <n-button size="tiny" quaternary :loading="signingId === account.id" :disabled="!account.is_active" @click="handleSign(account)">
-                      <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
-                    </n-button>
+                    <UiButton size="tiny" quaternary :loading="signingId === account.id" :disabled="!account.is_active" @click="handleSign(account)">
+                      <template #icon><Zap :size="14" /></template>
+                    </UiButton>
                   </template>
                   签到
-                </n-tooltip>
-                <n-tooltip trigger="hover">
+                </UiTooltip>
+                <UiTooltip trigger="hover">
                   <template #trigger>
-                    <n-button size="tiny" quaternary :loading="checkingId === account.id" @click="handleHealthCheck(account)">
-                      <template #icon><n-icon :size="14"><PulseOutline /></n-icon></template>
-                    </n-button>
+                    <UiButton size="tiny" quaternary :loading="checkingId === account.id" @click="handleHealthCheck(account)">
+                      <template #icon><Activity :size="14" /></template>
+                    </UiButton>
                   </template>
                   健康检查
-                </n-tooltip>
-                <n-tooltip trigger="hover">
+                </UiTooltip>
+                <UiTooltip trigger="hover">
                   <template #trigger>
-                    <n-button size="tiny" quaternary @click="showTokens(account)">
-                      <template #icon><n-icon :size="14"><KeyOutline /></n-icon></template>
-                    </n-button>
+                    <UiButton size="tiny" quaternary @click="showTokens(account)">
+                      <template #icon><KeyRound :size="14" /></template>
+                    </UiButton>
                   </template>
                   令牌
-                </n-tooltip>
+                </UiTooltip>
               </div>
             </div>
             <div v-if="displayAccounts.length === 0" class="row-empty">
-              <n-icon :size="20" color="var(--text-quaternary)"><PeopleOutline /></n-icon>
+              <Users :size="20" />
               <span>{{ accounts.length === 0 ? '还没有账号，先确认平台配置再添加账号' : '暂无匹配账号' }}</span>
             </div>
           </div>
@@ -229,10 +225,10 @@
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">最近活动</div>
-            <n-button text size="small" @click="$router.push('/logs')">
+            <UiButton text size="small" @click="$router.push('/logs')">
               更多
-              <template #icon><n-icon :size="12"><ChevronForwardOutline /></n-icon></template>
-            </n-button>
+              <template #icon><ChevronRight :size="12" /></template>
+            </UiButton>
           </div>
           <div class="activity-list">
             <div v-for="activity in recentActivities" :key="activity.id" class="activity-item">
@@ -246,7 +242,7 @@
               </div>
             </div>
             <div v-if="recentActivities.length === 0" class="row-empty">
-              <n-icon :size="20" color="var(--text-quaternary)"><TimeOutline /></n-icon>
+              <Clock :size="20" />
               <span>暂无活动</span>
             </div>
           </div>
@@ -257,7 +253,7 @@
           <div class="panel-head">
             <div class="panel-title">API 节点</div>
             <div class="panel-head-actions">
-              <n-select
+              <UiSelect
                 v-model:value="selectedPlatformId"
                 :options="platformOptions"
                 size="tiny"
@@ -265,10 +261,10 @@
                 :loading="loadingPlatforms"
                 class="platform-select"
               />
-              <n-button text size="small" :loading="syncingEndpoints" @click="handleSyncEndpoints">
-                <template #icon><n-icon :size="12"><SyncOutline /></n-icon></template>
+              <UiButton text size="small" :loading="syncingEndpoints" @click="handleSyncEndpoints">
+                <template #icon><RefreshCcw :size="12" /></template>
                 同步
-              </n-button>
+              </UiButton>
             </div>
           </div>
           <div class="endpoints-list">
@@ -278,9 +274,9 @@
                 <div class="endpoint-name">{{ ep.route }}</div>
                 <ExternalLink class="endpoint-url" :href="ep.url" mono />
               </div>
-              <n-button size="tiny" quaternary @click="copyEndpoint(ep.url)">
-                <template #icon><n-icon :size="12"><CopyOutline /></n-icon></template>
-              </n-button>
+              <UiButton size="tiny" quaternary @click="copyEndpoint(ep.url)">
+                <template #icon><Copy :size="12" /></template>
+              </UiButton>
             </div>
             <div v-if="apiEndpoints.length === 0" class="row-empty">
               <span>{{ selectedPlatformId ? '暂无节点，点击同步' : '请先在平台管理页创建平台' }}</span>
@@ -315,23 +311,13 @@
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiSegment, UiSelect, UiSkeleton, UiTooltip } from '../ui'
 import { ref, computed, onMounted, watch } from 'vue'
 import { TrendChart, AccountModal, QuotaPieChart, TokensModal } from '../components/dashboard'
 import ExternalLink from '../components/common/ExternalLink.vue'
 import { accountApi, dashboardApi, notifyApi, apiEndpointsApi, groupsApi, signApi, statisticsApi, platformApi, settingsApi } from '../api'
 import type { Account, AccountAuthType, AccountGroup, AccountProxyMode, ApiToken, DashboardData, ApiEndpoint, CreateTokenParams, Platform, SelectOption } from '../types'
-import {
-  AddOutline,
-  PeopleOutline,
-  FlashOutline,
-  RefreshOutline,
-  SyncOutline,
-  CopyOutline,
-  ChevronForwardOutline,
-  TimeOutline,
-  PulseOutline,
-  KeyOutline
-} from '@vicons/ionicons5'
+import { Activity, ChevronRight, Clock, Copy, KeyRound, Plus, RefreshCcw, RefreshCw, Users, Zap } from 'lucide-vue-next'
 import { useEventStream, useFormat } from '../composables'
 import { useClipboard } from '../composables/useClipboard'
 import { useViewRefresh } from '../composables'

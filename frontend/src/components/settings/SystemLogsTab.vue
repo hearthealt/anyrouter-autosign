@@ -1,31 +1,31 @@
 <template>
-  <n-card class="settings-panel">
-    <n-spin :show="loading">
+  <div class="card settings-panel">
+    <UiLoading :show="loading">
       <div class="channel-header">
         <div class="channel-header-info">
           <div class="channel-header-title">系统日志</div>
           <div class="channel-header-desc">查看应用运行日志，支持按级别筛选和关键词搜索</div>
         </div>
         <div class="log-header-actions">
-          <n-checkbox v-model:checked="autoRefresh" size="small">自动刷新</n-checkbox>
-          <n-button size="small" @click="loadLogs">
-            <template #icon><n-icon><RefreshOutline /></n-icon></template>
+          <UiCheckbox v-model:checked="autoRefresh" size="small">自动刷新</UiCheckbox>
+          <UiButton size="small" @click="loadLogs">
+            <template #icon><RefreshCw /></template>
             刷新
-          </n-button>
+          </UiButton>
         </div>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
       <div class="audit-filters">
-        <n-select
+        <UiSelect
           v-model:value="filters.file"
           :options="fileOptions"
           placeholder="选择日志文件"
           style="width: 180px;"
           size="small"
         />
-        <n-select
+        <UiSelect
           v-model:value="filters.level"
           :options="levelOptions"
           placeholder="日志级别"
@@ -33,7 +33,7 @@
           style="width: 120px;"
           size="small"
         />
-        <n-input
+        <UiInput
           v-model:value="filters.keyword"
           placeholder="搜索关键词"
           clearable
@@ -41,26 +41,26 @@
           style="width: 160px;"
           @keyup.enter="loadLogs"
         />
-        <n-button size="small" type="primary" @click="loadLogs" aria-label="查询日志">
-          <template #icon><n-icon><SearchOutline /></n-icon></template>
+        <UiButton size="small" type="primary" @click="loadLogs" aria-label="查询日志">
+          <template #icon><Search /></template>
           查询
-        </n-button>
-        <n-button size="small" @click="downloadFile" aria-label="下载日志文件">
-          <template #icon><n-icon><DownloadOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" @click="downloadFile" aria-label="下载日志文件">
+          <template #icon><Download /></template>
           下载
-        </n-button>
-        <n-popconfirm @positive-click="clearFile">
+        </UiButton>
+        <UiConfirm @positive-click="clearFile">
           <template #trigger>
-            <n-button size="small" type="error" ghost aria-label="清空日志">
-              <template #icon><n-icon><TrashOutline /></n-icon></template>
+            <UiButton size="small" type="error" ghost aria-label="清空日志">
+              <template #icon><Trash2 /></template>
               清空
-            </n-button>
+            </UiButton>
           </template>
           确定清空此日志文件？
-        </n-popconfirm>
+        </UiConfirm>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
       <div class="log-container">
         <div v-if="logs.length === 0" class="log-empty">暂无日志</div>
@@ -83,11 +83,11 @@
       </div>
 
       <div v-if="hasMore" class="log-load-more">
-        <n-button size="small" @click="loadMore" :loading="loadingMore">加载更多</n-button>
+        <UiButton size="small" @click="loadMore" :loading="loadingMore">加载更多</UiButton>
       </div>
 
       <div class="log-files-info" v-if="files.length > 0">
-        <n-divider style="margin: 16px 0;" />
+        <UiDivider style="margin: 16px 0;" />
         <div class="log-files-title">日志文件</div>
         <div class="log-files-grid">
           <div v-for="file in files" :key="file.name" class="log-file-item">
@@ -97,19 +97,14 @@
           </div>
         </div>
       </div>
-    </n-spin>
-  </n-card>
+    </UiLoading>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import {
-  NCard, NSpin, NCheckbox, NButton, NIcon, NSelect, NInput,
-  NPopconfirm, NDivider
-} from 'naive-ui'
-import {
-  RefreshOutline, SearchOutline, DownloadOutline, TrashOutline
-} from '@vicons/ionicons5'
+import { UiButton, UiCheckbox, UiConfirm, UiDivider, UiInput, UiLoading, UiSelect } from '../../ui'
+import { Download, RefreshCw, Search, Trash2 } from 'lucide-vue-next'
 import { logsApi } from '../../api'
 import { getToken } from '../../utils/auth'
 

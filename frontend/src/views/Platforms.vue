@@ -9,20 +9,20 @@
         </div>
       </div>
       <div class="toolbar-actions">
-        <n-button size="small" :loading="loading" @click="loadPlatforms(pagination.page)">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        <UiButton size="small" :loading="loading" @click="loadPlatforms(pagination.page)">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
-        <n-button size="small" type="primary" @click="showCreateModal">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" type="primary" @click="showCreateModal">
+          <template #icon><Plus :size="14" /></template>
           添加平台
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
     <div class="control-strip">
       <div class="filter-strip">
-      <n-input
+      <UiInput
         v-model:value="searchKeyword"
         size="small"
         clearable
@@ -31,15 +31,15 @@
         @keyup.enter="loadPlatforms(1)"
         @clear="loadPlatforms(1)"
       >
-        <template #prefix><n-icon :size="14"><SearchOutline /></n-icon></template>
-      </n-input>
-      <n-button size="small" :loading="loading" @click="loadPlatforms(1)">查询</n-button>
+        <template #prefix><Search :size="14" /></template>
+      </UiInput>
+      <UiButton size="small" :loading="loading" @click="loadPlatforms(1)">查询</UiButton>
       </div>
     </div>
 
     <div class="platforms-card data-surface">
       <div v-if="loading || platforms.length > 0" class="table-wrap">
-        <n-data-table
+        <DataGrid
           :columns="columns"
           :data="platforms"
           :row-key="getPlatformRowKey"
@@ -51,17 +51,17 @@
         />
       </div>
       <div v-else class="empty-state">
-        <n-icon :size="32" color="var(--text-quaternary)"><ServerOutline /></n-icon>
+        <Server :size="32" />
         <div class="empty-title">还没有平台</div>
         <div class="empty-desc">可以添加 New API 兼容站点，或配置任意 HTTP 签到接口</div>
-        <n-button size="small" type="primary" @click="showCreateModal">
-          <template #icon><n-icon :size="14"><AddOutline /></n-icon></template>
+        <UiButton size="small" type="primary" @click="showCreateModal">
+          <template #icon><Plus :size="14" /></template>
           创建平台
-        </n-button>
+        </UiButton>
       </div>
 
       <div v-if="pagination.itemCount > 0" class="pagination-wrap">
-        <n-pagination
+        <UiPagination
           v-model:page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :item-count="pagination.itemCount"
@@ -74,29 +74,32 @@
       </div>
     </div>
 
-    <n-modal v-model:show="modalVisible" :mask-closable="false">
+    <UiModal v-model:show="modalVisible" :mask-closable="false">
       <div class="edit-modal">
         <div class="modal-head">
           <h3>{{ editingPlatform ? '编辑平台' : '添加平台' }}</h3>
-          <n-button text @click="modalVisible = false">
-            <n-icon :size="16"><CloseOutline /></n-icon>
-          </n-button>
+          <UiButton text @click="modalVisible = false">
+            <X :size="16" />
+          </UiButton>
         </div>
 
         <div class="modal-body">
-          <n-form :model="formData" :rules="formRules" label-placement="top" class="platform-form">
+          <div class="platform-form">
             <section class="form-section">
               <div class="form-section-title">基础信息</div>
               <div class="form-grid base-grid">
-                <n-form-item label="平台名称" path="name">
-                  <n-input v-model:value="formData.name" size="small" placeholder="如：示例签到站" />
-                </n-form-item>
-                <n-form-item label="Base URL" path="base_url">
-                  <n-input v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
-                </n-form-item>
-                <n-form-item label="适配器" path="adapter_type">
-                  <n-select v-model:value="formData.adapter_type" size="small" :options="adapterOptions" />
-                </n-form-item>
+                <label class="field">
+                  <span class="field-label">平台名称 <span class="required">*</span></span>
+                  <UiInput v-model:value="formData.name" size="small" placeholder="如：示例签到站" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Base URL <span class="required">*</span></span>
+                  <UiInput v-model:value="formData.base_url" size="small" placeholder="https://example.com" />
+                </label>
+                <label class="field">
+                  <span class="field-label">适配器 <span class="required">*</span></span>
+                  <UiSelect v-model:value="formData.adapter_type" size="small" :options="adapterOptions" />
+                </label>
               </div>
               <div class="form-help">
                 Base URL 仅填写协议和站点地址；接口必须使用以 <code>/</code> 开头的相对路径。
@@ -107,42 +110,52 @@
               <section class="form-section">
                 <div class="form-section-title">New API 签到</div>
                 <div class="form-grid endpoint-grid">
-                  <n-form-item label="签到方式" path="sign_mode">
-                    <n-select v-model:value="formData.sign_mode" size="small" :options="signModeOptions" />
-                  </n-form-item>
-                  <n-form-item label="签到接口">
-                    <n-input v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
-                  </n-form-item>
-                  <n-form-item label="签到记录">
-                    <n-input v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
-                  </n-form-item>
-                  <n-form-item label="验证码">
-                    <n-input v-model:value="formData.captcha_api" size="small" placeholder="可选" />
-                  </n-form-item>
-                  <n-form-item label="用户信息">
-                    <n-input v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
-                  </n-form-item>
-                  <n-form-item label="控制台">
-                    <n-input v-model:value="formData.console_url" size="small" placeholder="/console" />
-                  </n-form-item>
+                  <label class="field">
+                  <span class="field-label">签到方式</span>
+                    <UiSelect v-model:value="formData.sign_mode" size="small" :options="signModeOptions" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">签到接口</span>
+                    <UiInput v-model:value="formData.sign_api" size="small" placeholder="/api/user/sign_in" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">签到记录</span>
+                    <UiInput v-model:value="formData.checkin_api" size="small" placeholder="/api/user/checkin" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">验证码</span>
+                    <UiInput v-model:value="formData.captcha_api" size="small" placeholder="可选" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">用户信息</span>
+                    <UiInput v-model:value="formData.user_api" size="small" placeholder="/api/user/self" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">控制台</span>
+                    <UiInput v-model:value="formData.console_url" size="small" placeholder="/console" />
+                  </label>
                 </div>
               </section>
 
               <section class="form-section">
                 <div class="form-section-title">New API 扩展接口</div>
                 <div class="form-grid endpoint-grid">
-                  <n-form-item label="模型列表">
-                    <n-input v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
-                  </n-form-item>
-                  <n-form-item label="平台分组">
-                    <n-input v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
-                  </n-form-item>
-                  <n-form-item label="Token">
-                    <n-input v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
-                  </n-form-item>
-                  <n-form-item label="系统状态">
-                    <n-input v-model:value="formData.status_api" size="small" placeholder="/api/status" />
-                  </n-form-item>
+                  <label class="field">
+                  <span class="field-label">模型列表</span>
+                    <UiInput v-model:value="formData.models_api" size="small" placeholder="/api/user/models" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">平台分组</span>
+                    <UiInput v-model:value="formData.groups_api" size="small" placeholder="/api/user/self/groups" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">Token</span>
+                    <UiInput v-model:value="formData.token_api" size="small" placeholder="/api/token/" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">系统状态</span>
+                    <UiInput v-model:value="formData.status_api" size="small" placeholder="/api/status" />
+                  </label>
                 </div>
               </section>
             </template>
@@ -151,38 +164,47 @@
               <section class="form-section">
                 <div class="form-section-title">HTTP 请求</div>
                 <div class="form-grid request-grid">
-                  <n-form-item label="请求方法">
-                    <n-select v-model:value="formData.http_method" size="small" :options="httpMethodOptions" />
-                  </n-form-item>
-                  <n-form-item label="签到路径" class="span-2">
-                    <n-input v-model:value="formData.http_path" size="small" placeholder="/api/checkin" />
-                  </n-form-item>
-                  <n-form-item label="请求体类型">
-                    <n-select v-model:value="formData.http_body_type" size="small" :options="bodyTypeOptions" />
-                  </n-form-item>
-                  <n-form-item label="超时（秒）">
-                    <n-input-number v-model:value="formData.http_timeout" size="small" :min="1" :max="120" />
-                  </n-form-item>
-                  <n-form-item label="最大重定向">
-                    <n-input-number v-model:value="formData.http_max_redirects" size="small" :min="0" :max="5" :disabled="!formData.http_follow_redirects" />
-                  </n-form-item>
-                  <n-form-item label="允许重定向">
+                  <label class="field">
+                  <span class="field-label">请求方法</span>
+                    <UiSelect v-model:value="formData.http_method" size="small" :options="httpMethodOptions" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">签到路径</span>
+                    <UiInput v-model:value="formData.http_path" size="small" placeholder="/api/checkin" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">请求体类型</span>
+                    <UiSelect v-model:value="formData.http_body_type" size="small" :options="bodyTypeOptions" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">超时（秒）</span>
+                    <UiNumberInput v-model:value="formData.http_timeout" size="small" :min="1" :max="120" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">最大重定向</span>
+                    <UiNumberInput v-model:value="formData.http_max_redirects" size="small" :min="0" :max="5" :disabled="!formData.http_follow_redirects" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">允许重定向</span>
                     <div class="switch-field">
-                      <n-switch v-model:value="formData.http_follow_redirects" size="small" />
+                      <UiSwitch v-model:value="formData.http_follow_redirects" size="small" />
                       <span>{{ formData.http_follow_redirects ? '允许（携带凭证时禁止跨域）' : '禁止' }}</span>
                     </div>
-                  </n-form-item>
+                  </label>
                 </div>
 
                 <div class="form-grid json-grid">
-                  <n-form-item label="Headers JSON">
-                    <n-input v-model:value="formData.http_headers_json" type="textarea" :rows="4" size="small" placeholder='{"X-Client":"autosign"}' />
-                  </n-form-item>
-                  <n-form-item label="Query JSON">
-                    <n-input v-model:value="formData.http_query_json" type="textarea" :rows="4" size="small" placeholder='{"uid":"{{account.external_user_id}}"}' />
-                  </n-form-item>
-                  <n-form-item label="请求体" class="span-2">
-                    <n-input
+                  <label class="field">
+                  <span class="field-label">Headers JSON</span>
+                    <UiInput v-model:value="formData.http_headers_json" type="textarea" :rows="4" size="small" placeholder='{"X-Client":"autosign"}' />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">Query JSON</span>
+                    <UiInput v-model:value="formData.http_query_json" type="textarea" :rows="4" size="small" placeholder='{"uid":"{{account.external_user_id}}"}' />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">请求体</span>
+                    <UiInput
                       v-model:value="formData.http_body_json"
                       type="textarea"
                       :rows="5"
@@ -190,7 +212,7 @@
                       :placeholder="formData.http_body_type === 'raw' ? '原始文本，可使用模板变量' : 'JSON 请求体，例如 action=checkin'"
                       :disabled="formData.http_body_type === 'none'"
                     />
-                  </n-form-item>
+                  </label>
                 </div>
                 <div class="form-help">
                   配置值支持模板变量：<code v-pre>{{auth.token}}</code>、<code v-pre>{{account.external_user_id}}</code>、<code v-pre>{{account.username}}</code>。
@@ -201,57 +223,58 @@
               <section class="form-section">
                 <div class="form-section-title">HTTP 响应判定</div>
                 <div class="form-grid json-grid">
-                  <n-form-item label="成功规则 JSON">
-                    <n-input v-model:value="formData.http_success_rule_json" type="textarea" :rows="4" size="small" placeholder='留空则按 HTTP 2xx；或 {"path":"code","equals":0}' />
-                  </n-form-item>
-                  <n-form-item label="已签到规则 JSON">
-                    <n-input v-model:value="formData.http_already_rule_json" type="textarea" :rows="4" size="small" placeholder='{"path":"message","contains":"已签到"}' />
-                  </n-form-item>
+                  <label class="field">
+                  <span class="field-label">成功规则 JSON</span>
+                    <UiInput v-model:value="formData.http_success_rule_json" type="textarea" :rows="4" size="small" placeholder='留空则按 HTTP 2xx；或 {"path":"code","equals":0}' />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">已签到规则 JSON</span>
+                    <UiInput v-model:value="formData.http_already_rule_json" type="textarea" :rows="4" size="small" placeholder='{"path":"message","contains":"已签到"}' />
+                  </label>
                 </div>
                 <div class="form-grid response-grid">
-                  <n-form-item label="消息字段路径">
-                    <n-input v-model:value="formData.http_message_path" size="small" placeholder="message" />
-                  </n-form-item>
-                  <n-form-item label="奖励字段路径">
-                    <n-input v-model:value="formData.http_reward_path" size="small" placeholder="data.points" />
-                  </n-form-item>
-                  <n-form-item label="奖励显示字段路径">
-                    <n-input v-model:value="formData.http_reward_display_path" size="small" placeholder="可选，如 data.reward_text" />
-                  </n-form-item>
-                  <n-form-item label="奖励单位">
-                    <n-input v-model:value="formData.http_reward_unit" size="small" placeholder="积分、金币、天" />
-                  </n-form-item>
-                  <n-form-item label="奖励倍率">
-                    <n-input-number v-model:value="formData.http_reward_multiplier" size="small" :min="0" />
-                  </n-form-item>
+                  <label class="field">
+                  <span class="field-label">消息字段路径</span>
+                    <UiInput v-model:value="formData.http_message_path" size="small" placeholder="message" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">奖励字段路径</span>
+                    <UiInput v-model:value="formData.http_reward_path" size="small" placeholder="data.points" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">奖励显示字段路径</span>
+                    <UiInput v-model:value="formData.http_reward_display_path" size="small" placeholder="可选，如 data.reward_text" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">奖励单位</span>
+                    <UiInput v-model:value="formData.http_reward_unit" size="small" placeholder="积分、金币、天" />
+                  </label>
+                  <label class="field">
+                  <span class="field-label">奖励倍率</span>
+                    <UiNumberInput v-model:value="formData.http_reward_multiplier" size="small" :min="0" />
+                  </label>
                 </div>
                 <div class="form-help">
                   字段路径支持点号访问嵌套对象。规则支持 <code>equals</code>、<code>contains</code>、<code>exists</code>、<code>in</code>、<code>truthy</code> 等判定。
                 </div>
               </section>
             </template>
-          </n-form>
+          </div>
         </div>
 
         <div class="modal-foot">
-          <n-button size="small" @click="modalVisible = false">取消</n-button>
-          <n-button size="small" type="primary" :loading="saving" @click="handleSave">保存</n-button>
+          <UiButton size="small" @click="modalVisible = false">取消</UiButton>
+          <UiButton size="small" type="primary" :loading="saving" @click="handleSave">保存</UiButton>
         </div>
       </div>
-    </n-modal>
+    </UiModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { NButton, NPopconfirm, type DataTableColumns } from 'naive-ui'
-import {
-  AddOutline,
-  CloseOutline,
-  RefreshOutline,
-  SearchOutline,
-  ServerOutline,
-} from '@vicons/ionicons5'
+import { DataGrid, UiButton, UiConfirm, UiInput, UiModal, UiNumberInput, UiPagination, UiSelect, UiSwitch, type GridColumns } from '../ui'
+import { Plus, RefreshCw, Search, Server, X } from 'lucide-vue-next'
 import { platformApi } from '../api'
 import { useViewRefresh } from '../composables'
 import ExternalLink from '../components/common/ExternalLink.vue'
@@ -373,12 +396,6 @@ const defaultPlatform = computed(() => platforms.value.find(platform => platform
 const totalAccounts = computed(() => platforms.value.reduce((sum, platform) => sum + (platform.accounts_count ?? 0), 0))
 const getPlatformRowKey = (platform: Platform) => platform.id
 
-const formRules = {
-  name: { required: true, message: '请输入平台名称', trigger: 'blur' },
-  base_url: { required: true, message: '请输入 Base URL', trigger: 'blur' },
-  adapter_type: { required: true, message: '请选择适配器', trigger: 'change' },
-}
-
 const getConfiguredPathCount = (platform: Platform) => endpointKeys.reduce((count, key) => {
   const value = String(platform[key] || '').trim()
   return count + (value ? 1 : 0)
@@ -396,7 +413,7 @@ const formatDateTime = (value: string) => {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-const columns = computed<DataTableColumns<Platform>>(() => [
+const columns = computed<GridColumns<Platform>>(() => [
   {
     title: '平台',
     key: 'name',
@@ -441,11 +458,11 @@ const columns = computed<DataTableColumns<Platform>>(() => [
     key: 'actions',
     width: 150,
     render: row => h('div', { class: 'actions' }, [
-      h(NButton, { size: 'tiny', quaternary: true, onClick: () => editPlatform(row) }, { default: () => '编辑' }),
-      h(NPopconfirm, {
+      h(UiButton, { size: 'tiny', quaternary: true, onClick: () => editPlatform(row) }, { default: () => '编辑' }),
+      h(UiConfirm, {
         onPositiveClick: () => deletePlatform(row), positiveText: '删除', negativeText: '取消',
       }, {
-        trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
+        trigger: () => h(UiButton, { size: 'tiny', quaternary: true, type: 'error' }, { default: () => '删除' }),
         default: () => `确定删除平台 "${row.name}"？删除前必须先迁移或删除关联账号。`
       })
     ])

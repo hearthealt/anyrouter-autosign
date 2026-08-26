@@ -10,7 +10,7 @@
     </div>
   </div>
   <div v-else class="empty-state quota-empty">
-    <n-icon :size="48" color="var(--text-tertiary)"><WalletOutline /></n-icon>
+    <Wallet :size="48" />
     <span class="empty-text">暂无额度数据</span>
   </div>
 </template>
@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import * as echarts from 'echarts'
-import { WalletOutline } from '@vicons/ionicons5'
+import { Wallet } from 'lucide-vue-next'
 import type { Account } from '../../types'
 
 const props = defineProps<{

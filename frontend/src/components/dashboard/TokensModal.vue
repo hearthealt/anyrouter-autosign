@@ -1,19 +1,19 @@
 <template>
-  <n-modal v-model:show="visible" :mask-closable="false">
+  <UiModal v-model:show="visible" :width="680" :mask-closable="false">
     <div class="modal-container tokens-modal">
       <div class="modal-header">
         <div class="modal-title-group">
           <div class="modal-icon">
-            <n-icon :size="18"><KeyOutline /></n-icon>
+            <KeyRound :size="18" />
           </div>
           <div>
             <h3>API 令牌</h3>
             <span class="modal-subtitle">{{ account?.username }}</span>
           </div>
         </div>
-        <n-button text @click="close">
-          <n-icon :size="20"><CloseOutline /></n-icon>
-        </n-button>
+        <UiButton text @click="close">
+          <X :size="20" />
+        </UiButton>
       </div>
 
       <div class="modal-body tokens-body">
@@ -23,104 +23,103 @@
             <span class="tokens-label">个令牌</span>
           </div>
           <div class="tokens-actions">
-            <n-button size="small" type="primary" @click="openAddDrawer">
-              <template #icon><n-icon><AddOutline /></n-icon></template>
+            <UiButton size="small" type="primary" @click="openAddDrawer">
+              <template #icon><Plus /></template>
               添加令牌
-            </n-button>
-            <n-button size="small" secondary @click="$emit('sync')" :loading="syncing">
-              <template #icon><n-icon><RefreshOutline /></n-icon></template>
+            </UiButton>
+            <UiButton size="small" secondary @click="$emit('sync')" :loading="syncing">
+              <template #icon><RefreshCw /></template>
               同步令牌
-            </n-button>
+            </UiButton>
           </div>
         </div>
 
-        <n-spin :show="loading">
+        <UiLoading :show="loading">
           <div v-if="tokens.length > 0" class="tokens-list">
             <div v-for="token in tokens" :key="token.id" class="token-card">
               <div class="token-header">
                 <div class="token-name">{{ token.name || '未命名令牌' }}</div>
                 <div class="token-quota">
                   <span class="quota-used">已用 {{ formatQuota(token.used_quota) }}</span>
-                  <n-tag v-if="token.unlimited_quota" size="tiny" :bordered="false" type="success">无限</n-tag>
-                  <n-tag v-else size="tiny" :bordered="false" type="info">{{ formatQuota(token.used_quota + token.remain_quota) }}</n-tag>
+                  <UiTag v-if="token.unlimited_quota" size="tiny" :bordered="false" type="success">无限</UiTag>
+                  <UiTag v-else size="tiny" :bordered="false" type="info">{{ formatQuota(token.used_quota + token.remain_quota) }}</UiTag>
                 </div>
               </div>
               <div v-if="token.model_limits" class="token-models">
-                <n-tag
+                <UiTag
                   v-for="model in parseModels(token.model_limits)"
                   :key="model"
                   size="tiny"
                   :bordered="false"
                 >
                   {{ model }}
-                </n-tag>
+                </UiTag>
               </div>
               <div class="token-key-row">
                 <code class="token-key">{{ renderKey(token) }}</code>
                 <div class="token-actions">
-                  <n-button size="tiny" quaternary :title="revealed.has(token.token_id) ? '隐藏' : '显示明文'" @click="toggleReveal(token)">
+                  <UiButton size="tiny" quaternary :title="revealed.has(token.token_id) ? '隐藏' : '显示明文'" @click="toggleReveal(token)">
                     <template #icon>
-                      <n-icon :size="14"><component :is="revealed.has(token.token_id) ? EyeOffOutline : EyeOutline" /></n-icon>
+                      <component :is="revealed.has(token.token_id) ? EyeOff : Eye" :size="14" />
                     </template>
-                  </n-button>
-                  <n-button size="tiny" quaternary @click="copyToken(token.key)">
-                    <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
-                  </n-button>
-                  <n-button size="tiny" quaternary @click="openEditDrawer(token)">
-                    <template #icon><n-icon :size="14"><CreateOutline /></n-icon></template>
-                  </n-button>
-                  <n-popconfirm @positive-click="$emit('delete', token)">
+                  </UiButton>
+                  <UiButton size="tiny" quaternary @click="copyToken(token.key)">
+                    <template #icon><Copy :size="14" /></template>
+                  </UiButton>
+                  <UiButton size="tiny" quaternary @click="openEditDrawer(token)">
+                    <template #icon><Pencil :size="14" /></template>
+                  </UiButton>
+                  <UiConfirm @positive-click="$emit('delete', token)">
                     <template #trigger>
-                      <n-button size="tiny" quaternary :loading="deletingId === token.token_id" style="color: var(--error-color);">
-                        <template #icon><n-icon :size="14"><TrashOutline /></n-icon></template>
-                      </n-button>
+                      <UiButton size="tiny" quaternary :loading="deletingId === token.token_id" style="color: var(--error-color);">
+                        <template #icon><Trash2 :size="14" /></template>
+                      </UiButton>
                     </template>
                     确定删除该令牌吗？
-                  </n-popconfirm>
+                  </UiConfirm>
                 </div>
               </div>
             </div>
           </div>
           <div v-else class="tokens-empty">
             <div class="empty-icon">
-              <n-icon :size="40"><KeyOutline /></n-icon>
+              <KeyRound :size="40" />
             </div>
             <div class="empty-text">暂无 API 令牌</div>
             <div class="empty-hint">点击"同步令牌"从服务器获取</div>
           </div>
-        </n-spin>
+        </UiLoading>
       </div>
 
       <div class="modal-footer">
-        <n-button @click="close">关闭</n-button>
+        <UiButton @click="close">关闭</UiButton>
       </div>
     </div>
-  </n-modal>
+  </UiModal>
 
   <!-- 添加/编辑令牌抽屉 -->
-  <n-drawer v-model:show="showDrawer" :width="400" placement="right">
-    <n-drawer-content :title="editingToken ? '编辑令牌' : '添加令牌'" closable>
+  <UiDrawer v-model:show="showDrawer" :width="400" kicker="Token" :title="editingToken ? '编辑令牌' : '添加令牌'">
       <div class="token-form">
         <div class="form-item">
           <label class="form-label">令牌名称 <span class="required">*</span></label>
-          <n-input v-model:value="tokenForm.name" placeholder="请输入令牌名称" />
+          <UiInput v-model:value="tokenForm.name" placeholder="请输入令牌名称" />
         </div>
         <div class="form-item">
           <label class="form-label">额度设置</label>
-          <n-switch v-model:value="tokenForm.unlimited_quota">
+          <UiSwitch v-model:value="tokenForm.unlimited_quota">
             <template #checked>无限额度</template>
             <template #unchecked>限制额度</template>
-          </n-switch>
+          </UiSwitch>
         </div>
         <div class="form-item" v-if="!tokenForm.unlimited_quota">
           <label class="form-label">剩余额度</label>
-          <n-input-number v-model:value="tokenForm.remain_quota" :min="0" :step="100000" style="width: 100%;">
+          <UiNumberInput v-model:value="tokenForm.remain_quota" :min="0" :step="100000" style="width: 100%;">
             <template #suffix>（约 ${{ (tokenForm.remain_quota / 500000).toFixed(2) }}）</template>
-          </n-input-number>
+          </UiNumberInput>
         </div>
         <div class="form-item">
           <label class="form-label">过期时间</label>
-          <n-select
+          <UiSelect
             v-model:value="tokenForm.expired_time"
             :options="expireOptions"
             placeholder="选择过期时间"
@@ -128,14 +127,14 @@
         </div>
         <div class="form-item">
           <label class="form-label">模型限制</label>
-          <n-switch v-model:value="tokenForm.model_limits_enabled">
+          <UiSwitch v-model:value="tokenForm.model_limits_enabled">
             <template #checked>启用限制</template>
             <template #unchecked>不限制</template>
-          </n-switch>
+          </UiSwitch>
         </div>
         <div class="form-item" v-if="tokenForm.model_limits_enabled">
           <label class="form-label">可用模型</label>
-          <n-select
+          <UiSelect
             v-model:value="tokenForm.model_limits_array"
             multiple
             filterable
@@ -146,7 +145,7 @@
         </div>
         <div class="form-item">
           <label class="form-label">分组</label>
-          <n-select
+          <UiSelect
             v-model:value="tokenForm.group"
             :options="tokenGroupOptions"
             :loading="loadingTokenGroups"
@@ -155,28 +154,24 @@
         </div>
         <div class="form-item">
           <label class="form-label">IP 白名单（可选）</label>
-          <n-input v-model:value="tokenForm.allow_ips" placeholder="留空表示不限制，多个 IP 用逗号分隔" />
+          <UiInput v-model:value="tokenForm.allow_ips" placeholder="留空表示不限制，多个 IP 用逗号分隔" />
         </div>
       </div>
       <template #footer>
         <div class="drawer-footer">
-          <n-button @click="showDrawer = false">取消</n-button>
-          <n-button type="primary" @click="handleSaveToken" :loading="savingToken">
+          <UiButton @click="showDrawer = false">取消</UiButton>
+          <UiButton type="primary" @click="handleSaveToken" :loading="savingToken">
             {{ editingToken ? '保存修改' : '创建令牌' }}
-          </n-button>
+          </UiButton>
         </div>
       </template>
-    </n-drawer-content>
-  </n-drawer>
+  </UiDrawer>
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiConfirm, UiDrawer, UiInput, UiLoading, UiModal, UiNumberInput, UiSelect, UiSwitch, UiTag } from '../../ui'
 import { ref, computed, watch } from 'vue'
-import {
-  KeyOutline, CloseOutline, AddOutline, RefreshOutline,
-  CopyOutline, CreateOutline, TrashOutline,
-  EyeOutline, EyeOffOutline
-} from '@vicons/ionicons5'
+import { Copy, Eye, EyeOff, KeyRound, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-vue-next'
 import { accountApi } from '../../api'
 import { useClipboard, useFormat } from '../../composables'
 import type { Account, ApiToken, SelectOption, CreateTokenParams } from '../../types'
@@ -398,9 +393,7 @@ watch(showDrawer, (val) => {
   overflow: hidden;
 }
 
-.tokens-modal {
-  width: min(640px, calc(100vw - 24px));
-}
+.tokens-modal { display: flex; flex-direction: column; min-width: 0; }
 
 .modal-header {
   display: flex;

@@ -1,10 +1,11 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import naive from 'naive-ui'
 import App from './App.vue'
 import router from './router'
 import './styles/global.css'
 import { initTheme } from './utils'
+// 副作用导入：模块加载时就把 data-motion 写到 <html>，避免首帧闪动
+import './design/useMotionPreference'
 
 // Polyfill: 为 wheel/mousewheel 事件添加 passive 标志
 // 这可以改善页面滚动性能，并消除 Chrome 的性能警告
@@ -30,6 +31,5 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
-app.use(naive)
 
 app.mount('#app')

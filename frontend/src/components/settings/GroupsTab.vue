@@ -1,25 +1,25 @@
 <template>
-  <n-card class="settings-panel">
-    <n-spin :show="loading">
+  <div class="card settings-panel">
+    <UiLoading :show="loading">
       <div class="channel-header">
         <div class="channel-header-info">
           <div class="channel-header-title">账号分组</div>
           <div class="channel-header-desc">创建分组来组织和管理账号</div>
         </div>
-        <n-button type="primary" @click="showAddGroupModal">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
+        <UiButton type="primary" @click="showAddGroupModal">
+          <template #icon><Plus /></template>
           新建分组
-        </n-button>
+        </UiButton>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
       <div v-if="groups.length > 0" class="group-grid">
         <div v-for="group in groups" :key="group.id" class="group-card">
           <div class="group-card-header">
             <div class="group-color-dot" :style="{ background: getGroupColor(group.color) }"></div>
             <div class="group-account-count">
-              <n-tag size="small" :bordered="false">{{ group.account_count }} 个账号</n-tag>
+              <UiTag size="small" :bordered="false">{{ group.account_count }} 个账号</UiTag>
             </div>
           </div>
           <div class="group-card-body">
@@ -27,53 +27,53 @@
             <div class="group-desc">{{ group.description || '暂无描述' }}</div>
           </div>
           <div class="group-card-footer">
-            <n-button size="small" quaternary @click="editGroup(group)">
-              <template #icon><n-icon><CreateOutline /></n-icon></template>
+            <UiButton size="small" quaternary @click="editGroup(group)">
+              <template #icon><Pencil /></template>
               编辑
-            </n-button>
-            <n-popconfirm @positive-click="deleteGroup(group.id)">
+            </UiButton>
+            <UiConfirm @positive-click="deleteGroup(group.id)">
               <template #trigger>
-                <n-button size="small" quaternary class="delete-btn">
-                  <template #icon><n-icon><TrashOutline /></n-icon></template>
+                <UiButton size="small" quaternary class="delete-btn">
+                  <template #icon><Trash2 /></template>
                   删除
-                </n-button>
+                </UiButton>
               </template>
               删除分组后，账号将变为未分组状态
-            </n-popconfirm>
+            </UiConfirm>
           </div>
         </div>
       </div>
 
       <div v-else class="empty-state">
         <div class="empty-icon">
-          <n-icon :size="48" color="#ddd"><FolderOpenOutline /></n-icon>
+          <FolderOpen :size="48" />
         </div>
         <div class="empty-title">暂无分组</div>
         <div class="empty-desc">创建分组来更好地组织和管理您的账号</div>
-        <n-button type="primary" @click="showAddGroupModal" style="margin-top: 16px;">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
+        <UiButton type="primary" @click="showAddGroupModal" style="margin-top: 16px;">
+          <template #icon><Plus /></template>
           创建第一个分组
-        </n-button>
+        </UiButton>
       </div>
-    </n-spin>
-  </n-card>
+    </UiLoading>
+  </div>
 
-  <n-modal v-model:show="showGroupModal" :mask-closable="false">
+  <UiModal v-model:show="showGroupModal" :mask-closable="false">
     <div class="modal-container">
       <div class="modal-header">
         <h3>{{ editingGroup ? '编辑分组' : '新建分组' }}</h3>
-        <n-button text @click="showGroupModal = false">
-          <n-icon :size="20"><CloseOutline /></n-icon>
-        </n-button>
+        <UiButton text @click="showGroupModal = false">
+          <X :size="20" />
+        </UiButton>
       </div>
       <div class="modal-body">
         <div class="form-item">
           <label>分组名称</label>
-          <n-input v-model:value="groupForm.name" placeholder="输入分组名称" />
+          <UiInput v-model:value="groupForm.name" placeholder="输入分组名称" />
         </div>
         <div class="form-item">
           <label>分组描述（可选）</label>
-          <n-input v-model:value="groupForm.description" placeholder="输入分组描述" />
+          <UiInput v-model:value="groupForm.description" placeholder="输入分组描述" />
         </div>
         <div class="form-item">
           <label>分组颜色</label>
@@ -86,25 +86,23 @@
               :style="{ background: color.hex }"
               @click="groupForm.color = color.value"
             >
-              <n-icon v-if="groupForm.color === color.value" :size="14" color="#fff"><CheckmarkOutline /></n-icon>
+              <Check :size="14" />
             </div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <n-button @click="showGroupModal = false">取消</n-button>
-        <n-button type="primary" @click="saveGroup" :loading="savingGroup">保存</n-button>
+        <UiButton @click="showGroupModal = false">取消</UiButton>
+        <UiButton type="primary" @click="saveGroup" :loading="savingGroup">保存</UiButton>
       </div>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiConfirm, UiDivider, UiInput, UiLoading, UiModal, UiTag } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
-import {
-  AddOutline, CloseOutline, CreateOutline, TrashOutline,
-  FolderOpenOutline, CheckmarkOutline
-} from '@vicons/ionicons5'
+import { Check, FolderOpen, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import { groupsApi } from '../../api'
 import { apiError } from '../../utils/apiError'
 

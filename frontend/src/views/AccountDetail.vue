@@ -2,27 +2,27 @@
   <div class="account-detail">
     <!-- 返回 + 标题 -->
     <div class="detail-head">
-      <n-button text size="small" @click="router.push('/accounts')">
-        <template #icon><n-icon :size="14"><ArrowBackOutline /></n-icon></template>
+      <UiButton text size="small" @click="router.push('/accounts')">
+        <template #icon><ArrowLeft :size="14" /></template>
         账号列表
-      </n-button>
+      </UiButton>
       <div class="detail-actions">
-        <n-button size="small" @click="openEditModal">
-          <template #icon><n-icon :size="14"><CreateOutline /></n-icon></template>
+        <UiButton size="small" @click="openEditModal">
+          <template #icon><Pencil :size="14" /></template>
           编辑
-        </n-button>
-        <n-button size="small" :loading="refreshing" @click="handleRefreshInfo">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" :loading="refreshing" @click="handleRefreshInfo">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
-        <n-button size="small" type="primary" :loading="signing" @click="handleSign">
-          <template #icon><n-icon :size="14"><FlashOutline /></n-icon></template>
+        </UiButton>
+        <UiButton size="small" type="primary" :loading="signing" @click="handleSign">
+          <template #icon><Zap :size="14" /></template>
           立即签到
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
-    <n-spin :show="loading">
+    <UiLoading :show="loading">
       <!-- 账号概览 -->
       <div class="account-hero">
         <div class="hero-identity">
@@ -167,10 +167,10 @@
               <div class="aff-label">推广链接</div>
               <div class="aff-row">
                 <ExternalLink class="aff-link" :href="getAffLink()" mono wrap />
-                <n-button size="small" @click="copyAffLink">
-                  <template #icon><n-icon :size="14"><CopyOutline /></n-icon></template>
+                <UiButton size="small" @click="copyAffLink">
+                  <template #icon><Copy :size="14" /></template>
                   复制
-                </n-button>
+                </UiButton>
               </div>
             </div>
           </div>
@@ -195,7 +195,7 @@
                   :key="day.date"
                   class="mini-day"
                 >
-                  <n-tooltip trigger="hover">
+                  <UiTooltip trigger="hover">
                     <template #trigger>
                       <div
                         class="mini-bar"
@@ -204,7 +204,7 @@
                       ></div>
                     </template>
                     {{ day.date }} · {{ day.label }}
-                  </n-tooltip>
+                  </UiTooltip>
                   <span class="mini-label">{{ day.short }}</span>
                 </div>
               </div>
@@ -227,17 +227,17 @@
             </div>
 
             <div v-if="loadingLogs" class="log-loading">
-              <n-spin size="small" />
+              <UiLoading size="small" />
             </div>
 
             <div v-if="!loadingLogs && signLogs.length === 0" class="log-empty">
-              <n-icon :size="24" color="var(--text-quaternary)"><DocumentTextOutline /></n-icon>
+              <FileText :size="24" />
               <span>暂无签到记录</span>
-              <n-button size="tiny" type="primary" :loading="signing" @click="handleSign">立即签到</n-button>
+              <UiButton size="tiny" type="primary" :loading="signing" @click="handleSign">立即签到</UiButton>
             </div>
 
             <div v-if="pagination.itemCount > pagination.pageSize" class="log-pagination">
-              <n-pagination
+              <UiPagination
                 v-model:page="pagination.page"
                 v-model:page-size="pagination.pageSize"
                 :item-count="pagination.itemCount"
@@ -250,7 +250,7 @@
           </div>
         </div>
       </div>
-    </n-spin>
+    </UiLoading>
 
     <AccountModal
       ref="accountModalRef"
@@ -263,10 +263,11 @@
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiLoading, UiPagination, UiTooltip } from '../ui'
 import { computed, ref, onMounted } from 'vue'
 import { AccountModal } from '../components/dashboard'
 import { useRoute, useRouter } from 'vue-router'
-import { RefreshOutline, FlashOutline, CopyOutline, CreateOutline, ArrowBackOutline, DocumentTextOutline } from '@vicons/ionicons5'
+import { ArrowLeft, Copy, FileText, Pencil, RefreshCw, Zap } from 'lucide-vue-next'
 
 import { accountApi, signApi, groupsApi, notifyApi, platformApi } from '../api'
 import { formatDateTime, formatQuota, formatRewardAmount, copyToClipboard } from '../utils'
@@ -486,6 +487,15 @@ const handleAccountSubmit = async (data: {
     } else {
       if (data.user_id.trim()) updateData.user_id = data.user_id.trim()
       if (data.session_cookie.trim()) updateData.session_cookie = data.session_cookie.trim()
+      // 令牌凭证：切到 PAT / refresh 时下发 auth_type + auth_data；
+      // 切回账号密码时下发 clear_auth_data 把旧令牌清掉
+      const usesToken = data.auth_type === 'bearer' || data.auth_type === 'new_api_refresh'
+      if (data.clear_auth_data) {
+        updateData.clear_auth_data = true
+      } else if (usesToken) {
+        updateData.auth_type = data.auth_type
+        if (data.auth_data) updateData.auth_data = data.auth_data
+      }
       if (data.clear_login_credentials) {
         updateData.clear_login_credentials = true
       } else {

@@ -1,8 +1,8 @@
 <template>
-  <n-modal :show="show" @update:show="(val: boolean) => emit('update:show', val)">
+  <UiModal :show="show" @update:show="(val: boolean) => emit('update:show', val)">
     <div class="command-palette">
       <div class="cp-search">
-        <n-icon :size="16"><SearchOutline /></n-icon>
+        <Search :size="16" />
         <input
           ref="inputRef"
           v-model="keyword"
@@ -33,7 +33,7 @@
             @click="executeCommandItem(item)"
           >
             <span class="cp-item-icon" :class="item.kind">
-              <n-icon :size="14"><component :is="item.icon" /></n-icon>
+              <component :is="item.icon" :size="14" />
             </span>
             <div class="cp-item-body">
               <div class="cp-item-top">
@@ -52,16 +52,14 @@
         </div>
       </div>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
+import { UiModal } from '../../ui'
 import { ref, computed, watch, nextTick, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  AddOutline, FlashOutline, GridOutline, PeopleOutline, PulseOutline,
-  SettingsOutline, TimeOutline, RefreshOutline, SearchOutline, ServerOutline
-} from '@vicons/ionicons5'
+import { Activity, Clock, LayoutDashboard, Plus, RefreshCw, Search, Server, Settings, Users, Zap } from 'lucide-vue-next'
 import { accountApi, platformApi, signApi } from '../../api'
 import type { Account, Platform, SignLog } from '../../types'
 import { apiError } from '../../utils/apiError'
@@ -145,14 +143,14 @@ const buildLocalDateParam = (value: string) => {
 }
 
 const actionCatalog: CommandActionItem[] = [
-  { id: 'refresh', title: '刷新当前视图', subtitle: '重新请求当前页面数据', icon: RefreshOutline, actionId: 'refresh', keywords: ['refresh', 'reload', '刷新', '重新加载'] },
-  { id: 'add-account', title: '添加账号', subtitle: '跳转到账号页继续新增', icon: AddOutline, actionId: 'add-account', keywords: ['add account', 'account', '账号', '添加'] },
-  { id: 'batch-sign', title: '一键签到', subtitle: '对全部启用账号执行签到', icon: FlashOutline, actionId: 'batch-sign', keywords: ['sign', 'batch sign', '签到', '一键'] },
-  { id: 'health-check-all', title: '批量健康检查', subtitle: '检查全部账号的当前凭证状态', icon: PulseOutline, actionId: 'health-check-all', keywords: ['health', 'check', '健康检查', '健康'] },
-  { id: 'open-dashboard', title: '打开仪表盘', subtitle: '跳转到首页概览', icon: GridOutline, actionId: 'open-dashboard', keywords: ['dashboard', 'home', '仪表盘', '首页'] },
-  { id: 'open-logs', title: '打开签到日志', subtitle: '查看全局签到记录', icon: TimeOutline, actionId: 'open-logs', keywords: ['logs', 'history', '日志', '签到记录'] },
-  { id: 'open-platforms', title: '打开平台页', subtitle: '查看平台 Base URL 和接口配置', icon: ServerOutline, actionId: 'open-platforms', keywords: ['platform', '平台', 'base url'] },
-  { id: 'open-settings', title: '打开设置页', subtitle: '查看调度与推送配置', icon: SettingsOutline, actionId: 'open-settings', keywords: ['settings', 'config', '设置', '配置'] }
+  { id: 'refresh', title: '刷新当前视图', subtitle: '重新请求当前页面数据', icon: RefreshCw, actionId: 'refresh', keywords: ['refresh', 'reload', '刷新', '重新加载'] },
+  { id: 'add-account', title: '添加账号', subtitle: '跳转到账号页继续新增', icon: Plus, actionId: 'add-account', keywords: ['add account', 'account', '账号', '添加'] },
+  { id: 'batch-sign', title: '一键签到', subtitle: '对全部启用账号执行签到', icon: Zap, actionId: 'batch-sign', keywords: ['sign', 'batch sign', '签到', '一键'] },
+  { id: 'health-check-all', title: '批量健康检查', subtitle: '检查全部账号的当前凭证状态', icon: Activity, actionId: 'health-check-all', keywords: ['health', 'check', '健康检查', '健康'] },
+  { id: 'open-dashboard', title: '打开仪表盘', subtitle: '跳转到首页概览', icon: LayoutDashboard, actionId: 'open-dashboard', keywords: ['dashboard', 'home', '仪表盘', '首页'] },
+  { id: 'open-logs', title: '打开签到日志', subtitle: '查看全局签到记录', icon: Clock, actionId: 'open-logs', keywords: ['logs', 'history', '日志', '签到记录'] },
+  { id: 'open-platforms', title: '打开平台页', subtitle: '查看平台 Base URL 和接口配置', icon: Server, actionId: 'open-platforms', keywords: ['platform', '平台', 'base url'] },
+  { id: 'open-settings', title: '打开设置页', subtitle: '查看调度与推送配置', icon: Settings, actionId: 'open-settings', keywords: ['settings', 'config', '设置', '配置'] }
 ]
 
 const commandItems = computed<CommandItem[]>(() => {
@@ -183,7 +181,7 @@ const commandItems = computed<CommandItem[]>(() => {
         id: `account-${account.id}`, kind: 'account',
         title: account.username || `账号 ${account.id}`,
         subtitle: `${account.platform?.name || '未配置平台'} · UID ${account.anyrouter_user_id ?? '-'}`,
-        icon: PeopleOutline, score, accountId: account.id
+        icon: Users, score, accountId: account.id
       })
     }
   })
@@ -194,7 +192,7 @@ const commandItems = computed<CommandItem[]>(() => {
       items.push({
         id: `platform-${platform.id}`, kind: 'platform',
         title: platform.name, subtitle: platform.base_url,
-        icon: ServerOutline, score
+        icon: Server, score
       })
     }
   })
@@ -208,7 +206,7 @@ const commandItems = computed<CommandItem[]>(() => {
         id: `log-${log.id}`, kind: 'log',
         title: `${username} · ${statusLabel}`,
         subtitle: `${new Date(log.sign_time).toLocaleString()}${log.message ? ` · ${log.message}` : ''}`,
-        icon: TimeOutline, score,
+        icon: Clock, score,
         accountId: log.account_id, success: log.success,
         logDate: buildLocalDateParam(log.sign_time)
       })

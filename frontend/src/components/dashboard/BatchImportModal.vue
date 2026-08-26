@@ -1,19 +1,19 @@
 <template>
-  <n-modal v-model:show="visible" :mask-closable="false">
+  <UiModal v-model:show="visible" :width="860" :mask-closable="false">
     <div class="batch-import-modal">
       <div class="modal-head">
         <div>
           <h3>批量导入账号</h3>
           <p>支持粘贴 JSON 或上传 CSV，逐条校验并返回每条结果</p>
         </div>
-        <n-button text @click="close">
-          <n-icon :size="16"><CloseOutline /></n-icon>
-        </n-button>
+        <UiButton text @click="close">
+          <X :size="16" />
+        </UiButton>
       </div>
 
       <div class="modal-body">
         <div class="hint">
-          <n-icon :size="14"><InformationCircleOutline /></n-icon>
+          <Info :size="14" />
           <span>
             字段支持 <code>platform_id</code> / <code>platform</code>、
             <code>group_id</code> / <code>group</code>，账号凭证字段与单个添加账号保持一致。
@@ -24,7 +24,7 @@
         <div class="field-grid">
           <div class="field">
             <label>默认平台（可选）</label>
-            <n-select
+            <UiSelect
               v-model:value="fallbackPlatformId"
               :options="platformOptions"
               size="small"
@@ -34,7 +34,7 @@
           </div>
           <div class="field">
             <label>默认分组（可选）</label>
-            <n-select
+            <UiSelect
               v-model:value="fallbackGroupId"
               :options="groupOptions"
               size="small"
@@ -44,25 +44,24 @@
           </div>
         </div>
 
-        <n-tabs v-model:value="mode" type="segment" animated>
-          <n-tab-pane name="json" tab="粘贴 JSON">
+        <UiSegment v-model:value="mode" :options="[{ label: '粘贴 JSON', value: 'json' }, { label: '上传 CSV', value: 'csv' }]" />
+        <div v-show="mode === 'json'" class="tab-panel">
             <div class="import-panel">
               <div class="panel-headline">
                 <span>JSON 数组或 <code>{\"items\": [...]}</code> 都支持</span>
-                <n-button text size="small" @click="fillExample">
+                <UiButton text size="small" @click="fillExample">
                   填充示例
-                </n-button>
+                </UiButton>
               </div>
-              <n-input
+              <UiInput
                 v-model:value="jsonText"
                 type="textarea"
                 :rows="14"
                 placeholder="[{ &quot;platform&quot;: &quot;AnyRouter&quot;, &quot;login_username&quot;: &quot;demo@example.com&quot;, &quot;login_password&quot;: &quot;secret&quot; }, { &quot;platform&quot;: &quot;某 HTTP 平台&quot;, &quot;external_user_id&quot;: &quot;user-001&quot;, &quot;auth_type&quot;: &quot;bearer&quot;, &quot;auth_data&quot;: { &quot;token&quot;: &quot;...&quot; } }]"
               />
             </div>
-          </n-tab-pane>
-
-          <n-tab-pane name="csv" tab="上传 CSV">
+                  </div>
+        <div v-show="mode === 'csv'" class="tab-panel">
             <div class="import-panel">
               <div class="upload-card">
                 <div class="upload-copy">
@@ -74,16 +73,12 @@
                     <code>proxy_mode</code>, <code>proxy_url</code>
                   </div>
                 </div>
-                <n-upload
-                  :show-file-list="false"
-                  accept=".csv,text/csv"
-                  @change="handleCsvFileChange"
-                >
-                  <n-button size="small" type="primary">
-                    <template #icon><n-icon :size="14"><CloudUploadOutline /></n-icon></template>
+                <UiFileDrop accept=".csv,text/csv" @select="handleCsvFileChange">
+                  <UiButton size="small" type="primary">
+                    <template #icon><CloudUpload :size="14" /></template>
                     选择 CSV
-                  </n-button>
-                </n-upload>
+                  </UiButton>
+                </UiFileDrop>
               </div>
 
               <div v-if="csvFileName" class="file-meta">
@@ -91,7 +86,7 @@
                 <span>{{ csvRowCount }} 条记录</span>
               </div>
 
-              <n-input
+              <UiInput
                 :value="csvPreview"
                 type="textarea"
                 :rows="12"
@@ -99,8 +94,7 @@
                 placeholder="选择 CSV 后会在这里显示内容预览"
               />
             </div>
-          </n-tab-pane>
-        </n-tabs>
+                  </div>
 
         <div v-if="summary" class="summary-row">
           <div class="summary-card">
@@ -127,9 +121,9 @@
             <div class="result-main">
               <div class="result-head">
                 <span class="result-index">#{{ result.index + 1 }}</span>
-                <n-tag size="small" :type="result.success ? 'success' : 'error'" :bordered="false">
+                <UiTag size="small" :type="result.success ? 'success' : 'error'" :bordered="false">
                   {{ result.success ? '成功' : '失败' }}
-                </n-tag>
+                </UiTag>
                 <span v-if="result.username" class="result-username">{{ result.username }}</span>
               </div>
               <div class="result-message">{{ result.message }}</div>
@@ -140,18 +134,19 @@
       </div>
 
       <div class="modal-foot">
-        <n-button @click="close">关闭</n-button>
-        <n-button type="primary" :loading="importing" @click="handleSubmit">
+        <UiButton @click="close">关闭</UiButton>
+        <UiButton type="primary" :loading="importing" @click="handleSubmit">
           开始导入
-        </n-button>
+        </UiButton>
       </div>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
+import { UiFileDrop, UiButton, UiInput, UiModal, UiSegment, UiSelect, UiTag } from '../../ui'
 import { computed, ref } from 'vue'
-import { CloseOutline, CloudUploadOutline, InformationCircleOutline } from '@vicons/ionicons5'
+import { CloudUpload, Info, X } from 'lucide-vue-next'
 import { accountApi } from '../../api'
 import type {
   AccountGroup,
@@ -477,8 +472,8 @@ const close = () => {
   resetState()
 }
 
-const handleCsvFileChange = async ({ file }: { file: { file?: File | null } }) => {
-  const rawFile = file.file
+// UiFileDrop 直接给原生 File
+const handleCsvFileChange = async (rawFile: File) => {
   if (!rawFile) return
 
   try {
@@ -542,14 +537,7 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped>
-.batch-import-modal {
-  width: min(820px, calc(100vw - 24px));
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
+.batch-import-modal { display: flex; flex-direction: column; min-width: 0; }
 
 .modal-head,
 .modal-foot {

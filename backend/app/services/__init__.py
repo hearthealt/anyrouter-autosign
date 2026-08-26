@@ -3,10 +3,15 @@
 """
 from .anrouter import anrouter_service, AnyRouterService
 from .account_session import (
+    build_account_credential,
+    build_transient_credential,
     execute_with_session_refresh,
+    has_dashboard_credential,
     has_login_credentials,
     is_auth_failure_message,
+    load_auth_data,
     login_account_session,
+    persist_login_result,
     refresh_account_session,
     resolve_session_cookie,
 )
@@ -23,9 +28,14 @@ __all__ = [
     "NotifyFactory",
     "NotifyBase",
     "execute_with_session_refresh",
+    "build_account_credential",
+    "build_transient_credential",
+    "has_dashboard_credential",
     "has_login_credentials",
     "is_auth_failure_message",
+    "load_auth_data",
     "login_account_session",
+    "persist_login_result",
     "refresh_account_session",
     "resolve_session_cookie",
     "apply_account_user_info",

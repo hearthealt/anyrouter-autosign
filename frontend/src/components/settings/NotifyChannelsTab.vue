@@ -1,31 +1,29 @@
 <template>
-  <n-card class="settings-panel">
-    <n-spin :show="loading">
+  <div class="card settings-panel">
+    <UiLoading :show="loading">
       <div class="channel-header">
         <div class="channel-header-info">
           <div class="channel-header-title">推送渠道</div>
           <div class="channel-header-desc">配置定时签到汇总与健康告警通知方式，支持多种推送渠道</div>
         </div>
-        <n-button type="primary" @click="showAddChannelModal">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
+        <UiButton type="primary" @click="showAddChannelModal">
+          <template #icon><Plus /></template>
           添加渠道
-        </n-button>
+        </UiButton>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
       <div v-if="channels.length > 0" class="channel-grid">
         <div v-for="channel in channels" :key="channel.id" class="channel-card">
           <div class="channel-card-header">
             <div class="channel-icon" :class="channel.type">
-              <n-icon :size="20">
-                <component :is="getChannelIcon(channel.type)" />
-              </n-icon>
+              <component :is="getChannelIcon(channel.type)" :size="20" />
             </div>
             <div class="channel-status">
-              <n-tag :type="channel.is_enabled ? 'success' : 'default'" size="small" :bordered="false">
+              <UiTag :type="channel.is_enabled ? 'success' : 'default'" size="small" :bordered="false">
                 {{ channel.is_enabled ? '已启用' : '已禁用' }}
-              </n-tag>
+              </UiTag>
             </div>
           </div>
           <div class="channel-card-body">
@@ -33,156 +31,154 @@
             <div class="channel-type-label">{{ getChannelTypeName(channel.type) }}</div>
           </div>
           <div class="channel-card-footer">
-            <n-button size="small" quaternary @click="testChannel(channel)" :loading="testingId === channel.id">
-              <template #icon><n-icon><SendOutline /></n-icon></template>
+            <UiButton size="small" quaternary @click="testChannel(channel)" :loading="testingId === channel.id">
+              <template #icon><Send /></template>
               测试
-            </n-button>
-            <n-button size="small" quaternary @click="editChannel(channel)">
-              <template #icon><n-icon><CreateOutline /></n-icon></template>
+            </UiButton>
+            <UiButton size="small" quaternary @click="editChannel(channel)">
+              <template #icon><Pencil /></template>
               编辑
-            </n-button>
-            <n-popconfirm @positive-click="deleteChannel(channel.id)">
+            </UiButton>
+            <UiConfirm @positive-click="deleteChannel(channel.id)">
               <template #trigger>
-                <n-button size="small" quaternary class="delete-btn">
-                  <template #icon><n-icon><TrashOutline /></n-icon></template>
+                <UiButton size="small" quaternary class="delete-btn">
+                  <template #icon><Trash2 /></template>
                   删除
-                </n-button>
+                </UiButton>
               </template>
               确定删除此渠道？
-            </n-popconfirm>
+            </UiConfirm>
           </div>
         </div>
       </div>
 
       <div v-else class="empty-state">
         <div class="empty-icon">
-          <n-icon :size="48" color="#ddd"><NotificationsOutline /></n-icon>
+          <Bell :size="48" />
         </div>
         <div class="empty-title">暂无推送渠道</div>
         <div class="empty-desc">添加推送渠道后，定时任务结果将自动通知到您</div>
-        <n-button type="primary" @click="showAddChannelModal" style="margin-top: 16px;">
-          <template #icon><n-icon><AddOutline /></n-icon></template>
+        <UiButton type="primary" @click="showAddChannelModal" style="margin-top: 16px;">
+          <template #icon><Plus /></template>
           添加第一个渠道
-        </n-button>
+        </UiButton>
       </div>
-    </n-spin>
-  </n-card>
+    </UiLoading>
+  </div>
 
-  <n-modal v-model:show="showChannelModal" :mask-closable="false">
+  <UiModal v-model:show="showChannelModal" :mask-closable="false">
     <div class="modal-container">
       <div class="modal-header">
         <h3>{{ editingChannel ? '编辑渠道' : '添加渠道' }}</h3>
-        <n-button text @click="showChannelModal = false">
-          <n-icon :size="20"><CloseOutline /></n-icon>
-        </n-button>
+        <UiButton text @click="showChannelModal = false">
+          <X :size="20" />
+        </UiButton>
       </div>
       <div class="modal-body">
         <div class="form-item">
           <label>渠道名称</label>
-          <n-input v-model:value="channelForm.name" placeholder="给渠道起个名字" />
+          <UiInput v-model:value="channelForm.name" placeholder="给渠道起个名字" />
         </div>
         <div class="form-item">
           <label>渠道类型</label>
-          <n-select v-model:value="channelForm.channel_type" :options="channelTypeOptions" :disabled="!!editingChannel" />
+          <UiSelect v-model:value="channelForm.channel_type" :options="channelTypeOptions" :disabled="!!editingChannel" />
         </div>
         <div class="form-item">
           <label>启用状态</label>
-          <n-switch v-model:value="channelForm.is_enabled" />
+          <UiSwitch v-model:value="channelForm.is_enabled" />
         </div>
 
         <template v-if="channelForm.channel_type === 'pushplus'">
           <div class="form-item">
             <label>Token</label>
-            <n-input v-model:value="channelForm.config.token" placeholder="PushPlus Token" />
+            <UiInput v-model:value="channelForm.config.token" placeholder="PushPlus Token" />
           </div>
         </template>
 
         <template v-if="channelForm.channel_type === 'wechat_mp'">
           <div class="form-item">
             <label>AppID</label>
-            <n-input v-model:value="channelForm.config.app_id" placeholder="公众号 AppID" />
+            <UiInput v-model:value="channelForm.config.app_id" placeholder="公众号 AppID" />
           </div>
           <div class="form-item">
             <label>AppSecret</label>
-            <n-input v-model:value="channelForm.config.app_secret" type="password" placeholder="公众号 AppSecret" />
+            <UiInput v-model:value="channelForm.config.app_secret" type="password" placeholder="公众号 AppSecret" />
           </div>
           <div class="form-item">
             <label>模板消息 ID</label>
-            <n-input v-model:value="channelForm.config.template_id" placeholder="模板消息 ID" />
+            <UiInput v-model:value="channelForm.config.template_id" placeholder="模板消息 ID" />
           </div>
           <div class="form-item">
             <label>接收者 OpenID</label>
-            <n-input v-model:value="channelForm.config.openid" placeholder="接收消息的用户 OpenID" />
+            <UiInput v-model:value="channelForm.config.openid" placeholder="接收消息的用户 OpenID" />
           </div>
         </template>
 
         <template v-if="channelForm.channel_type === 'wechat_work'">
           <div class="form-item">
             <label>Webhook URL</label>
-            <n-input v-model:value="channelForm.config.webhook_url" placeholder="企业微信机器人 Webhook" />
+            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="企业微信机器人 Webhook" />
           </div>
         </template>
 
         <template v-if="channelForm.channel_type === 'dingtalk'">
           <div class="form-item">
             <label>Webhook URL</label>
-            <n-input v-model:value="channelForm.config.webhook_url" placeholder="钉钉机器人 Webhook" />
+            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="钉钉机器人 Webhook" />
           </div>
           <div class="form-item">
             <label>签名密钥</label>
-            <n-input v-model:value="channelForm.config.secret" placeholder="可选" />
+            <UiInput v-model:value="channelForm.config.secret" placeholder="可选" />
           </div>
         </template>
 
         <template v-if="channelForm.channel_type === 'feishu'">
           <div class="form-item">
             <label>Webhook URL</label>
-            <n-input v-model:value="channelForm.config.webhook_url" placeholder="飞书机器人 Webhook" />
+            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="飞书机器人 Webhook" />
           </div>
           <div class="form-item">
             <label>签名密钥</label>
-            <n-input v-model:value="channelForm.config.secret" placeholder="可选" />
+            <UiInput v-model:value="channelForm.config.secret" placeholder="可选" />
           </div>
         </template>
 
         <template v-if="channelForm.channel_type === 'email'">
           <div class="form-item">
             <label>SMTP 服务器</label>
-            <n-input v-model:value="channelForm.config.smtp_host" placeholder="如 smtp.qq.com" />
+            <UiInput v-model:value="channelForm.config.smtp_host" placeholder="如 smtp.qq.com" />
           </div>
           <div class="form-item">
             <label>SMTP 端口</label>
-            <n-input-number v-model:value="channelForm.config.smtp_port" :min="1" :max="65535" style="width: 100%;" />
+            <UiNumberInput v-model:value="channelForm.config.smtp_port" :min="1" :max="65535" style="width: 100%;" />
           </div>
           <div class="form-item">
             <label>发件邮箱</label>
-            <n-input v-model:value="channelForm.config.username" placeholder="发件人邮箱" />
+            <UiInput v-model:value="channelForm.config.username" placeholder="发件人邮箱" />
           </div>
           <div class="form-item">
             <label>邮箱密码</label>
-            <n-input v-model:value="channelForm.config.password" type="password" placeholder="密码或授权码" />
+            <UiInput v-model:value="channelForm.config.password" type="password" placeholder="密码或授权码" />
           </div>
           <div class="form-item">
             <label>使用 SSL</label>
-            <n-switch v-model:value="channelForm.config.use_ssl" />
+            <UiSwitch v-model:value="channelForm.config.use_ssl" />
           </div>
         </template>
       </div>
       <div class="modal-footer">
-        <n-button @click="showChannelModal = false">取消</n-button>
-        <n-button type="primary" @click="saveChannel" :loading="savingChannel">保存</n-button>
+        <UiButton @click="showChannelModal = false">取消</UiButton>
+        <UiButton type="primary" @click="saveChannel" :loading="savingChannel">保存</UiButton>
       </div>
     </div>
-  </n-modal>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiConfirm, UiDivider, UiInput, UiLoading, UiModal, UiNumberInput, UiSelect, UiSwitch, UiTag } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
 import type { Component } from 'vue'
-import {
-  AddOutline, CloseOutline, SendOutline, CreateOutline, TrashOutline,
-  NotificationsOutline, LogoWechat, MailOutline, ChatbubbleOutline, PaperPlaneOutline
-} from '@vicons/ionicons5'
+import { Bell, Mail, MessageCircle, MessageSquare, Pencil, Plus, Send, Trash2, X } from 'lucide-vue-next'
 import { notifyApi } from '../../api'
 import { channelTypes, getChannelTypeName } from '../../utils'
 import { apiError } from '../../utils/apiError'
@@ -193,14 +189,14 @@ const emit = defineEmits<{
 
 const getChannelIcon = (type: string): Component => {
   const icons: Record<string, Component> = {
-    pushplus: PaperPlaneOutline,
-    wechat_mp: LogoWechat,
-    wechat_work: LogoWechat,
-    dingtalk: ChatbubbleOutline,
-    feishu: ChatbubbleOutline,
-    email: MailOutline
+    pushplus: Send,
+    wechat_mp: MessageSquare,
+    wechat_work: MessageSquare,
+    dingtalk: MessageCircle,
+    feishu: MessageCircle,
+    email: Mail
   }
-  return icons[type] || NotificationsOutline
+  return icons[type] || Bell
 }
 
 const loading = ref(false)

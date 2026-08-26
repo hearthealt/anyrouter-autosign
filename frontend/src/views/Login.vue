@@ -20,7 +20,7 @@
       <div class="login-form">
         <div class="field">
           <label>用户名</label>
-          <n-input
+          <UiInput
             v-model:value="form.username"
             placeholder="请输入用户名"
             size="medium"
@@ -28,14 +28,14 @@
             @keyup.enter="handleLogin"
           >
             <template #prefix>
-              <n-icon :size="14"><PersonOutline /></n-icon>
+              <User :size="14" />
             </template>
-          </n-input>
+          </UiInput>
         </div>
 
         <div class="field">
           <label>密码</label>
-          <n-input
+          <UiInput
             v-model:value="form.password"
             type="password"
             show-password-on="click"
@@ -44,12 +44,12 @@
             @keyup.enter="handleLogin"
           >
             <template #prefix>
-              <n-icon :size="14"><LockClosedOutline /></n-icon>
+              <Lock :size="14" />
             </template>
-          </n-input>
+          </UiInput>
         </div>
 
-        <n-button
+        <UiButton
           type="primary"
           :loading="loading"
           block
@@ -57,7 +57,7 @@
           @click="handleLogin"
         >
           登录
-        </n-button>
+        </UiButton>
       </div>
 
       <div class="login-footer">
@@ -68,9 +68,10 @@
 </template>
 
 <script setup lang="ts">
+import { UiButton, UiInput } from '../ui'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { Lock, User } from 'lucide-vue-next'
 import { authApi } from '../api'
 import { setToken } from '../utils/auth'
 

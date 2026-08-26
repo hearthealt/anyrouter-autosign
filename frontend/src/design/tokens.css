@@ -1,0 +1,354 @@
+/**
+ * 设计令牌 —— Telemetry as Instrument
+ *
+ * 把签到系统当作一台精密仪器的读数面板。三条原则：
+ *
+ * 1. 单色基底 + 一个信号色。层次靠材质（噪点、极细网格、发光描边）而非配色制造。
+ * 2. 两套排版尺度并置：门面页用 --display-*（可到 200px 可变字重），
+ *    数据页用 --fn-*（12–13px 功能字号）。尺度反差本身就是视觉冲击力。
+ * 3. 时间函数只有弹簧。这里不提供 duration/easing 令牌，动效参数见 design/motion.ts。
+ *
+ * 文件末尾有一段**兼容别名**，把旧 global.css 的变量名映射到新令牌，
+ * 让 25 个视图文件在迁移期间不会集体崩掉。全部迁完后删除该段。
+ */
+
+/* ─────────────────────────────────────────────── 字体 */
+
+@font-face {
+  font-family: "Inter Var";
+  src: url("/fonts/inter-var-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  /* 只覆盖拉丁文：中文交给系统字体，避免 Inter 无 CJK 时的豆腐块 */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "JetBrains Mono Var";
+  src: url("/fonts/jetbrains-mono-var-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --font-display: "Inter Var", "Inter", "PingFang SC", "Microsoft YaHei UI",
+    system-ui, sans-serif;
+  --font-sans: "Inter Var", "Inter", "PingFang SC", "Microsoft YaHei UI",
+    system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Var", "JetBrains Mono", "SF Mono", "Consolas",
+    monospace;
+}
+
+/* ─────────────────────────────────────────────── 亮色（默认） */
+
+:root {
+  color-scheme: light;
+
+  /* 表面：暖白纸感，不用纯白当页底 */
+  --surface-page: #f4f4f1;
+  --surface-sunken: #ececea;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-inset: #f8f8f6;
+  --surface-hover: #f0f0ed;
+  --surface-active: #e7e7e3;
+  --surface-inverse: #0a0b0d;
+
+  /* 文字 */
+  --ink-max: #0a0b0d;
+  --ink-strong: #1c1e22;
+  --ink: #3d4148;
+  --ink-muted: #6b7078;
+  --ink-faint: #969ba3;
+  --ink-ghost: #b8bcc2;
+  --ink-inverse: #f6f6f4;
+
+  /* 描边：极细，靠明度差不靠颜色 */
+  --line-faint: #e6e6e2;
+  --line: #d9d9d4;
+  --line-strong: #c2c2bb;
+
+  /* 信号色：酸性荧光黄绿。亮色主题下亮版只能做填充底， */
+  /* 文字/描边必须用 -deep，否则对比度不过关 */
+  --signal: #c8f01e;
+  --signal-deep: #5c7000;
+  --signal-ink: #14180a;
+  --signal-wash: rgba(200, 240, 30, 0.16);
+  --signal-glow: rgba(200, 240, 30, 0.42);
+
+  /* 语义色 */
+  --ok: #15803d;
+  --ok-wash: rgba(21, 128, 61, 0.1);
+  --warn: #b45309;
+  --warn-wash: rgba(180, 83, 9, 0.1);
+  --bad: #be123c;
+  --bad-wash: rgba(190, 18, 60, 0.1);
+  --info: #0369a1;
+  --info-wash: rgba(3, 105, 161, 0.1);
+
+  /* 材质：噪点 + 极细网格。用 data URI 避免额外请求 */
+  --noise-opacity: 0.05;
+  --grid-line: rgba(10, 11, 13, 0.055);
+
+  /* 投影：仪器面板不用柔光大阴影，用硬边描边 + 一层极浅位移 */
+  --lift-1: 0 0 0 1px var(--line-faint);
+  --lift-2: 0 0 0 1px var(--line-faint), 0 1px 2px rgba(10, 11, 13, 0.05);
+  --lift-3: 0 0 0 1px var(--line-faint), 0 4px 16px rgba(10, 11, 13, 0.07);
+  --lift-4: 0 0 0 1px var(--line), 0 18px 48px rgba(10, 11, 13, 0.14);
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--signal-deep);
+}
+
+/* ─────────────────────────────────────────────── 暗色 */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-page: #08090b;
+  --surface-sunken: #050608;
+  --surface-raised: #0f1115;
+  --surface-overlay: #14171c;
+  --surface-inset: #0c0e11;
+  --surface-hover: #16191e;
+  --surface-active: #1d2127;
+  --surface-inverse: #f6f6f4;
+
+  --ink-max: #f7f8f8;
+  --ink-strong: #e2e4e7;
+  --ink: #b6bac0;
+  --ink-muted: #82878f;
+  --ink-faint: #5b6068;
+  --ink-ghost: #3d424a;
+  --ink-inverse: #08090b;
+
+  --line-faint: #1a1d22;
+  --line: #262a31;
+  --line-strong: #383d46;
+
+  /* 暗底上信号色可以全力发挥 */
+  --signal: #d4ff3f;
+  --signal-deep: #d4ff3f;
+  --signal-ink: #0d1104;
+  --signal-wash: rgba(212, 255, 63, 0.13);
+  --signal-glow: rgba(212, 255, 63, 0.5);
+
+  --ok: #4ade80;
+  --ok-wash: rgba(74, 222, 128, 0.13);
+  --warn: #fbbf24;
+  --warn-wash: rgba(251, 191, 36, 0.13);
+  --bad: #fb7185;
+  --bad-wash: rgba(251, 113, 133, 0.13);
+  --info: #38bdf8;
+  --info-wash: rgba(56, 189, 248, 0.13);
+
+  --noise-opacity: 0.09;
+  --grid-line: rgba(255, 255, 255, 0.045);
+
+  --lift-1: 0 0 0 1px var(--line-faint);
+  --lift-2: 0 0 0 1px var(--line-faint), 0 1px 2px rgba(0, 0, 0, 0.6);
+  --lift-3: 0 0 0 1px var(--line-faint), 0 4px 16px rgba(0, 0, 0, 0.55);
+  --lift-4: 0 0 0 1px var(--line), 0 18px 48px rgba(0, 0, 0, 0.7);
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--signal);
+}
+
+/* ─────────────────────────────────────────────── 排版尺度 */
+
+:root {
+  /* 门面页：巨型。用 clamp 让它在窄屏不炸掉 */
+  --display-xs: clamp(1.75rem, 3vw, 2.5rem);
+  --display-sm: clamp(2.25rem, 5vw, 3.75rem);
+  --display-md: clamp(3rem, 8vw, 6rem);
+  --display-lg: clamp(4rem, 12vw, 9.5rem);
+  --display-xl: clamp(5rem, 17vw, 14rem);
+
+  /* 功能页：紧凑。保持和改造前一致的信息密度 */
+  --fn-2xs: 10px;
+  --fn-xs: 11px;
+  --fn-sm: 12px;
+  --fn-md: 13px;
+  --fn-lg: 15px;
+  --fn-xl: 18px;
+  --fn-2xl: 22px;
+  --fn-3xl: 28px;
+
+  --weight-thin: 200;
+  --weight-light: 300;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-black: 860;
+
+  --leading-none: 0.86;
+  --leading-tight: 1.16;
+  --leading-normal: 1.5;
+  --leading-loose: 1.7;
+
+  /* 巨字必须收紧字距，否则看起来是散开的字符而不是一个整体 */
+  --track-display: -0.045em;
+  --track-tight: -0.02em;
+  --track-normal: 0;
+  --track-wide: 0.08em;
+  --track-caps: 0.14em;
+}
+
+/* ─────────────────────────────────────────────── 空间与形状 */
+
+:root {
+  --unit: 4px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+  --s12: 48px;
+  --s16: 64px;
+  --s20: 80px;
+  --s24: 96px;
+  --s32: 128px;
+
+  /* 仪器感要硬朗：默认圆角比改造前更小 */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 16px;
+  --r-2xl: 24px;
+  --r-full: 999px;
+
+  --shell-sidebar: 232px;
+  --shell-sidebar-collapsed: 60px;
+  --shell-header: 56px;
+  --shell-max: 1560px;
+
+  --z-base: 1;
+  --z-sticky: 100;
+  --z-nav: 200;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-layer: 1100;
+  --z-toast: 1200;
+}
+
+/* ─────────────────────────────────────────────── 兼容别名
+ *
+ * 迁移期脚手架：把旧 global.css 的变量名指向新令牌。
+ * 25 个视图文件全部迁完后删除这一段。
+ */
+
+:root,
+[data-theme="dark"] {
+  --primary-color: var(--signal-deep);
+  --primary-color-hover: var(--signal-deep);
+  --primary-color-pressed: var(--signal-deep);
+  --primary-color-light: var(--signal-wash);
+  --primary-gradient: linear-gradient(135deg, var(--signal) 0%, var(--signal-deep) 100%);
+
+  --success-color: var(--ok);
+  --success-color-light: var(--ok-wash);
+  --warning-color: var(--warn);
+  --warning-color-light: var(--warn-wash);
+  --error-color: var(--bad);
+  --error-color-light: var(--bad-wash);
+  --info-color: var(--info);
+  --info-color-light: var(--info-wash);
+  --purple-color: var(--info);
+  --purple-light: var(--info-wash);
+  --pink-color: var(--bad);
+  --pink-light: var(--bad-wash);
+  --cyan-color: var(--info);
+  --cyan-light: var(--info-wash);
+
+  --bg-color: var(--surface-page);
+  --bg-secondary: var(--surface-sunken);
+  --bg-card: var(--surface-raised);
+  --bg-card-hover: var(--surface-hover);
+  --bg-input: var(--surface-inset);
+  --bg-header: var(--surface-page);
+  --bg-modal: var(--surface-overlay);
+  --bg-tag: var(--surface-sunken);
+  --bg-elevated: var(--surface-overlay);
+  --bg-sidebar: var(--surface-page);
+
+  --text-primary: var(--ink-max);
+  --text-secondary: var(--ink);
+  --text-tertiary: var(--ink-muted);
+  --text-quaternary: var(--ink-faint);
+  --text-placeholder: var(--ink-ghost);
+  --text-inverse: var(--ink-inverse);
+
+  --border-color: var(--line);
+  --border-color-light: var(--line-faint);
+  --divider-color: var(--line-faint);
+
+  --shadow-xs: var(--lift-1);
+  --shadow-sm: var(--lift-1);
+  --shadow-md: var(--lift-2);
+  --shadow-lg: var(--lift-3);
+  --shadow-xl: var(--lift-4);
+  --shadow-card: var(--lift-1);
+  --shadow-card-hover: var(--lift-2);
+
+  --radius-xs: var(--r-xs);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-2xl: var(--r-2xl);
+  --radius-full: var(--r-full);
+
+  --spacing-0: 0;
+  --spacing-1: var(--s1);
+  --spacing-2: var(--s2);
+  --spacing-3: var(--s3);
+  --spacing-4: var(--s4);
+  --spacing-5: var(--s5);
+  --spacing-6: var(--s6);
+  --spacing-7: 28px;
+  --spacing-8: var(--s8);
+  --spacing-10: var(--s10);
+  --spacing-12: var(--s12);
+  --spacing-14: 56px;
+  --spacing-16: var(--s16);
+
+  --text-xs: var(--fn-xs);
+  --text-sm: var(--fn-sm);
+  --text-base: var(--fn-md);
+  --text-md: var(--fn-md);
+  --text-lg: var(--fn-lg);
+  --text-xl: var(--fn-xl);
+  --text-2xl: var(--fn-2xl);
+  --text-3xl: var(--fn-3xl);
+  --text-4xl: var(--display-xs);
+
+  --font-normal: var(--weight-normal);
+  --font-medium: var(--weight-medium);
+  --font-semibold: var(--weight-semibold);
+  --font-bold: var(--weight-bold);
+
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.18s ease;
+  --transition-slow: 0.28s ease;
+  --transition-bounce: 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+
+  --z-dropdown: var(--z-nav);
+  --z-fixed: var(--z-sticky);
+  --z-modal-backdrop: var(--z-overlay);
+  --z-popover: var(--z-layer);
+  --z-tooltip: var(--z-layer);
+
+  --sidebar-width: var(--shell-sidebar);
+  --sidebar-collapsed-width: var(--shell-sidebar-collapsed);
+  --header-height: var(--shell-header);
+  --tabbar-height: 56px;
+  --workspace-max: var(--shell-max);
+}

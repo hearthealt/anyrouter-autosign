@@ -9,6 +9,7 @@ const SignLogs = () => import('../views/SignLogs.vue')
 const Statistics = () => import('../views/Statistics.vue')
 const Platforms = () => import('../views/Platforms.vue')
 const Settings = () => import('../views/Settings.vue')
+const UiLab = () => import('../views/UiLab.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -60,6 +61,13 @@ const router = createRouter({
       name: 'account-detail',
       component: AccountDetail,
       meta: { requiresAuth: true }
+    },
+    {
+      // 设计系统实验室。开发期工具，不挂进导航，改令牌或原语后先看这里。
+      // 生产构建里 import.meta.env.DEV 为 false，这条路由不会注册。
+      ...(import.meta.env.DEV
+        ? { path: '/ui-lab', name: 'ui-lab', component: UiLab, meta: { requiresAuth: false } }
+        : { path: '/ui-lab', redirect: '/' }),
     }
   ]
 })

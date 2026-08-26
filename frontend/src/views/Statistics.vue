@@ -9,10 +9,10 @@
         </div>
       </div>
       <div class="toolbar-actions">
-        <n-button size="small" :loading="loadingAccounts" @click="loadAccountStats">
-          <template #icon><n-icon :size="14"><RefreshOutline /></n-icon></template>
+        <UiButton size="small" :loading="loadingAccounts" @click="loadAccountStats">
+          <template #icon><RefreshCw :size="14" /></template>
           刷新
-        </n-button>
+        </UiButton>
       </div>
     </div>
 
@@ -56,12 +56,8 @@
         <div class="panel-head">
           <div class="panel-title">签到趋势</div>
           <div class="trend-controls">
-            <n-radio-group v-model:value="dailyDays" size="small" :disabled="!!customRange">
-              <n-radio-button :value="7">7 天</n-radio-button>
-              <n-radio-button :value="30">30 天</n-radio-button>
-              <n-radio-button :value="60">60 天</n-radio-button>
-            </n-radio-group>
-            <n-date-picker
+            <UiSegment v-model:value="dailyDays" size="small" :disabled="!!customRange" :options="[{ label: '7 天', value: 7 }, { label: '30 天', value: 30 }, { label: '60 天', value: 60 }]" />
+            <UiDateRange
               v-model:value="customRange"
               type="daterange"
               size="small"
@@ -93,13 +89,13 @@
       <div class="panel-head">
         <div class="panel-title">签到日历</div>
         <div class="calendar-controls">
-          <n-button size="tiny" quaternary @click="changeMonth(-1)">
-            <template #icon><n-icon :size="14"><ChevronBackOutline /></n-icon></template>
-          </n-button>
+          <UiButton size="tiny" quaternary @click="changeMonth(-1)">
+            <template #icon><ChevronLeft :size="14" /></template>
+          </UiButton>
           <span class="current-month">{{ currentMonthDisplay }}</span>
-          <n-button size="tiny" quaternary :disabled="isCurrentMonth" @click="changeMonth(1)">
-            <template #icon><n-icon :size="14"><ChevronForwardOutline /></n-icon></template>
-          </n-button>
+          <UiButton size="tiny" quaternary :disabled="isCurrentMonth" @click="changeMonth(1)">
+            <template #icon><ChevronRight :size="14" /></template>
+          </UiButton>
         </div>
       </div>
       <div class="calendar-legend">
@@ -133,7 +129,7 @@
     <div class="panel">
       <div class="panel-head">
         <div class="panel-title">账号排行</div>
-        <n-select
+        <UiSelect
           v-model:value="accountRankSort"
           :options="accountRankSortOptions"
           size="small"
@@ -141,10 +137,10 @@
         />
       </div>
       <div v-if="loadingAccounts" class="table-wrap skeleton-table" aria-busy="true" aria-label="加载中">
-        <n-skeleton v-for="i in 6" :key="i" :height="32" :sharp="false" style="margin-bottom: 8px" />
+        <UiSkeleton v-for="i in 6" :key="i" :height="32" :sharp="false" style="margin-bottom: 8px" />
       </div>
       <div v-else-if="accountStats.length > 0" class="table-wrap">
-        <n-data-table
+        <DataGrid
           :columns="accountColumns"
           :data="accountStats"
           :row-key="(row: any) => row.account_id"
@@ -153,7 +149,7 @@
           size="small"
         />
         <div class="ranking-pagination">
-          <n-pagination
+          <UiPagination
             v-model:page="accountPagination.page"
             v-model:page-size="accountPagination.pageSize"
             :item-count="accountPagination.itemCount"
@@ -172,12 +168,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, h, nextTick } from 'vue'
-import { NTag } from 'naive-ui'
-import {
-  RefreshOutline,
-  ChevronBackOutline,
-  ChevronForwardOutline,
-} from '@vicons/ionicons5'
+import { DataGrid, UiButton, UiDateRange, UiPagination, UiSegment, UiSelect, UiSkeleton, UiTag, type GridColumns } from '../ui'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import { statisticsApi } from '../api'
 import { useViewRefresh } from '../composables'
 import * as echarts from 'echarts'
@@ -366,7 +358,7 @@ const getDayClass = (day: any) => {
 
 const displayDailyData = computed(() => dailyData.value)
 
-const accountColumns = [
+const accountColumns: GridColumns = [
   {
     title: '#',
     key: 'rank',
@@ -382,7 +374,7 @@ const accountColumns = [
       return h('div', { class: 'cell-account' }, [
         h('span', { class: 'account-name' }, row.username),
         h(
-          NTag,
+          UiTag,
           {
             type: status === 'normal' ? 'success' : status === 'unhealthy' ? 'error' : 'default',
             size: 'tiny',

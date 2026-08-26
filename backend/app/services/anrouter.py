@@ -11,12 +11,25 @@ import logging
 import uuid
 from io import BytesIO
 from threading import RLock
-from typing import Optional, Tuple, Dict, Any, Iterable, List
+from typing import Optional, Tuple, Dict, Any, Iterable, List, Union
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
 from app.config import settings, SHANGHAI_TZ
+from app.services.newapi_credentials import (
+    AUTH_CODE_ORIGIN_FORBIDDEN,
+    AUTH_CODE_REFRESH_RACE,
+    DashboardCredential,
+    LegacySessionCredential,
+    NewApiAuthError,
+    ROTATE_KEY_ACCESS_EXPIRES_AT,
+    ROTATE_KEY_ACCESS_TOKEN,
+    ROTATE_KEY_REFRESH_TOKEN,
+    SCHEME_LEGACY_COOKIE,
+    SCHEME_REFRESH,
+    decode_access_token_expiry,
+)
 from app.utils.platform import (
     DEFAULT_CHECKIN_API,
     DEFAULT_CONSOLE_URL,
@@ -27,6 +40,16 @@ from app.utils.platform import (
     DEFAULT_TOKEN_API,
     DEFAULT_USER_API,
 )
+
+# 新版 new-api 的刷新接口与 cookie 名（service.RefreshCookieName）
+REFRESH_COOKIE_NAME = "new_api_refresh"
+DEFAULT_REFRESH_API = "/api/user/auth/refresh"
+# 服务端 service.RefreshReplayWindow = 30s，窗口内用同一个旧 token 重试是幂等的
+REFRESH_RACE_RETRY_SECONDS = 2
+
+# 对外方法的第一个参数：旧调用方传 session cookie 字符串，新调用方传凭证对象。
+# 由 AnyRouterService._resolve_credential 归一化。
+DashboardAuth = Union[str, DashboardCredential]
 
 logger = logging.getLogger(__name__)
 
@@ -496,12 +519,38 @@ class AnyRouterService:
             session.proxies.update(proxy_config)
         return session
 
-    def _get_headers(self, user_id: str, base_url: str, console_url: str = None) -> Dict[str, str]:
-        """获取请求头，包含 new-api-user 和动态 referer"""
+    @staticmethod
+    def _resolve_credential(
+        session_cookie: Any,
+        user_id: Any = None,
+    ) -> DashboardCredential:
+        """把调用方传来的凭证归一化成凭证对象。
+
+        历史上这个位置传的是 ``session`` cookie 字符串；为了不改动 8 个对外方法的签名，
+        这里同时接受字符串（旧方案）和凭证对象（新方案）。
+        """
+        if isinstance(session_cookie, DashboardCredential):
+            return session_cookie
+        return LegacySessionCredential(str(session_cookie or ""), user_id)
+
+    def _get_headers(
+        self,
+        credential: Any,
+        base_url: str,
+        console_url: str = None,
+    ) -> Dict[str, str]:
+        """获取请求头，包含凭证鉴权字段和动态 referer。
+
+        ``credential`` 可以是凭证对象，也可以是旧的 user_id 字符串。
+        """
         if console_url is None:
             console_url = DEFAULT_CONSOLE_URL
         headers = self.BASE_HEADERS.copy()
-        headers["new-api-user"] = str(user_id)
+        if isinstance(credential, DashboardCredential):
+            headers.update(credential.auth_headers())
+        else:
+            # 兼容仅有 user_id 的老调用方式
+            headers["new-api-user"] = str(credential)
         headers["referer"] = f"{base_url}{console_url}"
         return headers
 
@@ -1159,13 +1208,115 @@ class AnyRouterService:
             return session.cookies.get("session")
         return None
 
+    @staticmethod
+    def _extract_refresh_cookie(
+        response: Optional[requests.Response],
+        session: Optional[requests.Session] = None,
+    ) -> Optional[str]:
+        """从响应或 Session 中提取新版 ``new_api_refresh`` cookie。
+
+        服务端把它的 Path 设为 ``/api/user/auth``，所以只在登录/刷新响应里出现。
+        """
+        if response is not None and response.cookies.get(REFRESH_COOKIE_NAME):
+            return response.cookies.get(REFRESH_COOKIE_NAME)
+        if session is not None and session.cookies.get(REFRESH_COOKIE_NAME):
+            return session.cookies.get(REFRESH_COOKIE_NAME)
+        return None
+
+    @staticmethod
+    def _extract_auth_error_code(response: requests.Response) -> str:
+        """取出 new-api 的鉴权错误码；非 JSON 响应返回空串。"""
+        try:
+            payload = response.json()
+        except ValueError:
+            return ""
+        return str(payload.get("code") or "") if isinstance(payload, dict) else ""
+
+    def refresh_dashboard_token(
+        self,
+        base_url: str,
+        refresh_token: str,
+        proxy_mode: str = "direct",
+        proxy_url: Optional[str] = None,
+        refresh_api: str = None,
+    ) -> Dict[str, Any]:
+        """用 ``new_api_refresh`` cookie 换一个新的 access token。
+
+        返回 ``{"access_token", "access_expires_at", "refresh_token"}``，其中
+        ``refresh_token`` 是**轮换后的新值**，调用方必须落盘 —— 旧值只有 30 秒重放窗口，
+        超窗后复用会让服务端判定为令牌重用并吊销整个登录会话。
+
+        :raises NewApiAuthError: 刷新失败，``code`` 为 new-api 的错误码
+        """
+        if refresh_api is None:
+            refresh_api = DEFAULT_REFRESH_API
+        token = (refresh_token or "").strip()
+        if not token:
+            raise NewApiAuthError("缺少 refresh token")
+
+        session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
+        url = f"{base_url}{refresh_api}"
+        origin = self._get_origin(base_url)
+        headers = self.BASE_HEADERS.copy()
+        # SessionCookieOriginGuard 要求 Origin 或 Referer 等于站点自身 origin，
+        # 少了这个头会直接 403 AUTH_ORIGIN_FORBIDDEN
+        headers["origin"] = origin
+        headers["referer"] = f"{origin}/"
+        headers["cookie"] = f"{REFRESH_COOKIE_NAME}={token}"
+
+        def post_refresh() -> requests.Response:
+            return session.post(url, headers=headers, timeout=settings.request_timeout)
+
+        try:
+            response = post_refresh()
+            if response.status_code == 409 and self._extract_auth_error_code(response) == AUTH_CODE_REFRESH_RACE:
+                # 重放窗口内用同一个旧 token 重试，服务端会返回同一份轮换结果
+                time.sleep(REFRESH_RACE_RETRY_SECONDS)
+                response = post_refresh()
+        except requests.RequestException as exc:
+            raise NewApiAuthError(f"刷新令牌网络请求失败: {exc}") from exc
+
+        if response.status_code != 200:
+            code = self._extract_auth_error_code(response)
+            message = "刷新令牌失败"
+            if code == AUTH_CODE_ORIGIN_FORBIDDEN:
+                message = "刷新令牌被拒绝：请求来源校验未通过"
+            raise NewApiAuthError(message, code=code, status=response.status_code)
+
+        parsed, payload = self._parse_json_response(response, "刷新令牌响应解析失败")
+        if not parsed:
+            raise NewApiAuthError(payload.get("message", "刷新令牌响应解析失败"))
+        if not payload.get("success"):
+            raise NewApiAuthError(
+                str(payload.get("message") or "刷新令牌失败"),
+                code=str(payload.get("code") or ""),
+            )
+
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        access_token = str(data.get("access_token") or "").strip()
+        if not access_token:
+            raise NewApiAuthError("刷新成功但响应里没有 access_token")
+
+        expires_at = data.get("access_expires_at")
+        try:
+            expires_at = int(expires_at or 0)
+        except (TypeError, ValueError):
+            expires_at = 0
+
+        return {
+            ROTATE_KEY_ACCESS_TOKEN: access_token,
+            ROTATE_KEY_ACCESS_EXPIRES_AT: expires_at or decode_access_token_expiry(access_token),
+            # 没拿到轮换值时退回旧值，避免把已有凭证清空
+            ROTATE_KEY_REFRESH_TOKEN: self._extract_refresh_cookie(response, session) or token,
+        }
+
     def _is_anti_crawler_challenge(self, text: str) -> bool:
         """检查是否为反爬虫挑战"""
         return "acw_sc__v2" in text and "var arg1=" in text
 
     def _get_cookies_with_challenge(
         self,
-        session_cookie: str,
+        session_cookie: Any,
         user_id: str,
         base_url: str,
         console_url: str = None,
@@ -1173,11 +1324,15 @@ class AnyRouterService:
         proxy_mode: str = "direct",
         proxy_url: Optional[str] = None
     ) -> Dict[str, str]:
-        """获取 Cookies 并处理反爬虫挑战"""
+        """获取 Cookies 并处理反爬虫挑战。
+
+        ``session_cookie`` 兼容旧的 cookie 字符串与新的凭证对象。
+        """
         if console_url is None:
             console_url = DEFAULT_CONSOLE_URL
-        cookies = {"session": session_cookie}
-        headers = self._get_headers(user_id, base_url, console_url)
+        credential = self._resolve_credential(session_cookie, user_id)
+        cookies = dict(credential.seed_cookies())
+        headers = self._get_headers(credential, base_url, console_url)
         if session is None:
             session = self._get_session(proxy_mode=proxy_mode, proxy_url=proxy_url)
 
@@ -1201,7 +1356,7 @@ class AnyRouterService:
             return cookies
         except Exception as e:
             logger.error(f"获取 Cookies 失败: {e}")
-            return {"session": session_cookie}
+            return dict(credential.seed_cookies())
 
     def _get_checkin_pow_token(
         self,
@@ -1296,17 +1451,12 @@ class AnyRouterService:
             if not data.get("success"):
                 return False, {"message": data.get("message", "登录失败")}
 
-            session_cookie = self._extract_session_cookie(None, session)
-            if not session_cookie:
-                return False, {"message": "登录成功，但响应中未返回 session Cookie"}
-
             user_info = data.get("data") if isinstance(data.get("data"), dict) else {}
             user_id_value = user_info.get("id")
             user_id_str = str(user_id_value) if user_id_value is not None else None
 
-            return True, {
+            result: Dict[str, Any] = {
                 "message": data.get("message", "登录成功"),
-                "session_cookie": session_cookie,
                 "user_id": user_id_str,
                 "username": user_info.get("username"),
                 "display_name": user_info.get("display_name"),
@@ -1314,6 +1464,48 @@ class AnyRouterService:
                 "quota": self._safe_int(user_info.get("quota"), 0),
                 "raw": data,
             }
+
+            # 新版 new-api 直接在登录响应里返回 JWT，并把 refresh token 放进
+            # new_api_refresh cookie；旧版则只下发 session cookie。据此自动识别方案。
+            access_token = str(user_info.get("access_token") or "").strip()
+            if access_token:
+                refresh_cookie = self._extract_refresh_cookie(None, session)
+                if not refresh_cookie:
+                    return False, {"message": "登录成功，但响应中未返回 new_api_refresh Cookie"}
+                expires_at = self._safe_int(user_info.get("access_expires_at"), 0)
+                session_info = user_info.get("session") if isinstance(user_info.get("session"), dict) else {}
+                result.update(
+                    {
+                        "auth_scheme": SCHEME_REFRESH,
+                        ROTATE_KEY_ACCESS_TOKEN: access_token,
+                        ROTATE_KEY_ACCESS_EXPIRES_AT: expires_at or decode_access_token_expiry(access_token),
+                        ROTATE_KEY_REFRESH_TOKEN: refresh_cookie,
+                        "session_id": session_info.get("sid"),
+                        # 新方案没有 session cookie，这里显式留空，避免上层写脏数据
+                        "session_cookie": "",
+                    }
+                )
+                # 新版把用户信息挂在 data.user 下，data.id 可能缺失
+                nested_user = user_info.get("user") if isinstance(user_info.get("user"), dict) else {}
+                if nested_user:
+                    nested_id = nested_user.get("id")
+                    if nested_id is not None:
+                        result["user_id"] = str(nested_id)
+                    for key in ("username", "display_name"):
+                        if nested_user.get(key):
+                            result[key] = nested_user.get(key)
+                    if "checked_in" in nested_user:
+                        result["checked_in"] = nested_user.get("checked_in")
+                    result["quota"] = self._safe_int(nested_user.get("quota"), result["quota"])
+                return True, result
+
+            session_cookie = self._extract_session_cookie(None, session)
+            if not session_cookie:
+                return False, {"message": "登录成功，但响应中未返回 session Cookie"}
+
+            result["auth_scheme"] = SCHEME_LEGACY_COOKIE
+            result["session_cookie"] = session_cookie
+            return True, result
 
         except json.JSONDecodeError:
             return False, {"message": "登录响应解析失败"}
@@ -1324,7 +1516,7 @@ class AnyRouterService:
 
     def get_user_info(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         user_api: str = None,
@@ -1347,7 +1539,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{user_api}"
@@ -1385,7 +1577,7 @@ class AnyRouterService:
 
     def get_checkin_records(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         month: str,
@@ -1407,7 +1599,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{checkin_api}?month={month}"
@@ -1444,7 +1636,7 @@ class AnyRouterService:
 
     def sign_in(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         sign_api: str = None,
@@ -1476,7 +1668,7 @@ class AnyRouterService:
                 proxy_mode=proxy_mode,
                 proxy_url=proxy_url,
             )
-            headers = self._get_headers(user_id, base_url, console_url)
+            headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
             try:
                 if should_try_captcha_first:
@@ -1607,7 +1799,7 @@ class AnyRouterService:
 
     def get_tokens(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         token_api: str = None,
@@ -1630,7 +1822,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{token_api}?p=0&size=50"
@@ -1668,7 +1860,7 @@ class AnyRouterService:
 
     def get_models(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         models_api: str = None,
@@ -1691,7 +1883,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{models_api}"
@@ -1729,7 +1921,7 @@ class AnyRouterService:
 
     def get_groups(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         groups_api: str = None,
@@ -1752,7 +1944,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{groups_api}"
@@ -1790,7 +1982,7 @@ class AnyRouterService:
 
     def _token_request(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         payload: Dict[str, Any],
@@ -1815,7 +2007,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
         headers["content-type"] = "application/json"
 
         try:
@@ -1846,7 +2038,7 @@ class AnyRouterService:
 
     def create_token(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         name: str,
@@ -1884,7 +2076,7 @@ class AnyRouterService:
 
     def update_token(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         token_data: Dict[str, Any],
@@ -1905,7 +2097,7 @@ class AnyRouterService:
 
     def delete_token(
         self,
-        session_cookie: str,
+        session_cookie: DashboardAuth,
         user_id: str,
         base_url: str,
         token_id: int,
@@ -1929,7 +2121,7 @@ class AnyRouterService:
             proxy_mode=proxy_mode,
             proxy_url=proxy_url,
         )
-        headers = self._get_headers(user_id, base_url, console_url)
+        headers = self._get_headers(self._resolve_credential(session_cookie, user_id), base_url, console_url)
 
         try:
             url = f"{base_url}{token_api}/{token_id}"

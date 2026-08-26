@@ -1,21 +1,21 @@
 <template>
-  <n-card class="settings-panel">
-    <n-spin :show="loading">
+  <div class="card settings-panel">
+    <UiLoading :show="loading">
       <div class="channel-header">
         <div class="channel-header-info">
           <div class="channel-header-title">审计日志</div>
           <div class="channel-header-desc">记录系统中的所有敏感操作，包括登录、账号变更等</div>
         </div>
-        <n-button @click="exportAuditLogs">
-          <template #icon><n-icon><DownloadOutline /></n-icon></template>
+        <UiButton @click="exportAuditLogs">
+          <template #icon><Download /></template>
           导出日志
-        </n-button>
+        </UiButton>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
       <div class="audit-filters">
-        <n-select
+        <UiSelect
           v-model:value="filters.action"
           :options="actionOptions"
           placeholder="操作类型"
@@ -23,29 +23,29 @@
           style="width: 160px;"
           size="small"
         />
-        <n-date-picker
+        <UiDateRange
           v-model:value="filters.dateRange"
           type="daterange"
           clearable
           size="small"
           style="width: 240px;"
         />
-        <n-input
+        <UiInput
           v-model:value="filters.keyword"
           placeholder="搜索关键词"
           clearable
           size="small"
           style="width: 160px;"
         />
-        <n-button size="small" type="primary" @click="load">
-          <template #icon><n-icon><SearchOutline /></n-icon></template>
+        <UiButton size="small" type="primary" @click="load">
+          <template #icon><Search /></template>
           查询
-        </n-button>
+        </UiButton>
       </div>
 
-      <n-divider style="margin: 16px 0;" />
+      <UiDivider style="margin: 16px 0;" />
 
-      <n-data-table
+      <DataGrid
         :columns="columns"
         :data="logs"
         :pagination="pagination"
@@ -55,13 +55,14 @@
         @update:page="handlePageChange"
         @update:page-size="handlePageSizeChange"
       />
-    </n-spin>
-  </n-card>
+    </UiLoading>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { DataGrid, UiButton, UiDateRange, UiDivider, UiInput, UiLoading, UiSelect } from '../../ui'
 import { ref, onMounted } from 'vue'
-import { DownloadOutline, SearchOutline } from '@vicons/ionicons5'
+import { Download, Search } from 'lucide-vue-next'
 import { auditApi } from '../../api'
 import { getToken } from '../../utils/auth'
 import { apiError } from '../../utils/apiError'
