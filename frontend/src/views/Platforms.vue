@@ -1,42 +1,48 @@
 <template>
   <div class="platforms-page">
-    <div class="workspace-toolbar">
-      <div class="toolbar-summary">
-        <div class="toolbar-label">平台 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
-        <div class="toolbar-stats">
-          <span class="toolbar-stat">默认 <strong>{{ defaultPlatform?.name || '未设置' }}</strong></span>
-          <span class="toolbar-stat">关联账号 <strong>{{ totalAccounts }}</strong></span>
+    <section class="page-toolbar platforms-toolbar" aria-label="平台操作">
+      <div class="page-toolbar__summary">
+        <span class="page-toolbar__label"><Server :size="15" /> 平台网络</span>
+        <div class="filter-meta page-toolbar__meta">
+          <span>平台 <strong>{{ pagination.itemCount }}</strong></span>
+          <span>关联账号 <strong>{{ totalAccounts }}</strong></span>
+          <span>默认路由 <strong>{{ defaultPlatform?.name || '未设置' }}</strong></span>
         </div>
       </div>
-      <div class="toolbar-actions">
+      <div class="page-toolbar__actions">
         <UiButton size="small" :loading="loading" @click="loadPlatforms(pagination.page)">
           <template #icon><RefreshCw :size="14" /></template>
-          刷新
+          刷新网络
         </UiButton>
         <UiButton size="small" type="primary" @click="showCreateModal">
           <template #icon><Plus :size="14" /></template>
           添加平台
         </UiButton>
       </div>
-    </div>
+    </section>
 
-    <div class="control-strip">
+    <section class="platforms-console control-strip">
+      <div class="console-topline"><div><span class="console-code mono">ROUTE QUERY / 05—A</span><strong>节点检索</strong></div><span class="console-live"><span></span> CONFIGURATION SURFACE</span></div>
       <div class="filter-strip">
-      <UiInput
-        v-model:value="searchKeyword"
-        size="small"
-        clearable
-        placeholder="搜索平台名称或 Base URL"
-        class="search-input"
-        @keyup.enter="loadPlatforms(1)"
-        @clear="loadPlatforms(1)"
-      >
-        <template #prefix><Search :size="14" /></template>
-      </UiInput>
-      <UiButton size="small" :loading="loading" @click="loadPlatforms(1)">查询</UiButton>
+        <UiInput
+          v-model:value="searchKeyword"
+          size="small"
+          clearable
+          placeholder="搜索平台名称或 Base URL"
+          class="filter-search search-input"
+          @keyup.enter="loadPlatforms(1)"
+          @clear="loadPlatforms(1)"
+        >
+          <template #prefix><Search :size="14" /></template>
+        </UiInput>
+        <div class="filter-actions">
+          <UiButton size="small" :loading="loading" @click="loadPlatforms(1)">
+            <template #icon><Search :size="14" /></template>
+            查询节点
+          </UiButton>
+        </div>
       </div>
-    </div>
-
+    </section>
     <div class="platforms-card data-surface">
       <div v-if="loading || platforms.length > 0" class="table-wrap">
         <DataGrid
@@ -74,7 +80,7 @@
       </div>
     </div>
 
-    <UiModal v-model:show="modalVisible" :mask-closable="false">
+    <UiModal v-model:show="modalVisible" bare :width="940" :mask-closable="false">
       <div class="edit-modal">
         <div class="modal-head">
           <h3>{{ editingPlatform ? '编辑平台' : '添加平台' }}</h3>
@@ -417,7 +423,8 @@ const columns = computed<GridColumns<Platform>>(() => [
   {
     title: '平台',
     key: 'name',
-    minWidth: 270,
+    width: 270,
+    ellipsis: { tooltip: true },
     render: row => h('div', { class: 'platform-cell' }, [
       h('span', { class: 'platform-name', title: row.name }, row.name),
       h('span', { class: 'platform-tags' }, [
@@ -429,7 +436,8 @@ const columns = computed<GridColumns<Platform>>(() => [
   {
     title: 'Base URL',
     key: 'base_url',
-    minWidth: 280,
+    width: 280,
+    ellipsis: { tooltip: true },
     render: row => h(ExternalLink, { href: row.base_url, mono: true })
   },
   {
@@ -442,7 +450,8 @@ const columns = computed<GridColumns<Platform>>(() => [
   {
     title: '签到配置',
     key: 'paths',
-    minWidth: 150,
+    width: 150,
+    ellipsis: { tooltip: true },
     render: row => row.adapter_type === 'http'
       ? h('span', { class: 'mono', title: getHttpSummary(row) }, getHttpSummary(row))
       : `${getSignModeLabel(row)} · ${getConfiguredPathCount(row)}/9`
@@ -683,7 +692,7 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 
 <style scoped>
 .platforms-page { display: flex; flex-direction: column; gap: var(--spacing-3); }
-.search-input { width: min(440px, 100%); }
+.search-input { min-width: 0; }
 .platforms-card { overflow: hidden; }
 .table-wrap :deep(.n-data-table) { border: none; border-radius: 0; }
 .pagination-wrap { display: flex; justify-content: flex-end; padding: var(--spacing-3) var(--spacing-4); border-top: 1px solid var(--border-color-light); background: var(--bg-card-hover); }
@@ -697,11 +706,11 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 .platforms-page :deep(.tag.ghost) { background: transparent; color: transparent; }
 .platforms-page :deep(.mono) { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
 .platforms-page :deep(.actions) { display: flex; gap: 2px; }
-.edit-modal { width: min(940px, calc(100vw - 24px)); background: var(--bg-modal); border: 1px solid var(--border-color-light); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); overflow: hidden; }
-.modal-head, .modal-foot { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-3) var(--spacing-4); }
+.edit-modal { display: flex; width: 100%; min-width: 0; min-height: 0; max-height: inherit; flex-direction: column; overflow: hidden; background: var(--bg-modal); border: 1px solid var(--border-color-light); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.modal-head, .modal-foot { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; padding: var(--spacing-3) var(--spacing-4); }
 .modal-head { border-bottom: 1px solid var(--border-color-light); }
 .modal-head h3 { margin: 0; font-size: var(--text-md); font-weight: var(--font-semibold); }
-.modal-body { padding: var(--spacing-3) var(--spacing-4); max-height: calc(100vh - 160px); overflow-y: auto; }
+.modal-body { flex: 1; min-width: 0; min-height: 0; max-height: none; padding: var(--spacing-3) var(--spacing-4); overflow-y: auto; overscroll-behavior: contain; }
 .modal-foot { justify-content: flex-end; gap: var(--spacing-2); border-top: 1px solid var(--border-color-light); background: var(--bg-card-hover); }
 .platform-form { display: flex; flex-direction: column; gap: var(--spacing-3); }
 .form-section { padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border-color-light); }
@@ -725,5 +734,65 @@ useViewRefresh(() => loadPlatforms(pagination.value.page))
 @media (max-width: 640px) {
   .form-grid, .base-grid, .endpoint-grid, .request-grid, .response-grid, .json-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
+  .modal-head, .modal-body, .modal-foot { padding-inline: 14px; }
+  .modal-foot :deep(.ui-button) { flex: 1; }
 }
-</style>
+
+/* ────────── platform network visual layer */
+.platforms-page { gap: clamp(14px, 1.8vw, 24px); padding-bottom: 48px; }
+.platforms-hero { position: relative; isolation: isolate; min-height: 275px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 26px; align-items: center; overflow: hidden; padding: clamp(24px, 4vw, 48px); border: 1px solid var(--line); border-radius: 26px; background: radial-gradient(circle at 88% 20%, var(--signal-wash), transparent 25%), linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-3); }
+.platforms-hero__grid { position: absolute; inset: 0; z-index: -1; opacity: .55; background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 38px 38px; mask-image: linear-gradient(to right, black 26%, transparent 100%); }
+.platforms-hero::after { content: ''; position: absolute; right: -74px; top: -155px; z-index: -1; width: 390px; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--signal) 30%, transparent); border-radius: 50%; box-shadow: 0 0 0 46px color-mix(in srgb, var(--signal) 5%, transparent), 0 0 0 94px color-mix(in srgb, var(--signal) 3%, transparent); }
+.platforms-hero__copy { max-width: 700px; }
+.eyebrow-line { display: flex; align-items: center; gap: 9px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
+.eyebrow-line .mono { margin-left: auto; color: var(--ink-faint); }
+.live-pulse { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px var(--signal-wash), 0 0 14px var(--signal-glow); }
+.platforms-hero h2 { margin: 35px 0 14px; color: var(--ink-max); font-family: var(--font-display); font-size: clamp(38px, 5vw, 72px); font-weight: 470; line-height: .96; letter-spacing: -.07em; }
+.platforms-hero h2 em { display: block; color: var(--signal-deep); font-style: normal; font-weight: 720; }
+.platforms-hero p { max-width: 580px; margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.85; }
+.platforms-hero__stats { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--line-faint); }
+.platforms-hero__stats > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 18px; background: color-mix(in srgb, var(--surface-overlay) 78%, transparent); }
+.platforms-hero__stats span { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .11em; }
+.platforms-hero__stats strong { color: var(--ink-max); font-family: var(--font-display); font-size: 27px; font-weight: 620; letter-spacing: -.05em; }
+.platforms-hero__stats .text-value { max-width: 160px; overflow: hidden; font-family: var(--font-sans); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.platforms-hero__footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-top: 16px; border-top: 1px solid var(--line-faint); }
+.platforms-hero__footer > .mono { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; }
+.hero-link { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; }
+.platforms-console { gap: 14px; padding: 17px; border-radius: 20px; background: linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-2); }
+.console-topline { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line-faint); }
+.console-topline > div { display: flex; align-items: baseline; gap: 13px; }
+.console-code { color: var(--signal-deep); font-size: 9px; letter-spacing: .14em; }
+.console-topline strong { color: var(--ink-strong); font-size: 12px; }
+.console-live { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .09em; }
+.console-live span { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 9px var(--signal-glow); }
+.platforms-card { border-color: var(--line); border-radius: 20px; box-shadow: var(--lift-2); }
+.platforms-card .table-wrap { position: relative; }
+.platforms-card .table-wrap::before { content: 'PLATFORM NODES'; display: block; padding: 13px 20px; border-bottom: 1px solid var(--line-faint); color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .15em; background: var(--surface-inset); }
+.platforms-card .table-wrap :deep(.n-data-table) { background: transparent; }
+.pagination-wrap { background: var(--surface-inset); border-color: var(--line-faint); }
+.edit-modal { border-color: var(--line); border-radius: 20px; box-shadow: var(--lift-4); }
+.modal-head { background: linear-gradient(90deg, var(--signal-wash), transparent 42%); }
+.modal-head h3 { letter-spacing: -.02em; }
+.form-section-title { color: var(--signal-deep); letter-spacing: .08em; }
+.form-help code { color: var(--signal-deep); background: var(--signal-wash); }
+
+@media (max-width: 780px) {
+  .platforms-hero { grid-template-columns: 1fr; align-items: stretch; }
+  .platforms-hero__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .platforms-hero__stats > div { display: block; padding: 14px; }
+  .platforms-hero__stats strong { display: block; margin-top: 8px; }
+}
+@media (max-width: 640px) {
+  .platforms-hero { min-height: 0; padding: 22px; border-radius: 20px; }
+  .eyebrow-line .mono { display: none; }
+  .platforms-hero h2 { margin-top: 34px; font-size: clamp(40px, 12vw, 58px); }
+  .platforms-hero__stats { grid-template-columns: 1fr; }
+  .platforms-hero__stats > div { display: flex; }
+  .platforms-hero__footer { align-items: flex-start; flex-direction: column; }
+  .hero-link { margin-left: 0; }
+  .platforms-hero__footer .toolbar-actions { width: 100%; }
+  .platforms-hero__footer .toolbar-actions :deep(.ui-button) { flex: 1; }
+  .platforms-console .filter-strip { align-items: stretch; flex-direction: column; }
+  .search-input { width: 100%; }
+  .platforms-card .table-wrap::before { padding: 11px 14px; }
+}</style>

@@ -88,6 +88,19 @@ export function escapeHtml(value: unknown): string {
 }
 
 /**
+ * 表格里的自由文本硬性截断。
+ *
+ * 签到结果、审计详情这类字段长度完全由上游返回决定，只靠 CSS 省略号不够：
+ * 列宽是 min-width，超长文本会把整行撑开、把后面的列挤出视口。这里先按字数
+ * 砍掉，CSS 省略号只负责收尾。
+ */
+export function truncateText(value: unknown, max = 60): string {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+/**
  * 校验并归一化对外跳转链接。
  * 平台 base_url 由用户手填并存库，只放行 http/https，其余（含 javascript:）返回空串，
  * 由调用方降级为纯文本展示。

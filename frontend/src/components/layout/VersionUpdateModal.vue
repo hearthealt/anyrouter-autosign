@@ -1,6 +1,8 @@
 <template>
   <UiModal
     :show="show"
+    bare
+    :width="560"
     :mask-closable="!updating"
     :close-on-esc="!updating"
     @update:show="(value: boolean) => emit('update:show', value)"
@@ -182,7 +184,12 @@ watch(
 
 <style scoped>
 .version-modal {
-  width: min(92vw, 560px);
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  flex-direction: column;
   background: var(--bg-card);
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-md);
@@ -193,6 +200,7 @@ watch(
 .modal-head,
 .modal-footer {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-3);
@@ -236,9 +244,15 @@ watch(
 
 .modal-body {
   display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
   flex-direction: column;
   gap: var(--spacing-4);
   padding: var(--spacing-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .version-grid {

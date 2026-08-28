@@ -84,7 +84,7 @@
                 @update:checked="value => toggleRow(keyOf(row, index), value)"
               />
 
-              <UiTooltip v-else-if="col.ellipsis" :content="plainText(col, row, index)" placement="top">
+              <UiTooltip v-else-if="col.ellipsis" :content="plainText(col, row, index)" :disabled="!ellipsisTooltip(col)" placement="top">
                 <span class="grid__clip"><RenderCell :node="cell(col, row, index)" /></span>
               </UiTooltip>
 
@@ -172,7 +172,13 @@ function colStyle(col: GridColumn) {
   const width = col.width ?? col.minWidth
   if (width === undefined) return undefined
   const value = typeof width === 'number' ? `${width}px` : width
-  return col.width !== undefined ? { width: value } : { minWidth: value }
+  // fixed table layout 只读取 col 的 width；scrollX 负责提供整表最小宽度，
+  // 因此 minWidth 也必须转换为 width，长文本才不会反向撑开列。
+  return { width: value }
+}
+
+function ellipsisTooltip(col: GridColumn): boolean {
+  return typeof col.ellipsis === 'object' ? col.ellipsis.tooltip !== false : true
 }
 
 function keyOf(row: any, index: number): string | number {
@@ -184,11 +190,38 @@ function cell(col: GridColumn, row: any, index: number): VNodeChild {
   return col.key ? (row?.[col.key] ?? '-') : ''
 }
 
-/** ellipsis 的 tooltip 需要纯文本。render 返回 VNode 时取不到，退回字段原值。 */
+/** ellipsis 的 tooltip 需要纯文本；VNode 列递归提取 children，提取不到时退回字段原值。 */
+function plainValue(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of ['base_url', 'name', 'label', 'username', 'message']) {
+      const candidate = record[key]
+      if (typeof candidate === 'string' || typeof candidate === 'number') return String(candidate)
+    }
+    try { return JSON.stringify(value) } catch { return '' }
+  }
+  return String(value)
+}
+
+function vnodeText(value: unknown): string {
+  if (value === undefined || value === null || typeof value === 'boolean') return ''
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  if (typeof value === 'function') return vnodeText((value as () => unknown)())
+  if (Array.isArray(value)) return value.map(vnodeText).filter(Boolean).join(' ')
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if ('children' in record) return vnodeText(record.children)
+    if (typeof record.default === 'function') return vnodeText(record.default)
+  }
+  return ''
+}
+
 function plainText(col: GridColumn, row: any, index: number): string {
-  if (col.key && row?.[col.key] !== undefined && row[col.key] !== null) return String(row[col.key])
-  const rendered = col.render?.(row, index)
-  return typeof rendered === 'string' || typeof rendered === 'number' ? String(rendered) : ''
+  const renderedText = vnodeText(col.render?.(row, index)).replace(/\s+/g, ' ').trim()
+  if (renderedText) return renderedText
+  return col.key ? plainValue(row?.[col.key]) : ''
 }
 
 /* ── 排序 */
@@ -253,6 +286,7 @@ function toggleAll(checked: boolean) {
 
 .grid__table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   /* 数据表全域等宽数字：纵向对比数值的前提 */
@@ -356,13 +390,16 @@ function toggleAll(checked: boolean) {
 
 .grid__clip {
   display: block;
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.grid__td.is-ellipsis { max-width: 0; }
+.grid__td.is-ellipsis { max-width: 0; overflow: hidden; }
+.grid__td.is-ellipsis :deep(.ui-tip__anchor) { display: flex; width: 100%; min-width: 0; }
+.grid__td.is-ellipsis :deep(.ui-tip__anchor > *) { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 空态与刷新 */
 

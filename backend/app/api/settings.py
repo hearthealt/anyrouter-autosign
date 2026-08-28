@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Setting, User, AuditAction, NotifyChannel
 from app.schemas import ApiResponse, SettingsResponse, SettingsUpdate
-from app.services.scheduler import update_sign_schedule, update_health_check_schedule
+from app.services.scheduler import update_sign_schedule, update_health_check_schedule, update_log_cleanup_schedule
 from app.services.audit import log_action
 from app.api.deps import get_current_user
 
@@ -27,6 +27,8 @@ DEFAULT_SETTINGS = {
     "sign_notify_enabled": False,
     "sign_notify_channel_ids": [],
     "quota_warning_threshold": 5.0,
+    "audit_log_retention_days": 0,
+    "system_log_retention_days": 0,
 }
 
 
@@ -113,6 +115,19 @@ def update_settings(
 
     if quota_warning_threshold is None or quota_warning_threshold < 0:
         raise HTTPException(status_code=400, detail="额度告警阈值不能小于 0")
+
+    for retention_key, retention_label in (
+        ("audit_log_retention_days", "审计日志保留天数"),
+        ("system_log_retention_days", "系统日志保留天数"),
+    ):
+        retention_days = merged_settings.get(retention_key, 0)
+        if retention_days is None:
+            continue
+        if not isinstance(retention_days, int) or isinstance(retention_days, bool):
+            raise HTTPException(status_code=400, detail=f"{retention_label}必须是整数")
+        if retention_days < 0 or retention_days > 365:
+            raise HTTPException(status_code=400, detail=f"{retention_label}需在 0-365 之间（0 表示不自动清理）")
+
     if sign_notify_enabled and not sign_notify_channel_ids:
         raise HTTPException(status_code=400, detail="启用签到推送时请选择推送渠道")
     if sign_notify_enabled:
@@ -136,6 +151,10 @@ def update_settings(
     # 更新健康检查定时任务
     if "health_check_enabled" in update_data or "health_check_interval" in update_data:
         update_health_check_schedule()
+
+    # 更新日志清理定时任务
+    if "audit_log_retention_days" in update_data or "system_log_retention_days" in update_data:
+        update_log_cleanup_schedule()
 
     # 记录审计日志
     audit_detail = update_data.copy()

@@ -14,7 +14,7 @@
       <div v-if="show" class="ui-modal-mask" @pointerdown.self="onMaskDown">
         <div
           ref="panel"
-          :class="['ui-modal', `ui-modal--${size}`]"
+          :class="['ui-modal', `ui-modal--${size}`, { 'ui-modal--bare': bare }]"
           :style="width ? { maxWidth: typeof width === 'number' ? `${width}px` : width } : undefined"
           role="dialog"
           aria-modal="true"
@@ -33,7 +33,10 @@
             </button>
           </header>
 
-          <div class="ui-modal__body">
+          <div v-if="bare" class="ui-modal__bare">
+            <slot />
+          </div>
+          <div v-else class="ui-modal__body">
             <slot>
               <p v-if="content" class="ui-modal__content">{{ content }}</p>
             </slot>
@@ -73,6 +76,8 @@ const props = withDefaults(defineProps<{
   /** 覆盖 size 给出的最大宽度。数字按 px，也可传 'min(820px, 92vw)' 这类表达式 */
   width?: number | string
   closable?: boolean
+  /** 无内边距、无重复面板外观，供自带头部/正文/页脚的复杂弹窗使用 */
+  bare?: boolean
   maskClosable?: boolean
   closeOnEsc?: boolean
   /** 对齐 n-modal 的 preset；给 'dialog' 时自动渲染确认/取消页脚 */
@@ -84,6 +89,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   size: 'md',
   closable: true,
+  bare: false,
   maskClosable: true,
   closeOnEsc: true,
   positiveTone: 'primary',
@@ -152,7 +158,7 @@ function onClosed() {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: calc(100vh - var(--s12));
+  max-height: calc(100dvh - var(--s12));
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: var(--surface-overlay);
@@ -164,6 +170,23 @@ function onClosed() {
 .ui-modal--md { max-width: 560px; }
 .ui-modal--lg { max-width: 760px; }
 .ui-modal--xl { max-width: 1040px; }
+
+.ui-modal--bare {
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ui-modal__bare {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  overflow: hidden;
+}
 
 .ui-modal__head {
   display: flex;
@@ -210,8 +233,10 @@ function onClosed() {
 
 .ui-modal__body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--s5);
 }
 
@@ -245,6 +270,6 @@ function onClosed() {
     place-items: end stretch;
   }
 
-  .ui-modal { max-height: calc(100vh - var(--s8)); }
+  .ui-modal { max-height: calc(100dvh - var(--s6)); }
 }
 </style>

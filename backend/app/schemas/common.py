@@ -24,6 +24,8 @@ class SettingsResponse(BaseModel):
     sign_notify_enabled: bool = False
     sign_notify_channel_ids: List[int] = Field(default_factory=list)
     quota_warning_threshold: float = 5.0
+    audit_log_retention_days: int = 0
+    system_log_retention_days: int = 0
 
 
 class SettingsUpdate(BaseModel):
@@ -38,6 +40,13 @@ class SettingsUpdate(BaseModel):
     sign_notify_enabled: Optional[bool] = None
     sign_notify_channel_ids: Optional[List[int]] = None
     quota_warning_threshold: Optional[float] = None
+    audit_log_retention_days: Optional[int] = None
+    system_log_retention_days: Optional[int] = None
+
+
+class LogCleanupRequest(BaseModel):
+    """日志清理请求。before_days 为 None 或 0 表示全部清理。"""
+    before_days: Optional[int] = Field(default=None, ge=0, le=365)
 
 
 class RecentSign(BaseModel):

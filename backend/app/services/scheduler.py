@@ -728,6 +728,65 @@ def update_health_check_schedule():
         db.close()
 
 
+def log_cleanup_job():
+    """按保留天数清理审计日志和日志文件"""
+    from app.services.log_cleanup import cleanup_audit_logs, cleanup_log_files, format_size
+
+    db = SessionLocal()
+
+    try:
+        audit_days = get_setting_value(db, "audit_log_retention_days", 0)
+        system_days = get_setting_value(db, "system_log_retention_days", 0)
+
+        # 0 表示不自动清理；这里只按天保留，不做"全部清空"
+        if audit_days and audit_days > 0:
+            deleted = cleanup_audit_logs(db, audit_days)
+            logger.info(f"审计日志保留清理完成: 保留 {audit_days} 天，删除 {deleted} 条")
+
+        if system_days and system_days > 0:
+            result = cleanup_log_files(system_days)
+            logger.info(
+                f"系统日志保留清理完成: 保留 {system_days} 天，"
+                f"删除 {result['removed_files']} 个归档，释放 {format_size(result['freed_bytes'])}"
+            )
+
+    except Exception as e:
+        logger.error(f"日志保留清理失败: {e}")
+    finally:
+        db.close()
+
+
+def update_log_cleanup_schedule():
+    """更新日志清理定时任务"""
+    db = SessionLocal()
+
+    try:
+        audit_days = get_setting_value(db, "audit_log_retention_days", 0)
+        system_days = get_setting_value(db, "system_log_retention_days", 0)
+
+        if scheduler.get_job("log_cleanup"):
+            scheduler.remove_job("log_cleanup")
+
+        if (audit_days and audit_days > 0) or (system_days and system_days > 0):
+            # 凌晨低峰执行；避开整点，且重启不会立刻触发一次清理
+            scheduler.add_job(
+                log_cleanup_job,
+                CronTrigger(hour=3, minute=17),
+                id="log_cleanup",
+                replace_existing=True
+            )
+            logger.info(
+                f"日志清理任务已设置: 每天 03:17（审计 {audit_days or '关闭'} 天 / 系统 {system_days or '关闭'} 天）"
+            )
+        else:
+            logger.info("日志清理任务已禁用")
+
+    except Exception as e:
+        logger.error(f"更新日志清理定时任务失败: {e}")
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """初始化调度器"""
     if not scheduler.running:
@@ -736,6 +795,7 @@ def init_scheduler():
 
     update_sign_schedule()
     update_health_check_schedule()
+    update_log_cleanup_schedule()
 
 
 def shutdown_scheduler():

@@ -6,22 +6,20 @@ import json
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.schemas import ApiResponse
+from app.database import get_db
+from app.models import User
+from app.models.audit_log import AuditAction
+from app.schemas import ApiResponse, LogCleanupRequest
+from app.services.audit import log_action
+from app.services.log_cleanup import cleanup_log_files, format_size, get_log_dir, is_log_file
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/logs", tags=["系统日志"])
-
-
-def get_log_dir() -> Path:
-    """获取日志目录"""
-    log_dir = Path(settings.log_dir)
-    if not log_dir.is_absolute():
-        # 相对于 backend 目录
-        log_dir = Path(__file__).parent.parent.parent / settings.log_dir
-    return log_dir
 
 
 @router.get("/files", response_model=ApiResponse)
@@ -34,7 +32,7 @@ def get_log_files():
 
     files = []
     for f in log_dir.iterdir():
-        if f.is_file() and f.suffix == ".log" or ".log." in f.name:
+        if is_log_file(f):
             stat = f.stat()
             files.append({
                 "name": f.name,
@@ -134,6 +132,41 @@ def download_log(filename: str):
     )
 
 
+@router.post("/cleanup", response_model=ApiResponse)
+def cleanup_logs(
+    data: LogCleanupRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    批量清理日志文件
+
+    before_days 为空或 0 表示清理全部归档并把活跃文件截空；
+    否则只删除该天数之前的归档文件，活跃文件不动。
+    """
+    before_days = data.before_days
+    result = cleanup_log_files(before_days)
+    freed_display = format_size(result["freed_bytes"])
+
+    log_action(
+        db=db,
+        action=AuditAction.SYSTEM_LOG_CLEAR,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="system_log",
+        detail={"before_days": before_days, **result},
+        request=request
+    )
+
+    scope = f"{before_days} 天前" if before_days else "全部"
+    return ApiResponse(
+        success=True,
+        message=f"已清理{scope}日志，删除 {result['removed_files']} 个归档，释放 {freed_display}",
+        data={**result, "freed_display": freed_display}
+    )
+
+
 @router.delete("/{filename}", response_model=ApiResponse)
 def clear_log(filename: str):
     """清空日志文件"""
@@ -222,12 +255,3 @@ def parse_log_line(line: str) -> Optional[dict]:
         "is_json": False,
         "extra": {}
     }
-
-
-def format_size(size: int) -> str:
-    """格式化文件大小"""
-    for unit in ["B", "KB", "MB", "GB"]:
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"

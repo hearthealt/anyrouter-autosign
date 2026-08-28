@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { getToken, removeToken } from '../utils/auth'
 import router from '../router'
-import { ApiError } from '../utils/apiError'
+import { ApiError, apiError } from '../utils/apiError'
 import type { AccountAuthType, AccountProxyMode, PlatformAdapterType } from '../types'
 
 const api = axios.create({
@@ -29,7 +29,7 @@ api.interceptors.response.use(
   error => {
     const status = error.response?.status
     const detail = error.response?.data
-    const message = detail?.detail || error.message
+    const message = apiError(detail, error.message || '请求失败')
 
     // 401 未授权 - 跳转登录页（保留当前路径便于回跳）
     if (status === 401) {
@@ -259,6 +259,7 @@ export const auditApi = {
     keyword?: string
   }) => api.get('/audit/logs', { params }),
   getActions: () => api.get('/audit/actions'),
+  cleanup: (data: { before_days?: number | null }) => api.post('/audit/cleanup', data),
   export: (params?: {
     action?: string
     start_date?: string
@@ -287,7 +288,8 @@ export const logsApi = {
   download: (filename: string) => {
     return `/api/v1/logs/download/${filename}`
   },
-  clear: (filename: string) => api.delete(`/logs/${filename}`)
+  clear: (filename: string) => api.delete(`/logs/${filename}`),
+  cleanup: (data: { before_days?: number | null }) => api.post('/logs/cleanup', data)
 }
 
 // 系统信息与更新 API

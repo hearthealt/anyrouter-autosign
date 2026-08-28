@@ -9,11 +9,13 @@
 -->
 <template>
   <div
+    v-bind="rootAttrs"
     :class="['ui-input', `ui-input--${size}`, {
       'is-disabled': disabled,
       'is-focused': focused,
       'is-textarea': type === 'textarea',
-    }]"
+    }, rootAttrs.class]"
+    :style="rootAttrs.style"
   >
     <span v-if="$slots.prefix" class="ui-input__affix"><slot name="prefix" /></span>
 
@@ -26,7 +28,7 @@
       :placeholder="placeholder"
       :disabled="disabled"
       :maxlength="maxlength"
-      v-bind="$attrs"
+      v-bind="controlAttrs"
       @input="onInput"
       @focus="focused = true"
       @blur="focused = false"
@@ -40,7 +42,7 @@
       :placeholder="placeholder"
       :disabled="disabled"
       :maxlength="maxlength"
-      v-bind="$attrs"
+      v-bind="controlAttrs"
       @input="onInput"
       @focus="focused = true"
       @blur="focused = false"
@@ -75,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useAttrs } from 'vue'
 import { Eye, EyeOff, X } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
@@ -104,6 +106,13 @@ defineOptions({ inheritAttrs: false })
 const control = ref<HTMLInputElement | HTMLTextAreaElement | null>(null)
 const focused = ref(false)
 const revealed = ref(false)
+const attrs = useAttrs()
+
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style as import('vue').StyleValue }))
+const controlAttrs = computed(() => {
+  const { class: _class, style: _style, ...rest } = attrs
+  return rest
+})
 
 const hasValue = computed(() => !!props.value)
 

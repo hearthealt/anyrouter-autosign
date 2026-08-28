@@ -1,19 +1,19 @@
 <template>
   <div class="accounts-page">
-    <div class="workspace-toolbar">
-      <div class="toolbar-summary">
-        <div class="toolbar-label">账号 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
-        <div class="toolbar-stats" aria-label="账号状态统计">
-          <span class="toolbar-stat success">正常 <strong>{{ normalCount }}</strong></span>
-          <span class="toolbar-stat error">异常 <strong>{{ unhealthyCount }}</strong></span>
-          <span class="toolbar-stat">禁用 <strong>{{ disabledCount }}</strong></span>
-          <span class="toolbar-stat">正常率 <strong>{{ healthRatio }}%</strong></span>
+    <section class="page-toolbar accounts-toolbar" aria-label="账号操作">
+      <div class="page-toolbar__summary">
+        <span class="page-toolbar__label"><Activity :size="15" /> 账号池</span>
+        <div class="filter-meta page-toolbar__meta">
+          <span>健康度 <strong>{{ healthRatio }}%</strong></span>
+          <span class="success">正常 <strong>{{ normalCount }}</strong></span>
+          <span class="error">异常 <strong>{{ unhealthyCount }}</strong></span>
+          <span>禁用 <strong>{{ disabledCount }}</strong></span>
         </div>
       </div>
-      <div class="toolbar-actions">
+      <div class="page-toolbar__actions">
         <UiButton size="small" :loading="loading" @click="handleRefresh">
           <template #icon><RefreshCw :size="14" /></template>
-          刷新
+          刷新节点
         </UiButton>
         <UiButton size="small" :loading="batchChecking" @click="handleBatchHealthCheck">
           <template #icon><Activity :size="14" /></template>
@@ -32,16 +32,23 @@
           添加账号
         </UiButton>
       </div>
-    </div>
+    </section>
 
-    <div class="control-strip">
+    <section class="accounts-console control-strip">
+      <div class="console-topline">
+        <div>
+          <span class="console-code mono">FILTER MATRIX / 02—A</span>
+          <strong>节点筛选与状态切片</strong>
+        </div>
+        <span class="console-live"><span></span> {{ pagination.itemCount }} NODES INDEXED</span>
+      </div>
       <div class="filter-strip accounts-filter">
         <UiInput
           v-model:value="searchKeyword"
           size="small"
           clearable
           placeholder="搜索用户名、平台或 User ID"
-          class="search-input"
+          class="filter-search search-input"
         >
           <template #prefix><Search :size="14" /></template>
         </UiInput>
@@ -52,7 +59,7 @@
           size="small"
           clearable
           placeholder="全部平台"
-          class="filter-item"
+          class="filter-field filter-item"
         />
 
         <UiSelect
@@ -61,7 +68,7 @@
           size="small"
           clearable
           placeholder="全部分组"
-          class="filter-item"
+          class="filter-field filter-item"
         />
 
         <UiButton v-if="hasActiveFilters" size="small" quaternary @click="resetFilters">重置</UiButton>
@@ -80,8 +87,7 @@
           {{ pill.label }} <b>{{ pill.count }}</b>
         </button>
       </div>
-    </div>
-
+    </section>
     <div v-if="selectedAccounts.length > 0" class="bulk-bar">
       <div class="bulk-bar-info">
         已选择 <strong>{{ selectedAccounts.length }}</strong> 个账号
@@ -978,7 +984,8 @@ const columns = computed<GridColumns<Account>>(() => [
   {
     title: '账号',
     key: 'username',
-    minWidth: 200,
+    width: 200,
+    ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('username'),
     render: account =>
@@ -1008,7 +1015,8 @@ const columns = computed<GridColumns<Account>>(() => [
   {
     title: '平台',
     key: 'platform',
-    minWidth: 210,
+    width: 210,
+    ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('platform'),
     render: account => h(ExternalLink, {
@@ -1020,7 +1028,8 @@ const columns = computed<GridColumns<Account>>(() => [
   {
     title: '分组',
     key: 'group',
-    minWidth: 100,
+    width: 100,
+    ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('group'),
     render: account => {
@@ -1033,7 +1042,7 @@ const columns = computed<GridColumns<Account>>(() => [
   {
     title: '额度',
     key: 'quota',
-    minWidth: 180,
+    width: 180,
     sorter: 'default',
     sortOrder: getSortOrder('quota'),
     render: account => {
@@ -1342,6 +1351,7 @@ useViewRefresh(() => handleRefresh())
 .accounts-page :deep(.account-cell) {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: var(--spacing-2);
 }
 
@@ -1365,10 +1375,15 @@ useViewRefresh(() => handleRefresh())
 .accounts-page :deep(.account-name-row) {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 6px;
 }
 
 .accounts-page :deep(.account-name) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-primary);
   font-weight: var(--font-medium);
   cursor: pointer;
@@ -1573,4 +1588,64 @@ useViewRefresh(() => handleRefresh())
     width: 100%;
   }
 }
-</style>
+
+/* ────────── account operations visual layer */
+.accounts-page { gap: clamp(14px, 1.8vw, 24px); padding-bottom: 48px; }
+.accounts-hero { position: relative; isolation: isolate; min-height: 310px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, .55fr); gap: 28px; align-items: end; overflow: hidden; padding: clamp(24px, 4vw, 52px); border: 1px solid var(--line); border-radius: 26px; background: radial-gradient(circle at 90% 18%, var(--signal-wash), transparent 25%), linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-3); }
+.accounts-hero__grid { position: absolute; inset: 0; z-index: -1; opacity: .55; background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 40px 40px; mask-image: linear-gradient(to right, black 34%, transparent 100%); }
+.accounts-hero::after { content: ''; position: absolute; right: 22%; top: -60%; z-index: -1; width: 340px; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent); border-radius: 50%; box-shadow: 0 0 0 52px color-mix(in srgb, var(--signal) 5%, transparent), 0 0 0 104px color-mix(in srgb, var(--signal) 3%, transparent); }
+.accounts-hero__copy { align-self: center; max-width: 720px; }
+.eyebrow-line { display: flex; align-items: center; gap: 9px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
+.eyebrow-line .mono { margin-left: auto; color: var(--ink-faint); }
+.live-pulse { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px var(--signal-wash), 0 0 14px var(--signal-glow); }
+.accounts-hero h2 { margin: 36px 0 16px; color: var(--ink-max); font-family: var(--font-display); font-size: clamp(38px, 5.1vw, 72px); font-weight: 470; line-height: .98; letter-spacing: -.065em; }
+.accounts-hero h2 em { display: block; color: var(--signal-deep); font-style: normal; font-weight: 720; }
+.accounts-hero p { max-width: 580px; margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.85; }
+.accounts-hero__actions { display: flex; align-items: center; gap: 16px; margin-top: 25px; }
+.hero-link { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; }
+.accounts-hero__readout { align-self: center; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: color-mix(in srgb, var(--surface-overlay) 76%, transparent); backdrop-filter: blur(20px); }
+.hero-readout__label { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; }
+.hero-readout__value { margin: 16px 0 20px; color: var(--ink-max); font-family: var(--font-display); font-size: clamp(54px, 6vw, 78px); font-weight: 620; line-height: .85; letter-spacing: -.08em; }
+.hero-readout__value small { margin-left: 4px; color: var(--signal-deep); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0; }
+.hero-readout__meta { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; }
+.hero-readout__meta strong { color: var(--ink-strong); font-size: 11px; }
+.hero-readout__bar { height: 3px; margin: 12px 0 15px; overflow: hidden; border-radius: 99px; background: var(--line-faint); }
+.hero-readout__bar span { display: block; height: 100%; border-radius: inherit; background: var(--signal); box-shadow: 0 0 12px var(--signal-glow); transition: width .5s; }
+.hero-readout__counts { display: flex; flex-wrap: wrap; gap: 7px 12px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 9px; }
+.status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: var(--line-strong); }
+.status-dot.success { background: var(--ok); }
+.status-dot.error { background: var(--bad); }
+.status-dot.default { background: var(--ink-faint); }
+.accounts-hero__actions-panel { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-top: 16px; border-top: 1px solid var(--line-faint); }
+.accounts-hero__actions-panel > .mono { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; }
+.accounts-hero__actions-panel .toolbar-actions { flex-wrap: wrap; }
+.accounts-console { gap: 14px; padding: 17px; border-radius: 20px; background: linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-2); }
+.console-topline { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line-faint); }
+.console-topline > div { display: flex; align-items: baseline; gap: 13px; }
+.console-code { color: var(--signal-deep); font-size: 9px; letter-spacing: .14em; }
+.console-topline strong { color: var(--ink-strong); font-size: 12px; }
+.console-live { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .09em; }
+.console-live span { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 9px var(--signal-glow); }
+.accounts-console .status-tabs { padding-top: 13px; border-top: 1px solid var(--line-faint); }
+.status-tab { border-radius: 7px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .02em; }
+.status-tab.active { box-shadow: 0 0 0 1px var(--signal-glow); }
+.bulk-bar { border-radius: 16px; border-color: var(--signal-glow); background: linear-gradient(90deg, var(--signal-wash), var(--surface-raised)); box-shadow: var(--lift-2); }
+.accounts-card { border-color: var(--line); border-radius: 20px; box-shadow: var(--lift-2); }
+.pagination-wrap { background: var(--surface-inset); border-color: var(--line-faint); }
+
+@media (max-width: 920px) {
+  .accounts-hero { grid-template-columns: 1fr; }
+  .accounts-hero__readout { max-width: 420px; }
+  .accounts-hero__actions-panel { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 640px) {
+  .accounts-hero { min-height: 0; padding: 22px; border-radius: 20px; }
+  .eyebrow-line .mono { display: none; }
+  .accounts-hero h2 { margin-top: 34px; font-size: clamp(40px, 12vw, 58px); }
+  .accounts-hero__actions { align-items: flex-start; flex-direction: column; }
+  .accounts-hero__actions-panel .toolbar-actions { align-items: stretch; flex-direction: column; width: 100%; }
+  .accounts-hero__actions-panel .toolbar-actions :deep(.ui-button) { width: 100%; }
+  .console-topline { align-items: flex-start; flex-direction: column; }
+  .console-topline > div { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .accounts-console .accounts-filter { flex-direction: column; align-items: stretch; }
+}</style>

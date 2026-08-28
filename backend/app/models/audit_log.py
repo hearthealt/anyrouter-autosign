@@ -64,6 +64,10 @@ class AuditAction:
     # 系统相关
     SYSTEM_UPDATE = "system_update"
 
+    # 日志清理相关
+    AUDIT_LOG_CLEAR = "audit_log_clear"
+    SYSTEM_LOG_CLEAR = "system_log_clear"
+
 
 # 操作类型显示名称
 ACTION_NAMES = {
@@ -87,4 +91,6 @@ ACTION_NAMES = {
     AuditAction.GROUP_UPDATE: "更新分组",
     AuditAction.GROUP_DELETE: "删除分组",
     AuditAction.SYSTEM_UPDATE: "系统更新",
+    AuditAction.AUDIT_LOG_CLEAR: "清理审计日志",
+    AuditAction.SYSTEM_LOG_CLEAR: "清理系统日志",
 }

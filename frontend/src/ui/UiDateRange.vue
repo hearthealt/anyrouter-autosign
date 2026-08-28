@@ -9,7 +9,12 @@
   端点实心 —— 一眼能看出选了多长一段。
 -->
 <template>
-  <div class="dr" :class="{ 'is-disabled': disabled }">
+  <div
+    v-bind="rootAttrs"
+    class="dr"
+    :class="[{ 'is-disabled': disabled }, rootAttrs.class]"
+    :style="rootAttrs.style"
+  >
     <div
       ref="anchor"
       class="dr__field"
@@ -102,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useAttrs, watch } from 'vue'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-vue-next'
 import UiButton from './UiButton.vue'
 import { useAnchoredLayer } from './useAnchoredLayer'
@@ -123,6 +128,10 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ 'update:value': [value: [number, number] | null] }>()
+
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style as import('vue').StyleValue }))
 
 const anchor = ref<HTMLElement | null>(null)
 const layer = ref<HTMLElement | null>(null)

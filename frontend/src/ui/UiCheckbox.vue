@@ -1,8 +1,6 @@
 <!--
   UiCheckbox —— 替代 n-checkbox。v-model:checked 对齐原 API。
-
-  勾选标记用 SVG path 的 stroke-dashoffset 动画画出来，
-  比直接显示图标更有"落笔"感，且能被动效开关关掉。
+  勾选标记统一使用 Lucide，保持整套界面的图标语言一致。
 -->
 <template>
   <label :class="['ui-check', `ui-check--${size}`, { 'is-disabled': disabled, 'is-checked': checked }]">
@@ -16,18 +14,16 @@
       @change="onChange"
     />
     <span class="ui-check__box" aria-hidden="true">
-      <svg v-if="indeterminate" class="ui-check__mark" viewBox="0 0 16 16">
-        <path d="M4 8 H12" />
-      </svg>
-      <svg v-else class="ui-check__mark" viewBox="0 0 16 16">
-        <path d="M3.5 8.5 L6.5 11.5 L12.5 4.5" />
-      </svg>
+      <Minus v-if="indeterminate" class="ui-check__mark" :size="size === 'small' ? 11 : 13" :stroke-width="2.2" />
+      <Check v-else class="ui-check__mark" :size="size === 'small' ? 11 : 13" :stroke-width="2.2" />
     </span>
     <span v-if="$slots.default" class="ui-check__label"><slot /></span>
   </label>
 </template>
 
 <script setup lang="ts">
+import { Check, Minus } from 'lucide-vue-next'
+
 withDefaults(defineProps<{
   checked?: boolean
   disabled?: boolean
@@ -62,7 +58,6 @@ function onChange(event: Event) {
 .ui-check--small { font-size: var(--fn-xs); }
 .ui-check--medium { font-size: var(--fn-sm); }
 
-/* 原生 input 保留在无障碍树里，只是视觉隐藏 */
 .ui-check__input {
   position: absolute;
   width: 1px;
@@ -97,22 +92,16 @@ function onChange(event: Event) {
 .ui-check__input:focus-visible + .ui-check__box { box-shadow: var(--focus-ring); }
 
 .ui-check__mark {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: var(--signal-ink);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  /* 未选中时把线段完全收起，选中时画出来 */
-  stroke-dasharray: 18;
-  stroke-dashoffset: 18;
-  transition: stroke-dashoffset 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+  color: var(--signal-ink);
+  opacity: 0;
+  transform: scale(0.55);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .ui-check.is-checked .ui-check__mark,
 .ui-check__input:indeterminate + .ui-check__box .ui-check__mark {
-  stroke-dashoffset: 0;
+  opacity: 1;
+  transform: scale(1);
 }
 
 .ui-check__label {

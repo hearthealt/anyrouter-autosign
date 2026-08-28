@@ -1,52 +1,47 @@
 <template>
   <div class="sign-logs-page page-shell">
-    <div class="workspace-toolbar">
-      <div class="toolbar-summary">
-        <div class="toolbar-label">签到日志 <span class="toolbar-count">{{ pagination.itemCount }}</span></div>
-        <div class="toolbar-stats">
-          <span class="toolbar-stat success">成功 <strong>{{ summary.success_count }}</strong></span>
-          <span class="toolbar-stat error">失败 <strong>{{ summary.fail_count }}</strong></span>
+    <section class="logs-console control-strip">
+      <div class="filter-strip logs-filter">
+        <UiSelect
+          v-model:value="filters.account_id"
+          :options="accountOptions"
+          placeholder="全部账号"
+          size="small"
+          clearable
+          class="filter-field--lg"
+          @update:value="loadLogs(1)"
+        />
+        <UiSelect
+          v-model:value="filters.success"
+          :options="statusOptions"
+          placeholder="全部状态"
+          size="small"
+          clearable
+          class="filter-field"
+          @update:value="loadLogs(1)"
+        />
+        <UiDateRange
+          v-model:value="filters.dateRange"
+          type="daterange"
+          size="small"
+          clearable
+          class="filter-field--lg"
+          @update:value="loadLogs(1)"
+        />
+
+        <div class="filter-actions">
+          <span class="filter-meta">
+            <span>共 <strong>{{ pagination.itemCount }}</strong></span>
+            <span class="success">成功 <strong>{{ summary.success_count }}</strong></span>
+            <span class="error">失败 <strong>{{ summary.fail_count }}</strong></span>
+          </span>
+          <UiButton size="small" :loading="loading" @click="loadLogs(1)">
+            <template #icon><RefreshCw :size="14" /></template>
+            刷新
+          </UiButton>
         </div>
       </div>
-      <div class="toolbar-actions">
-        <UiButton size="small" @click="loadLogs(1)" :loading="loading">
-          <template #icon><RefreshCw :size="14" /></template>
-          刷新
-        </UiButton>
-      </div>
-    </div>
-
-    <div class="control-strip">
-      <div class="filter-strip logs-filter">
-      <UiSelect
-        v-model:value="filters.account_id"
-        :options="accountOptions"
-        placeholder="全部账号"
-        size="small"
-        clearable
-        class="filter-item"
-        @update:value="loadLogs(1)"
-      />
-      <UiSelect
-        v-model:value="filters.success"
-        :options="statusOptions"
-        placeholder="全部状态"
-        size="small"
-        clearable
-        class="filter-item"
-        @update:value="loadLogs(1)"
-      />
-      <UiDateRange
-        v-model:value="filters.dateRange"
-        type="daterange"
-        size="small"
-        clearable
-        class="filter-date"
-        @update:value="loadLogs(1)"
-      />
-      </div>
-    </div>
-
+    </section>
     <div class="logs-card data-surface">
       <div v-if="loading || logs.length > 0" class="table-wrap">
         <DataGrid
@@ -58,6 +53,7 @@
           :single-line="false"
           :remote="true"
           size="small"
+          :scroll-x="1040"
           @update:sorter="handleSorterChange"
         />
       </div>
@@ -219,7 +215,7 @@ const columns = computed<GridColumns<SignLogRow>>(() => [
   {
     title: '账号',
     key: 'username',
-    minWidth: 80,
+    width: 190,
     ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('username'),
@@ -231,7 +227,8 @@ const columns = computed<GridColumns<SignLogRow>>(() => [
   {
     title: '平台',
     key: 'platform',
-    minWidth: 220,
+    width: 230,
+    ellipsis: { tooltip: true },
     sorter: 'default',
     sortOrder: getSortOrder('platform'),
     render: row => h(ExternalLink, {
@@ -271,7 +268,7 @@ const columns = computed<GridColumns<SignLogRow>>(() => [
   {
     title: '结果',
     key: 'message',
-    minWidth: 280,
+    width: 230,
     ellipsis: { tooltip: true },
     render: row => row.message || '-'
   },
@@ -466,4 +463,57 @@ useViewRefresh(() => loadLogs(pagination.value.page))
     width: 100%;
   }
 }
-</style>
+
+/* ────────── event stream visual layer */
+.sign-logs-page { gap: clamp(14px, 1.8vw, 24px); padding-bottom: 48px; }
+.logs-hero { position: relative; isolation: isolate; min-height: 275px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(270px, .75fr); gap: 26px; align-items: center; overflow: hidden; padding: clamp(24px, 4vw, 48px); border: 1px solid var(--line); border-radius: 26px; background: radial-gradient(circle at 92% 24%, var(--bad-wash), transparent 24%), linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-3); }
+.logs-hero__grid { position: absolute; inset: 0; z-index: -1; opacity: .55; background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 38px 38px; mask-image: linear-gradient(to right, black 26%, transparent 100%); }
+.logs-hero::after { content: ''; position: absolute; right: -70px; top: -170px; z-index: -1; width: 410px; height: 410px; border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent); border-radius: 50%; box-shadow: 0 0 0 48px color-mix(in srgb, var(--signal) 5%, transparent), 0 0 0 100px color-mix(in srgb, var(--signal) 3%, transparent); }
+.logs-hero__copy { max-width: 700px; }
+.eyebrow-line { display: flex; align-items: center; gap: 9px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; }
+.eyebrow-line .mono { margin-left: auto; color: var(--ink-faint); }
+.live-pulse { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px var(--signal-wash), 0 0 14px var(--signal-glow); }
+.logs-hero h2 { margin: 35px 0 14px; color: var(--ink-max); font-family: var(--font-display); font-size: clamp(40px, 5.4vw, 76px); font-weight: 470; line-height: .96; letter-spacing: -.07em; }
+.logs-hero h2 em { display: block; color: var(--signal-deep); font-style: normal; font-weight: 720; }
+.logs-hero p { max-width: 560px; margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.85; }
+.logs-hero__metrics { display: grid; grid-template-columns: 1fr; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--line-faint); }
+.logs-hero__metrics > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 18px; background: color-mix(in srgb, var(--surface-overlay) 78%, transparent); }
+.logs-hero__metrics span { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .11em; }
+.logs-hero__metrics strong { color: var(--ink-max); font-family: var(--font-display); font-size: 28px; font-weight: 620; letter-spacing: -.05em; }
+.logs-hero__metrics .success strong { color: var(--ok); }
+.logs-hero__metrics .error strong { color: var(--bad); }
+.logs-hero__footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 16px; border-top: 1px solid var(--line-faint); }
+.logs-hero__footer > .mono { color: var(--ink-faint); font-size: 9px; letter-spacing: .16em; }
+.hero-link { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; }
+.logs-console { gap: 14px; padding: 17px; border-radius: 20px; background: linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-2); }
+.console-topline { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line-faint); }
+.console-topline > div { display: flex; align-items: baseline; gap: 13px; }
+.console-code { color: var(--signal-deep); font-size: 9px; letter-spacing: .14em; }
+.console-topline strong { color: var(--ink-strong); font-size: 12px; }
+.console-live { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .09em; }
+.console-live span { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 9px var(--signal-glow); }
+.logs-card { border-color: var(--line); border-radius: 20px; box-shadow: var(--lift-2); }
+.table-wrap { position: relative; }
+.table-wrap::before { content: 'EVENT TIMELINE'; display: block; padding: 13px 20px; border-bottom: 1px solid var(--line-faint); color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .15em; background: var(--surface-inset); }
+.table-wrap :deep(.n-data-table) { border: none; border-radius: 0; background: transparent; }
+.pagination-wrap { background: var(--surface-inset); border-color: var(--line-faint); }
+.sign-logs-page :deep(.reward-value) { color: var(--signal-deep); }
+
+@media (max-width: 780px) {
+  .logs-hero { grid-template-columns: 1fr; align-items: stretch; }
+  .logs-hero__metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .logs-hero__metrics > div { display: block; padding: 14px; }
+  .logs-hero__metrics strong { display: block; margin-top: 9px; }
+}
+@media (max-width: 640px) {
+  .logs-hero { min-height: 0; padding: 22px; border-radius: 20px; }
+  .eyebrow-line .mono { display: none; }
+  .logs-hero h2 { margin-top: 34px; font-size: clamp(42px, 13vw, 60px); }
+  .logs-hero__metrics { grid-template-columns: 1fr; }
+  .logs-hero__metrics > div { display: flex; }
+  .logs-hero__footer { align-items: flex-start; flex-direction: column; }
+  .hero-link { margin-left: 0; }
+  .logs-console .logs-filter { align-items: stretch; flex-direction: column; }
+  .filter-item, .filter-date { width: 100%; }
+  .table-wrap::before { padding: 11px 14px; }
+}</style>

@@ -1,61 +1,65 @@
 <template>
   <div class="settings-page">
-    <div class="workspace-toolbar">
-      <div class="toolbar-summary">
-        <div class="toolbar-label">系统设置</div>
-        <div class="toolbar-stats">
-          <span class="toolbar-stat" :class="{ success: autoSignEnabled }">自动签到 <strong>{{ autoSignEnabled ? '已开启' : '未开启' }}</strong></span>
-          <span class="toolbar-stat">推送渠道 <strong>{{ channelCount }}</strong></span>
-          <span class="toolbar-stat">账号分组 <strong>{{ groupCount }}</strong></span>
+    <section class="page-toolbar settings-toolbar" aria-label="设置概览">
+      <div class="page-toolbar__summary">
+        <span class="page-toolbar__label"><Settings2 :size="15" /> 系统设置</span>
+        <div class="filter-meta page-toolbar__meta">
+          <span :class="{ success: autoSignEnabled }">自动签到 <strong>{{ autoSignEnabled ? '已开启' : '未开启' }}</strong></span>
+          <span>通知渠道 <strong>{{ channelCount }}</strong></span>
+          <span>账号分组 <strong>{{ groupCount }}</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-navigation">
+      <div class="settings-navigation__head"><span class="mono">NAVIGATION / 06—A</span><strong>系统模块</strong><Activity :size="15" /></div>
+      <UiSegment v-model:value="activeTab" class="settings-tabs" :options="[{ label: '常规', value: 'general' }, { label: '通知', value: 'notify' }, { label: '数据', value: 'data' }, { label: '日志', value: 'logs' }, { label: '关于', value: 'about' }]" />
+    </section>
+
+    <div v-show="activeTab === 'general'" class="tab-panel">
+      <GeneralSettingsTab ref="generalRef" @update:auto-sign-enabled="autoSignEnabled = $event" />
+    </div>
+    <div v-show="activeTab === 'notify'" class="tab-panel">
+      <NotifyChannelsTab ref="notifyRef" @update:count="channelCount = $event" />
+    </div>
+    <div v-show="activeTab === 'data'" class="tab-panel">
+      <div class="sub-section">
+        <div class="sub-section-nav">
+          <UiSegment v-model:value="dataSection" size="small" :options="[{ label: '分组管理', value: 'groups' }, { label: '数据备份', value: 'backup' }]" />
+        </div>
+        <div class="sub-section-body">
+          <GroupsTab
+            v-if="dataSection === 'groups'"
+            ref="groupsRef"
+            @update:count="groupCount = $event"
+          />
+          <BackupTab
+            v-else-if="dataSection === 'backup'"
+            ref="backupRef"
+            @update:account-count="backupAccountCount = $event"
+          />
         </div>
       </div>
     </div>
-
-    <UiSegment v-model:value="activeTab" class="settings-tabs" :options="[{ label: '常规', value: 'general' }, { label: '通知', value: 'notify' }, { label: '数据', value: 'data' }, { label: '日志', value: 'logs' }, { label: '关于', value: 'about' }]" />
-    <div v-show="activeTab === 'general'" class="tab-panel">
-        <GeneralSettingsTab ref="generalRef" @update:auto-sign-enabled="autoSignEnabled = $event" />
-          </div>
-    <div v-show="activeTab === 'notify'" class="tab-panel">
-        <NotifyChannelsTab ref="notifyRef" @update:count="channelCount = $event" />
-          </div>
-    <div v-show="activeTab === 'data'" class="tab-panel">
-        <div class="sub-section">
-          <div class="sub-section-nav">
-            <UiSegment v-model:value="dataSection" size="small" :options="[{ label: '分组管理', value: 'groups' }, { label: '数据备份', value: 'backup' }]" />
-          </div>
-          <div class="sub-section-body">
-            <GroupsTab
-              v-if="dataSection === 'groups'"
-              ref="groupsRef"
-              @update:count="groupCount = $event"
-            />
-            <BackupTab
-              v-else-if="dataSection === 'backup'"
-              ref="backupRef"
-              @update:account-count="backupAccountCount = $event"
-            />
-          </div>
-        </div>
-          </div>
     <div v-show="activeTab === 'logs'" class="tab-panel">
-        <div class="sub-section">
-          <div class="sub-section-nav">
-            <UiSegment v-model:value="logSection" size="small" :options="[{ label: '审计日志', value: 'audit' }, { label: '系统日志', value: 'system' }]" />
-          </div>
-          <div class="sub-section-body">
-            <AuditLogsTab v-if="logSection === 'audit'" ref="auditRef" />
-            <SystemLogsTab v-else-if="logSection === 'system'" />
-          </div>
+      <div class="sub-section">
+        <div class="sub-section-nav">
+          <UiSegment v-model:value="logSection" size="small" :options="[{ label: '审计日志', value: 'audit' }, { label: '系统日志', value: 'system' }]" />
         </div>
-          </div>
+        <div class="sub-section-body">
+          <AuditLogsTab v-if="logSection === 'audit'" ref="auditRef" />
+          <SystemLogsTab v-else-if="logSection === 'system'" />
+        </div>
+      </div>
+    </div>
     <div v-show="activeTab === 'about'" class="tab-panel">
-        <AboutTab ref="aboutRef" />
-          </div>
+      <AboutTab ref="aboutRef" />
+    </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { UiSegment } from '../ui'
+import { Activity, Settings2 } from 'lucide-vue-next'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useViewRefresh } from '../composables'
@@ -106,60 +110,24 @@ useViewRefresh(async () => {
 </script>
 
 <style scoped>
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.settings-tabs :deep(.n-tabs-nav) {
-  margin-bottom: var(--spacing-3);
-}
-
-.settings-tabs :deep(.n-tabs-rail) {
-  background: var(--bg-secondary);
-  padding: 3px;
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
-
-.settings-tabs :deep(.n-tabs-tab) {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  padding: 6px 18px;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-}
-
-.settings-tabs :deep(.n-tabs-tab:hover) {
-  color: var(--text-primary);
-}
-
-.settings-tabs :deep(.n-tabs-tab.n-tabs-tab--active) {
-  color: var(--text-primary);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
-}
-
-.sub-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.sub-section-nav {
-  display: flex;
-  align-items: center;
-}
-
-.sub-section-body {
-  display: flex;
-  flex-direction: column;
-}
-
+.settings-page { display: flex; flex-direction: column; gap: clamp(14px, 1.8vw, 24px); padding-bottom: 48px; }
+.settings-navigation { padding: 15px 17px 17px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(135deg, var(--surface-raised), var(--surface-inset)); box-shadow: var(--lift-2); }
+.settings-navigation__head { display: flex; align-items: center; gap: 13px; margin-bottom: 13px; padding-bottom: 12px; border-bottom: 1px solid var(--line-faint); }
+.settings-navigation__head .mono { color: var(--signal-deep); font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; }
+.settings-navigation__head strong { color: var(--ink-strong); font-size: 12px; }
+.settings-navigation__head svg { margin-left: auto; color: var(--signal-deep); }
+.settings-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.settings-tabs::-webkit-scrollbar { display: none; }
+/* 内容区自带内边距：原来 general/notify/about 三个面板直接贴在卡片描边上 */
+.tab-panel { position: relative; overflow: hidden; padding: clamp(16px, 2.4vw, 24px); border: 1px solid var(--line); border-radius: 20px; background: var(--surface-raised); box-shadow: var(--lift-2); }
+.tab-panel::before { content: ''; position: absolute; top: 0; left: 24px; z-index: 1; width: 76px; height: 2px; background: var(--signal); box-shadow: 0 0 14px var(--signal-glow); }
+/* 子标签页在同一块面板内，内边距由 .tab-panel 给，这里只管纵向节奏 */
+.sub-section { display: flex; flex-direction: column; gap: var(--s4); }
+.sub-section-nav { display: flex; align-items: center; padding-bottom: var(--s4); border-bottom: 1px solid var(--line-faint); }
+.sub-section-body { display: flex; flex-direction: column; min-width: 0; }
 @media (max-width: 560px) {
-  .settings-tabs :deep(.n-tabs-tab) {
-    padding: 6px 12px;
-  }
+  .settings-navigation { padding: 13px; }
+  .settings-navigation__head { align-items: flex-start; flex-wrap: wrap; }
+  .tab-panel { border-radius: 16px; }
 }
 </style>

@@ -121,7 +121,8 @@ code, pre, kbd {
   z-index: 1;
   pointer-events: none;
   opacity: var(--noise-opacity);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: radial-gradient(color-mix(in srgb, var(--ink-max) 22%, transparent) 0.55px, transparent 0.8px);
+  background-size: 4px 4px;
   /* soft-light 而非 overlay：overlay 在接近纯白/纯黑的底色上几乎不产生变化，
      实测下来噪点等于不存在。soft-light 在两端都留得住颗粒。 */
   mix-blend-mode: soft-light;

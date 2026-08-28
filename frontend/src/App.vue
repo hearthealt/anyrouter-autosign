@@ -1,21 +1,23 @@
 <template>
-  <!-- 登录页自己占满视口，不套外壳 -->
   <router-view v-if="isLoginPage" />
 
   <div v-else class="shell">
+    <SignalField class="shell__field" :density="34" :intensity="0.62" />
+    <div class="shell__aura shell__aura--one" aria-hidden="true" />
+    <div class="shell__aura shell__aura--two" aria-hidden="true" />
     <div class="shell__scrim" :class="{ 'is-open': mobileMenuOpen }" @click="mobileMenuOpen = false" />
 
-    <!-- ───────────────────────────────── 侧栏 -->
     <aside
       ref="sidebarEl"
       class="rail material-noise"
       :class="{ 'is-collapsed': collapsed, 'is-mobile-open': mobileMenuOpen }"
     >
       <div class="rail__brand">
-        <button type="button" class="rail__mark" aria-label="返回首页" @click="router.push('/')">
-          <Zap :size="15" />
+        <button type="button" class="rail__mark" aria-label="返回总览" @click="router.push('/')">
+          <Zap :size="18" :stroke-width="2.2" />
         </button>
         <div class="rail__id">
+          <span class="rail__eyebrow">AUTOMATION / 01</span>
           <span class="rail__name">AnyRouter</span>
           <button
             type="button"
@@ -24,67 +26,86 @@
             :title="versionStore.hasNewVersion ? `有新版本 ${versionStore.latestTag}，点击查看` : '查看版本信息'"
             @click="showVersionModal = true"
           >
-            <span class="mono">{{ versionStore.currentTag || (versionStore.loading ? '加载中…' : '版本未知') }}</span>
+            <span class="mono">{{ versionStore.currentTag || (versionStore.loading ? 'LOADING' : 'VERSION N/A') }}</span>
             <span v-if="versionStore.hasNewVersion" class="rail__dot" aria-hidden="true" />
-            <span v-if="versionStore.hasNewVersion" class="sr-only">有新版本</span>
           </button>
         </div>
       </div>
 
+      <div class="rail__section-label">
+        <span>Navigation</span>
+        <span class="mono">06</span>
+      </div>
+
       <nav class="rail__nav" aria-label="主导航">
-        <!-- 活动指示条：位置由弹簧驱动，在导航项之间滑动 -->
         <span ref="indicatorEl" class="rail__indicator" aria-hidden="true" />
         <button
-          v-for="item in menuItems"
+          v-for="(item, index) in menuItems"
           :key="item.path"
           :ref="el => setNavRef(item.path, el as HTMLElement | null)"
           type="button"
           class="rail__item"
           :class="{ 'is-active': isActive(item.path) }"
           :aria-current="isActive(item.path) ? 'page' : undefined"
+          :title="collapsed ? item.label : undefined"
           @click="navigateTo(item.path)"
         >
-          <component :is="item.icon" :size="16" class="rail__icon" />
+          <span class="rail__number mono">{{ String(index + 1).padStart(2, '0') }}</span>
+          <component :is="item.icon" :size="17" :stroke-width="1.8" class="rail__icon" />
           <span class="rail__label">{{ item.label }}</span>
+          <ChevronRight :size="13" class="rail__arrow" />
         </button>
       </nav>
 
       <div class="rail__foot">
-        <button
-          type="button"
-          class="rail__item is-small"
-          :aria-label="currentTheme === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
-          @click="toggleTheme"
-        >
-          <component :is="currentTheme === 'dark' ? Sun : Moon" :size="16" class="rail__icon" />
-          <span class="rail__label">{{ currentTheme === 'dark' ? '浅色' : '深色' }}</span>
-        </button>
-        <button
-          type="button"
-          class="rail__item is-small"
-          :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
-          :aria-expanded="!collapsed"
-          @click="collapsed = !collapsed"
-        >
-          <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="16" class="rail__icon" />
-          <span class="rail__label">收起</span>
-        </button>
+        <div class="rail__system">
+          <span class="rail__system-orbit" aria-hidden="true"><span /></span>
+          <span class="rail__system-copy">
+            <strong>System online</strong>
+            <small class="mono">REALTIME LINK</small>
+          </span>
+        </div>
+        <div class="rail__foot-actions">
+          <button
+            type="button"
+            class="rail__utility"
+            :aria-label="currentTheme === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
+            :title="currentTheme === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
+            @click="toggleTheme"
+          >
+            <component :is="currentTheme === 'dark' ? Sun : Moon" :size="16" />
+            <span>{{ currentTheme === 'dark' ? 'Light' : 'Dark' }}</span>
+          </button>
+          <button
+            type="button"
+            class="rail__utility rail__collapse"
+            :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
+            :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
+            :aria-expanded="!collapsed"
+            @click="collapsed = !collapsed"
+          >
+            <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="16" />
+            <span>Collapse</span>
+          </button>
+        </div>
       </div>
     </aside>
 
-    <!-- ───────────────────────────────── 主区 -->
     <div class="frame" :class="{ 'is-wide': collapsed }">
       <header class="bar">
         <UiButton class="bar__burger" quaternary size="small" aria-label="打开导航菜单" @click="mobileMenuOpen = true">
-          <template #icon><Menu :size="17" /></template>
+          <template #icon><Menu :size="18" /></template>
         </UiButton>
 
         <div class="bar__title">
-          <h1 class="bar__heading">{{ pageTitle }}</h1>
-          <span v-if="breadcrumbTail" class="bar__crumb">
-            <ChevronRight :size="11" />
-            {{ breadcrumbTail }}
-          </span>
+          <span class="bar__index mono">AR / CONTROL PLANE</span>
+          <div class="bar__title-line">
+            <h1 class="bar__heading">{{ pageTitle }}</h1>
+            <span v-if="breadcrumbTail" class="bar__crumb">
+              <ChevronRight :size="11" />
+              {{ breadcrumbTail }}
+            </span>
+          </div>
         </div>
 
         <div class="bar__search">
@@ -92,7 +113,7 @@
             trigger="manual"
             placement="bottom"
             :show="searchResults.length > 0"
-            :width="380"
+            :width="420"
             bare
             @update:show="(show: boolean) => !show && (searchResults = [])"
           >
@@ -100,14 +121,14 @@
               <UiInput
                 v-model:value="searchKeyword"
                 class="bar__field"
-                placeholder="搜索账号、日志…"
+                placeholder="搜索账号、日志或动作"
                 size="small"
                 clearable
                 @keyup.enter="handleGlobalSearch"
               >
                 <template #prefix>
                   <UiSpinner v-if="searchLoading" :size="12" />
-                  <Search v-else :size="13" />
+                  <Search v-else :size="14" />
                 </template>
                 <template #suffix>
                   <button
@@ -143,6 +164,7 @@
         </div>
 
         <div class="bar__tools">
+          <div class="bar__live"><span />LIVE</div>
           <UiTooltip :content="versionStore.hasNewVersion ? `发现新版本 ${versionStore.latestTag}` : '查看版本和更新'">
             <UiBadge :dot="versionStore.hasNewVersion" type="primary">
               <UiButton quaternary size="small" circle aria-label="查看版本和更新" @click="showVersionModal = true">
@@ -196,7 +218,7 @@
         :aria-current="isActive(item.path) ? 'page' : undefined"
         @click="navigateTo(item.path)"
       >
-        <component :is="item.icon" :size="17" aria-hidden="true" />
+        <component :is="item.icon" :size="18" aria-hidden="true" />
         <span>{{ item.label }}</span>
       </button>
     </nav>
@@ -207,7 +229,6 @@
   <VersionUpdateModal v-model:show="showVersionModal" />
   <CommandPalette v-model:show="showCommandPalette" @request-refresh="refreshBus.trigger()" />
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -225,6 +246,7 @@ import ShortcutsHelpModal from './components/layout/ShortcutsHelpModal.vue'
 import CommandPalette from './components/layout/CommandPalette.vue'
 import NotificationCenter from './components/layout/NotificationCenter.vue'
 import VersionUpdateModal from './components/layout/VersionUpdateModal.vue'
+import SignalField from './components/layout/SignalField.vue'
 
 interface GlobalSearchResult {
   type: 'account' | 'log'
@@ -559,90 +581,148 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .shell {
+  position: relative;
   display: flex;
   width: 100%;
-  min-height: 100vh;
   min-width: 0;
-  background: var(--surface-page);
+  min-height: 100vh;
+  overflow: clip;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-page) 94%, var(--signal) 6%), var(--surface-page) 38%),
+    var(--surface-page);
 }
+
+.shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom right, #000 0%, transparent 72%);
+}
+
+.shell__field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.72;
+}
+
+.shell__aura {
+  position: fixed;
+  z-index: 0;
+  width: 34vw;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(90px);
+  opacity: 0.08;
+}
+
+.shell__aura--one { top: -18vw; right: -8vw; background: var(--signal); }
+.shell__aura--two { bottom: -24vw; left: 18vw; background: var(--info); }
 
 .shell__scrim {
   position: fixed;
   inset: 0;
-  z-index: 90;
-  background: color-mix(in srgb, var(--surface-inverse) 40%, transparent);
-  backdrop-filter: blur(3px);
+  z-index: 190;
+  background: color-mix(in srgb, var(--surface-inverse) 42%, transparent);
+  backdrop-filter: blur(7px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.24s ease;
 }
 
-.shell__scrim.is-open {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* ───────────────────────────────────────── 侧栏 */
+.shell__scrim.is-open { opacity: 1; pointer-events: auto; }
 
 .rail {
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 100;
+  top: 16px;
+  bottom: 16px;
+  left: 16px;
+  z-index: var(--z-nav);
   display: flex;
   flex-direction: column;
   width: var(--shell-sidebar);
-  background: var(--surface-sunken);
-  border-right: 1px solid var(--line-faint);
-  transition: width 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-sunken) 90%, transparent);
+  box-shadow: var(--lift-3);
+  backdrop-filter: blur(24px) saturate(1.25);
+  transition: width 0.28s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
+.rail > * { position: relative; z-index: 2; }
 .rail.is-collapsed { width: var(--shell-sidebar-collapsed); }
 
 .rail__brand {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  height: var(--shell-header);
-  padding: 0 var(--s4);
-  border-bottom: 1px solid var(--line-faint);
+  min-height: 88px;
+  padding: var(--s4);
   overflow: hidden;
+  border-bottom: 1px solid var(--line-faint);
 }
 
 .rail__mark {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 42px;
+  height: 42px;
   border: 0;
-  border-radius: var(--r-sm);
-  background: var(--signal);
+  border-radius: 13px;
   color: var(--signal-ink);
-  transition: box-shadow 0.18s ease;
+  background: var(--signal);
+  box-shadow: 0 12px 30px -16px var(--signal-glow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.rail__mark:hover { box-shadow: 0 0 20px -4px var(--signal-glow); }
+.rail__mark::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1px solid var(--signal-glow);
+  border-radius: 17px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.rail__mark:hover { transform: rotate(-5deg) scale(1.04); box-shadow: 0 0 32px -8px var(--signal-glow); }
+.rail__mark:hover::after { opacity: 1; transform: scale(1); }
 
 .rail__id {
   display: grid;
   gap: 1px;
   min-width: 0;
   opacity: 1;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.16s ease, transform 0.24s ease;
 }
 
-.rail.is-collapsed .rail__id {
-  opacity: 0;
-  pointer-events: none;
+.rail__eyebrow,
+.rail__version {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .rail__name {
   color: var(--ink-max);
-  font-size: var(--fn-sm);
-  font-weight: var(--weight-semibold);
+  font-size: var(--fn-lg);
+  font-weight: var(--weight-bold);
   letter-spacing: var(--track-tight);
   white-space: nowrap;
 }
@@ -650,16 +730,14 @@ onBeforeUnmount(() => {
 .rail__version {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  width: max-content;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ink-faint);
-  font-size: var(--fn-2xs);
-  white-space: nowrap;
 }
 
-.rail__version:hover { color: var(--ink); }
+.rail__version:hover,
 .rail__version.has-update { color: var(--signal-deep); }
 
 .rail__dot {
@@ -667,64 +745,90 @@ onBeforeUnmount(() => {
   height: 5px;
   border-radius: 50%;
   background: var(--signal-deep);
+  box-shadow: 0 0 9px var(--signal-glow);
 }
 
-/* ── 导航 */
+.rail__section-label {
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 18px 8px;
+  color: var(--ink-faint);
+  font-size: 9px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: opacity 0.16s ease;
+}
 
 .rail__nav {
   position: relative;
   display: grid;
-  gap: 1px;
-  padding: var(--s3) var(--s2);
+  gap: 5px;
+  padding: 0 9px;
 }
 
-/* 活动指示条：贴左缘的 signal 色细条 */
 .rail__indicator {
   position: absolute;
-  left: 0;
-  top: var(--s3);
-  width: 2px;
-  border-radius: 0 var(--r-full) var(--r-full) 0;
+  top: 0;
+  left: 4px;
+  width: 3px;
+  border-radius: var(--r-full);
   background: var(--signal);
+  box-shadow: 0 0 18px var(--signal-glow);
   opacity: 0;
   pointer-events: none;
-  box-shadow: 0 0 12px 0 var(--signal-glow);
 }
 
 .rail__item {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px 20px minmax(0, 1fr) 14px;
   align-items: center;
-  gap: var(--s3);
+  gap: 8px;
   width: 100%;
-  height: 34px;
-  padding: 0 var(--s3);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
+  min-height: 48px;
+  padding: 0 11px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 13px;
   color: var(--ink-muted);
+  background: transparent;
   font-size: var(--fn-sm);
   font-weight: var(--weight-medium);
   text-align: left;
   white-space: nowrap;
-  transition: background-color 0.14s ease, color 0.14s ease;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
-.rail__item:hover {
-  background: var(--surface-hover);
-  color: var(--ink-strong);
+.rail__item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(95deg, var(--signal-wash), transparent 78%);
+  transition: opacity 0.18s ease;
 }
+
+.rail__item:hover { color: var(--ink-max); transform: translateX(2px); }
+.rail__item:hover::before { opacity: 0.7; }
 
 .rail__item.is-active {
-  background: var(--signal-wash);
   color: var(--ink-max);
-  font-weight: var(--weight-semibold);
+  border-color: color-mix(in srgb, var(--signal-deep) 22%, var(--line-faint));
+  background: color-mix(in srgb, var(--surface-raised) 76%, transparent);
 }
 
-.rail__item.is-small { height: 30px; font-size: var(--fn-xs); }
+.rail__item.is-active::before { opacity: 1; }
+.rail__item > * { position: relative; z-index: 1; }
+
+.rail__number {
+  color: var(--ink-ghost);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
 
 .rail__icon { flex-shrink: 0; }
-
 .rail__item.is-active .rail__icon { color: var(--signal-deep); }
 
 .rail__label {
@@ -732,254 +836,220 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 1;
-  transition: opacity 0.16s ease;
+  transition: opacity 0.15s ease;
 }
 
-.rail.is-collapsed .rail__label { opacity: 0; }
+.rail__arrow { justify-self: end; color: var(--ink-ghost); opacity: 0; transform: translateX(-4px); transition: all 0.18s ease; }
+.rail__item:hover .rail__arrow,
+.rail__item.is-active .rail__arrow { opacity: 1; transform: translateX(0); }
 
 .rail__foot {
   display: grid;
-  gap: 1px;
+  gap: 12px;
   margin-top: auto;
-  padding: var(--s2);
+  padding: 14px 10px 10px;
   border-top: 1px solid var(--line-faint);
 }
 
-/* ───────────────────────────────────────── 主区 */
-
-.frame {
+.rail__system {
   display: flex;
-  flex-direction: column;
-  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
   min-width: 0;
-  margin-left: var(--shell-sidebar);
-  transition: margin-left 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
 }
 
-.frame.is-wide { margin-left: var(--shell-sidebar-collapsed); }
+.rail__system-orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--line));
+  border-radius: 50%;
+}
+
+.rail__system-orbit::before {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: system-orbit 4s linear infinite;
+  transform-origin: 0 0;
+}
+
+.rail__system-orbit span { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 12px color-mix(in srgb, var(--ok) 70%, transparent); }
+
+@keyframes system-orbit {
+  from { transform: rotate(0deg) translateX(12px); }
+  to { transform: rotate(360deg) translateX(12px); }
+}
+
+.rail__system-copy { display: grid; min-width: 0; white-space: nowrap; }
+.rail__system-copy strong { color: var(--ink-strong); font-size: var(--fn-xs); font-weight: var(--weight-semibold); }
+.rail__system-copy small { color: var(--ink-faint); font-size: 7px; letter-spacing: 0.08em; }
+
+.rail__foot-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.rail__utility {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: var(--fn-xs);
+  white-space: nowrap;
+}
+.rail__utility:hover { border-color: var(--line-faint); background: var(--surface-hover); color: var(--ink-max); }
+
+.rail.is-collapsed .rail__section-label,
+.rail.is-collapsed .rail__label,
+.rail.is-collapsed .rail__arrow,
+.rail.is-collapsed .rail__utility span { opacity: 0; pointer-events: none; }
+/* 折叠宽只有 60px，这两块必须撤出布局流：仅设 opacity 会继续占 flex 空间，
+   把 logo 和状态环挤离中线（logo 42px 甚至会被 overflow 裁掉右缘） */
+.rail.is-collapsed .rail__id,
+.rail.is-collapsed .rail__system-copy { display: none; }
+.rail.is-collapsed .rail__brand { justify-content: center; gap: 0; padding-inline: 0; }
+.rail.is-collapsed .rail__nav { padding-inline: 9px; }
+.rail.is-collapsed .rail__item { grid-template-columns: 0 20px 0 0; gap: 0; justify-content: center; padding: 0; }
+.rail.is-collapsed .rail__number { opacity: 0; }
+.rail.is-collapsed .rail__system { justify-content: center; padding-inline: 0; background: transparent; }
+.rail.is-collapsed .rail__foot { padding-inline: 6px; }
+.rail.is-collapsed .rail__foot-actions { grid-template-columns: 1fr; justify-items: center; }
+.rail.is-collapsed .rail__utility { width: 38px; padding: 0; gap: 0; }
+.rail.is-collapsed .rail__utility span { display: none; }
+
+.frame {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: calc(var(--shell-sidebar) + 32px);
+  transition: margin-left 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.frame.is-wide { margin-left: calc(var(--shell-sidebar-collapsed) + 32px); }
 
 .bar {
   position: sticky;
-  top: 0;
+  top: 16px;
   z-index: var(--z-sticky);
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(260px, 1fr) auto;
   align-items: center;
   gap: var(--s4);
-  height: var(--shell-header);
-  padding: 0 var(--s5);
-  background: color-mix(in srgb, var(--surface-page) 82%, transparent);
-  backdrop-filter: blur(12px) saturate(1.4);
-  border-bottom: 1px solid var(--line-faint);
+  min-height: 70px;
+  margin: 16px 18px 0 0;
+  padding: 10px 13px 10px 20px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--surface-page) 78%, transparent);
+  box-shadow: var(--lift-2);
+  backdrop-filter: blur(24px) saturate(1.35);
 }
 
 .bar__burger { display: none; }
 
-.bar__title {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  flex-shrink: 0;
-}
+.bar__title { display: grid; gap: 1px; min-width: 0; }
+.bar__index { color: var(--ink-faint); font-size: 7px; letter-spacing: 0.13em; }
+.bar__title-line { display: flex; align-items: baseline; gap: 7px; }
+.bar__heading { margin: 0; font-size: var(--fn-xl); font-weight: var(--weight-bold); letter-spacing: var(--track-tight); white-space: nowrap; }
+.bar__crumb { display: inline-flex; align-items: center; gap: 2px; color: var(--ink-faint); font-size: var(--fn-xs); white-space: nowrap; }
 
-.bar__heading {
-  margin: 0;
-  font-size: var(--fn-lg);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--track-tight);
-  color: var(--ink-max);
-  white-space: nowrap;
-}
+.bar__search { display: flex; justify-content: center; min-width: 0; }
+.bar__field { width: min(100%, 520px); }
+.bar__field :deep(.ui-input) { border-radius: 12px; background: color-mix(in srgb, var(--surface-inset) 76%, transparent); }
 
-.bar__crumb {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--ink-faint);
-  font-size: var(--fn-xs);
-  white-space: nowrap;
-}
+.bar__kbd { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: transparent; }
+.bar__kbd kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 17px; padding: 0 3px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-sunken); color: var(--ink-faint); font-family: var(--font-mono); font-size: 8px; }
+.bar__kbd:hover kbd { border-color: var(--signal-deep); color: var(--signal-deep); }
 
-.bar__search {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-}
+.bar__tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.bar__live { display: inline-flex; align-items: center; gap: 5px; margin-right: 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.1em; }
+.bar__live span { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: live-pulse 2s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: 0.35; transform: scale(0.72); } }
 
-.bar__field { max-width: 420px; }
-
-.bar__kbd {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.bar__kbd kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 17px;
-  height: 16px;
-  padding: 0 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-xs);
-  background: var(--surface-sunken);
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: 9px;
-}
-
-.bar__kbd:hover kbd {
-  border-color: var(--signal-deep);
-  color: var(--signal-deep);
-}
-
-.bar__tools {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-.bar__user { padding-inline: 5px 8px; }
-
-.bar__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 21px;
-  height: 21px;
-  border-radius: var(--r-sm);
-  background: var(--signal);
-  color: var(--signal-ink);
-  font-size: var(--fn-2xs);
-  font-weight: var(--weight-bold);
-}
-
-.bar__username {
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.bar__user { padding-inline: 5px 9px; margin-left: 4px; border: 1px solid var(--line-faint); border-radius: 11px; background: color-mix(in srgb, var(--surface-raised) 68%, transparent); }
+.bar__avatar { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 8px; background: var(--signal); color: var(--signal-ink); font-size: var(--fn-2xs); font-weight: var(--weight-bold); }
+.bar__username { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stage {
   flex: 1;
-  min-width: 0;
   width: 100%;
+  min-width: 0;
   max-width: var(--shell-max);
   margin: 0 auto;
-  padding: var(--s5);
+  padding: 26px 28px 72px 10px;
 }
 
-/* ───────────────────────────────────────── 搜索结果 */
-
-.hits {
-  display: grid;
-  max-height: 340px;
-  overflow-y: auto;
-}
-
-.hits__row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s3);
-  width: 100%;
-  padding: var(--s2) var(--s3);
-  border: 0;
-  border-radius: var(--r-xs);
-  background: transparent;
-  text-align: left;
-}
-
+.hits { display: grid; max-height: 380px; overflow-y: auto; padding: 6px; }
+.hits__row { display: flex; align-items: flex-start; gap: var(--s3); width: 100%; padding: 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; }
 .hits__row:hover { background: var(--surface-hover); }
-
-.hits__kind {
-  flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: var(--r-xs);
-  font-size: var(--fn-2xs);
-  font-weight: var(--weight-semibold);
-}
-
+.hits__kind { flex-shrink: 0; padding: 2px 6px; border-radius: 4px; font-size: var(--fn-2xs); font-weight: var(--weight-semibold); }
 .hits__kind.account { background: var(--signal-wash); color: var(--signal-deep); }
 .hits__kind.log { background: var(--info-wash); color: var(--info); }
-
-.hits__body {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.hits__title {
-  color: var(--ink-max);
-  font-size: var(--fn-sm);
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hits__desc {
-  color: var(--ink-muted);
-  font-size: var(--fn-xs);
-}
-
-/* ───────────────────────────────────────── 移动端 */
+.hits__body { display: grid; gap: 1px; min-width: 0; }
+.hits__title { overflow: hidden; color: var(--ink-max); font-size: var(--fn-sm); font-weight: var(--weight-medium); text-overflow: ellipsis; white-space: nowrap; }
+.hits__desc { color: var(--ink-muted); font-size: var(--fn-xs); }
 
 .tabs { display: none; }
 
+@media (max-width: 1120px) {
+  .bar { grid-template-columns: minmax(150px, auto) 1fr auto; }
+  .bar__live { display: none; }
+  .bar__username { display: none; }
+}
+
 @media (max-width: 900px) {
-  .rail {
-    transform: translateX(-100%);
-    box-shadow: var(--lift-4);
-  }
-
+  .rail { top: 10px; bottom: 10px; left: 10px; width: min(270px, calc(100vw - 20px)); transform: translateX(calc(-100% - 20px)); box-shadow: var(--lift-4); }
   .rail.is-mobile-open { transform: translateX(0); }
-
-  .frame { margin-left: 0; }
+  .rail.is-collapsed { width: min(270px, calc(100vw - 20px)); }
+  .rail.is-collapsed .rail__section-label,
+  .rail.is-collapsed .rail__label,
+  .rail.is-collapsed .rail__arrow,
+  .rail.is-collapsed .rail__utility span { display: inline; opacity: 1; pointer-events: auto; }
+  /* 移动端折叠态其实是全宽抽屉，这两块要恢复成各自原本的 grid（不是 inline，否则内部行会塌成一行） */
+  .rail.is-collapsed .rail__id,
+  .rail.is-collapsed .rail__system-copy { display: grid; opacity: 1; pointer-events: auto; }
+  .rail.is-collapsed .rail__brand { justify-content: flex-start; gap: var(--s3); padding-inline: var(--s4); }
+  .rail.is-collapsed .rail__item { grid-template-columns: 24px 20px minmax(0, 1fr) 14px; gap: 8px; justify-content: initial; padding: 0 11px; }
+  .rail.is-collapsed .rail__number { opacity: 1; }
+  .rail.is-collapsed .rail__foot { padding-inline: 10px; }
+  .rail.is-collapsed .rail__foot-actions { grid-template-columns: 1fr 1fr; justify-items: stretch; }
+  .rail.is-collapsed .rail__utility { width: auto; padding: 0 8px; gap: 7px; }
+  .frame,
   .frame.is-wide { margin-left: 0; }
-
+  .bar { top: 10px; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 62px; margin: 10px 10px 0; padding: 8px 10px; border-radius: 16px; }
   .bar__burger { display: inline-flex; }
   .bar__title { display: none; }
-
-  .stage { padding: var(--s4) var(--s3) calc(var(--s16) + var(--s4)); }
-
-  .tabs {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: var(--z-nav);
-    display: grid;
-    grid-auto-flow: column;
-    background: color-mix(in srgb, var(--surface-page) 90%, transparent);
-    backdrop-filter: blur(14px);
-    border-top: 1px solid var(--line-faint);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .tabs__item {
-    display: grid;
-    justify-items: center;
-    gap: 2px;
-    padding: 7px 2px;
-    border: 0;
-    background: transparent;
-    color: var(--ink-faint);
-    font-size: 9px;
-    font-weight: var(--weight-medium);
-  }
-
+  .bar__search { justify-content: stretch; }
+  .bar__tools > :not(:last-child) { display: none; }
+  .stage { padding: 24px 12px calc(var(--s20) + env(safe-area-inset-bottom)); }
+  .tabs { position: fixed; right: 10px; bottom: 10px; left: 10px; z-index: var(--z-nav); display: grid; grid-auto-flow: column; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: color-mix(in srgb, var(--surface-page) 88%, transparent); box-shadow: var(--lift-4); backdrop-filter: blur(20px); padding-bottom: env(safe-area-inset-bottom); }
+  .tabs__item { position: relative; display: grid; justify-items: center; gap: 3px; padding: 8px 2px 7px; border: 0; background: transparent; color: var(--ink-faint); font-size: 8px; font-weight: var(--weight-medium); }
+  .tabs__item::after { content: ""; position: absolute; top: 0; width: 18px; height: 2px; border-radius: 2px; background: var(--signal); opacity: 0; }
   .tabs__item.is-active { color: var(--signal-deep); }
+  .tabs__item.is-active::after { opacity: 1; }
 }
 
 @media (max-width: 620px) {
-  .bar { gap: var(--s2); padding: 0 var(--s3); }
+  .bar { gap: 5px; }
+  .bar__field :deep(input) { font-size: 11px; }
+  .bar__user { padding: 0; border: 0; background: transparent; }
   .bar__username { display: none; }
 }
 </style>

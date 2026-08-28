@@ -8,7 +8,11 @@
   所以这里只管选项列表和键盘导航。
 -->
 <template>
-  <div :class="['ui-select', `ui-select--${size}`, { 'is-disabled': disabled, 'is-open': open }]">
+  <div
+    v-bind="rootAttrs"
+    :class="['ui-select', `ui-select--${size}`, { 'is-disabled': disabled, 'is-open': open }, rootAttrs.class]"
+    :style="rootAttrs.style"
+  >
     <div
       ref="anchor"
       class="ui-select__field"
@@ -103,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, useAttrs, watch } from 'vue'
 import { Check, ChevronDown, X } from 'lucide-vue-next'
 import UiSpinner from './UiSpinner.vue'
 import { useAnchoredLayer } from './useAnchoredLayer'
@@ -137,6 +141,10 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:value': [value: OptionValue | OptionValue[] | null]
 }>()
+
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
+const rootAttrs = computed(() => ({ class: attrs.class, style: attrs.style as import('vue').StyleValue }))
 
 const anchor = ref<HTMLElement | null>(null)
 const layer = ref<HTMLElement | null>(null)

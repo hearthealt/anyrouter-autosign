@@ -1,5 +1,5 @@
 <template>
-  <UiModal v-model:show="visible" :width="680" :mask-closable="false">
+  <UiModal v-model:show="visible" bare :width="680" :mask-closable="false">
     <div class="modal-container tokens-modal">
       <div class="modal-header">
         <div class="modal-title-group">
@@ -7,6 +7,7 @@
             <KeyRound :size="18" />
           </div>
           <div>
+            <span class="modal-code">ACCESS KEY / VAULT</span>
             <h3>API 令牌</h3>
             <span class="modal-subtitle">{{ account?.username }}</span>
           </div>
@@ -92,6 +93,7 @@
       </div>
 
       <div class="modal-footer">
+        <span class="modal-status"><i></i> ENCRYPTED SESSION</span>
         <UiButton @click="close">关闭</UiButton>
       </div>
     </div>
@@ -385,222 +387,50 @@ watch(showDrawer, (val) => {
 </script>
 
 <style scoped>
-.modal-container {
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+.modal-container { display: flex; width: 100%; min-width: 0; min-height: 0; max-height: inherit; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface-overlay); box-shadow: var(--lift-4); }
+.tokens-modal { display: flex; min-width: 0; flex-direction: column; color: var(--ink-strong); }
+.modal-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--s4); padding: 16px 20px; border-bottom: 1px solid var(--line-faint); background: linear-gradient(to right, var(--grid-line) 1px, transparent 1px), var(--surface-inset); background-size: 18px 18px; }
+.modal-title-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.modal-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid color-mix(in srgb, var(--signal-deep) 26%, transparent); border-radius: 50%; color: var(--signal-deep); background: var(--signal-wash); }
+.modal-code, .modal-status { display: block; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: var(--weight-semibold); letter-spacing: .1em; text-transform: uppercase; }
+.modal-header h3 { margin: 4px 0 0; color: var(--ink-max); font-size: var(--fn-lg); font-weight: var(--weight-semibold); }
+.modal-subtitle { display: block; margin-top: 3px; color: var(--ink-muted); font-size: var(--fn-xs); }
+.modal-body { flex: 1; min-width: 0; min-height: 0; max-height: none; padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
+.modal-footer { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: var(--s2); padding: 14px 20px; border-top: 1px solid var(--line-faint); background: var(--surface-inset); }
+.modal-status { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: var(--ok); }
+.modal-status i { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px color-mix(in srgb, var(--ok) 55%, transparent); }
+.tokens-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); margin-bottom: 16px; }
+.tokens-stats { display: flex; align-items: baseline; gap: 7px; }
+.tokens-count { color: var(--ink-max); font-family: var(--font-display); font-size: clamp(2.4rem, 5vw, 4.4rem); font-weight: var(--weight-semibold); letter-spacing: -.08em; line-height: .82; }
+.tokens-label { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; }
+.tokens-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.tokens-list { display: flex; flex-direction: column; gap: 10px; }
+.token-card { position: relative; padding: 14px 15px; overflow: hidden; border: 1px solid var(--line-faint); border-radius: var(--r-lg); background: var(--surface-raised); transition: border-color var(--transition-fast), transform var(--transition-bounce), box-shadow var(--transition-bounce); }
+.token-card::before { position: absolute; top: 0; right: 0; left: 0; height: 2px; content: ''; background: linear-gradient(90deg, var(--signal-deep), transparent 62%); }
+.token-card:hover { border-color: var(--line); box-shadow: var(--lift-2); transform: translateY(-2px); }
+.token-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: 8px; }
+.token-name { color: var(--ink-strong); font-size: var(--fn-sm); font-weight: var(--weight-semibold); }
+.token-quota { display: inline-flex; align-items: center; gap: 7px; }
+.quota-used { color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; }
+.token-models { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 9px; }
+.token-key-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding-top: 10px; border-top: 1px solid var(--line-faint); }
+.token-key { min-width: 0; overflow: hidden; color: var(--signal-deep); font-family: var(--font-mono); font-size: var(--fn-xs); text-overflow: ellipsis; white-space: nowrap; }
+.token-actions { display: flex; flex: 0 0 auto; gap: 2px; }
+.tokens-empty { display: flex; min-height: 250px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: var(--s8); border: 1px dashed var(--line); color: var(--ink-faint); background: var(--surface-inset); }
+.empty-icon { color: var(--signal-deep); }
+.empty-text { color: var(--ink-strong); font-size: var(--fn-sm); font-weight: var(--weight-semibold); }
+.empty-hint { color: var(--ink-faint); font-size: var(--fn-xs); }
+.token-form { display: flex; flex-direction: column; gap: 16px; }
+.form-item { display: flex; flex-direction: column; gap: 7px; }
+.form-label { color: var(--ink-muted); font-size: var(--fn-xs); font-weight: var(--weight-semibold); }
+.required { margin-left: 2px; color: var(--bad); }
+.drawer-footer { display: flex; justify-content: flex-end; gap: var(--s2); }
+@media (max-width: 560px) {
+  .modal-header, .modal-footer, .modal-body { padding-inline: 16px; }
+  .tokens-toolbar { align-items: stretch; flex-direction: column; }
+  .tokens-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .token-header, .token-key-row { align-items: flex-start; flex-direction: column; }
+  .token-actions { align-self: stretch; justify-content: flex-end; }
+  .modal-status { display: none; }
 }
-
-.tokens-modal { display: flex; flex-direction: column; min-width: 0; }
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
-  gap: var(--spacing-3);
-}
-
-.modal-title-group {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.modal-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-color-light);
-  color: var(--primary-color);
-  display: grid;
-  place-items: center;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.modal-subtitle {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.modal-body {
-  padding: var(--spacing-4);
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-/* Tokens */
-.tokens-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-3);
-}
-
-.tokens-stats {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.tokens-count {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.tokens-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.tokens-actions {
-  display: flex;
-  gap: var(--spacing-2);
-}
-
-.tokens-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.token-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
-  transition: border-color var(--transition-fast);
-}
-
-.token-card:hover {
-  border-color: var(--border-color);
-}
-
-.token-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-2);
-  margin-bottom: 6px;
-}
-
-.token-name {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-}
-
-.token-quota {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.quota-used {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-.token-models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 6px;
-}
-
-.token-key-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding-top: 6px;
-  border-top: 1px solid var(--border-color-light);
-}
-
-.token-key {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.token-actions {
-  display: flex;
-  gap: 2px;
-}
-
-.tokens-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--spacing-10);
-  gap: var(--spacing-2);
-  color: var(--text-tertiary);
-}
-
-.empty-icon {
-  color: var(--text-quaternary);
-}
-
-.empty-text {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.empty-hint {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-/* Drawer form */
-.token-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-label {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-}
-
-.required {
-  color: var(--error-color);
-  margin-left: 2px;
-}
-
-.drawer-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-2);
-}
-
 </style>

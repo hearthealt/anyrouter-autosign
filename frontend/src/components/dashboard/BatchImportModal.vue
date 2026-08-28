@@ -1,8 +1,9 @@
 <template>
-  <UiModal v-model:show="visible" :width="860" :mask-closable="false">
+  <UiModal v-model:show="visible" bare :width="860" :mask-closable="false">
     <div class="batch-import-modal">
       <div class="modal-head">
         <div>
+          <span class="modal-code">BATCH INGEST / PIPELINE</span>
           <h3>批量导入账号</h3>
           <p>支持粘贴 JSON 或上传 CSV，逐条校验并返回每条结果</p>
         </div>
@@ -134,6 +135,7 @@
       </div>
 
       <div class="modal-foot">
+        <span class="modal-status"><i></i> VALIDATION ENGINE READY</span>
         <UiButton @click="close">关闭</UiButton>
         <UiButton type="primary" :loading="importing" @click="handleSubmit">
           开始导入
@@ -537,248 +539,49 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped>
-.batch-import-modal { display: flex; flex-direction: column; min-width: 0; }
-
-.modal-head,
-.modal-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-}
-
-.modal-head {
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.modal-head h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-}
-
-.modal-head p {
-  margin: 2px 0 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.modal-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-  padding: var(--spacing-4);
-  max-height: 78vh;
-  overflow-y: auto;
-}
-
-.modal-foot {
-  justify-content: flex-end;
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.hint {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-}
-
-.hint code,
-.panel-headline code,
-.upload-desc code {
-  font-family: var(--font-mono);
-}
-
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-3);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field label {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-}
-
-.import-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.panel-headline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.upload-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-}
-
-.upload-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.upload-title {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.upload-desc {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-}
-
-.file-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-2);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-2);
-}
-
-.summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--spacing-3);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-}
-
-.summary-card strong {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.summary-card.success strong {
-  color: var(--success-color);
-}
-
-.summary-card.error strong {
-  color: var(--error-color);
-}
-
-.summary-label {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
-.result-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.result-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--spacing-3);
-  align-items: center;
-  padding: var(--spacing-3);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-}
-
-.result-item.success {
-  border-color: rgba(22, 163, 74, 0.22);
-}
-
-.result-item.error {
-  border-color: rgba(220, 38, 38, 0.22);
-}
-
-.result-main {
-  min-width: 0;
-}
-
-.result-head {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
-}
-
-.result-index {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.result-username {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.result-message {
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  word-break: break-word;
-}
-
-.result-side {
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-
+.batch-import-modal { display: flex; width: 100%; min-width: 0; min-height: 0; max-height: inherit; flex-direction: column; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface-overlay); box-shadow: var(--lift-4); color: var(--ink-strong); }
+.modal-head, .modal-foot { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--s4); padding: 16px 20px; }
+.modal-head { border-bottom: 1px solid var(--line-faint); background: linear-gradient(to right, var(--grid-line) 1px, transparent 1px), var(--surface-inset); background-size: 18px 18px; }
+.modal-head h3 { margin: 5px 0 0; color: var(--ink-max); font-size: var(--fn-lg); font-weight: var(--weight-semibold); }
+.modal-head p { margin: 4px 0 0; color: var(--ink-muted); font-size: var(--fn-xs); }
+.modal-code, .modal-status { display: block; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: var(--weight-semibold); letter-spacing: .1em; text-transform: uppercase; }
+.modal-body { display: flex; flex: 1; min-width: 0; min-height: 0; max-height: none; flex-direction: column; gap: 16px; padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
+.modal-foot { justify-content: flex-end; border-top: 1px solid var(--line-faint); background: var(--surface-inset); }
+.modal-status { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: var(--ok); }
+.modal-status i { width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px color-mix(in srgb, var(--ok) 55%, transparent); }
+.hint { display: flex; align-items: flex-start; gap: var(--s2); padding: 11px 13px; border: 1px solid var(--line-faint); border-left: 2px solid var(--signal-deep); border-radius: var(--r-md); background: var(--surface-inset); color: var(--ink-muted); font-size: var(--fn-xs); line-height: 1.6; }
+.hint svg { margin-top: 2px; flex: 0 0 auto; color: var(--signal-deep); }
+.hint code, .panel-headline code, .upload-desc code { font-family: var(--font-mono); color: var(--signal-deep); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 7px; }
+.field label { color: var(--ink-muted); font-size: var(--fn-xs); font-weight: var(--weight-semibold); }
+.import-panel { display: flex; flex-direction: column; gap: 13px; }
+.panel-headline { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); color: var(--ink-muted); font-size: var(--fn-xs); }
+.upload-card { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 15px; border: 1px solid var(--line-faint); border-radius: var(--r-lg); background: var(--surface-inset); }
+.upload-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.upload-title { color: var(--ink-strong); font-size: var(--fn-sm); font-weight: var(--weight-semibold); }
+.upload-desc { color: var(--ink-muted); font-size: var(--fn-xs); line-height: 1.6; overflow-wrap: anywhere; }
+.file-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; }
+.summary-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.summary-card { display: flex; min-height: 76px; flex-direction: column; justify-content: center; gap: 6px; padding: 12px 14px; border: 1px solid var(--line-faint); border-top: 2px solid var(--line); background: var(--surface-inset); }
+.summary-card.success { border-top-color: var(--ok); }
+.summary-card.error { border-top-color: var(--bad); }
+.summary-label { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; }
+.summary-card strong { color: var(--ink-max); font-family: var(--font-display); font-size: var(--fn-2xl); line-height: 1; }
+.result-list { display: flex; flex-direction: column; border: 1px solid var(--line-faint); }
+.result-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s4); padding: 13px 15px; border-bottom: 1px solid var(--line-faint); border-left: 2px solid var(--line); background: var(--surface-raised); }
+.result-item:last-child { border-bottom: 0; }
+.result-item.success { border-left-color: var(--ok); }
+.result-item.error { border-left-color: var(--bad); }
+.result-main { min-width: 0; }
+.result-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.result-index, .result-side { color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; }
+.result-username { color: var(--ink-strong); font-size: var(--fn-sm); font-weight: var(--weight-semibold); }
+.result-message { margin-top: 6px; color: var(--ink-muted); font-size: var(--fn-xs); line-height: 1.55; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
-  .field-grid,
-  .summary-row {
-    grid-template-columns: 1fr;
-  }
-
-  .upload-card,
-  .result-item {
-    grid-template-columns: 1fr;
-  }
-
-  .upload-card {
-    align-items: flex-start;
-  }
+  .field-grid, .summary-row { grid-template-columns: 1fr; }
+  .upload-card, .result-item { align-items: stretch; flex-direction: column; }
+  .modal-head, .modal-foot, .modal-body { padding-inline: 16px; }
+  .modal-status { display: none; }
 }
 </style>

@@ -1,36 +1,34 @@
 <template>
-  <div class="card settings-panel">
-    <UiLoading :show="loading">
-      <div class="channel-header">
-        <div class="channel-header-info">
-          <div class="channel-header-title">推送渠道</div>
-          <div class="channel-header-desc">配置定时签到汇总与健康告警通知方式，支持多种推送渠道</div>
+  <UiLoading :show="loading">
+    <div class="settings-pane">
+      <div class="pane-head">
+        <div class="pane-heading">
+          <div class="pane-title"><Bell :size="15" />推送渠道</div>
+          <div class="pane-desc">配置定时签到汇总与健康告警通知方式，支持多种推送渠道</div>
         </div>
-        <UiButton type="primary" @click="showAddChannelModal">
-          <template #icon><Plus /></template>
-          添加渠道
-        </UiButton>
+        <div class="pane-actions">
+          <UiButton type="primary" size="small" @click="showAddChannelModal">
+            <template #icon><Plus /></template>
+            添加渠道
+          </UiButton>
+        </div>
       </div>
 
-      <UiDivider style="margin: 16px 0;" />
-
       <div v-if="channels.length > 0" class="channel-grid">
-        <div v-for="channel in channels" :key="channel.id" class="channel-card">
-          <div class="channel-card-header">
-            <div class="channel-icon" :class="channel.type">
-              <component :is="getChannelIcon(channel.type)" :size="20" />
+        <article v-for="channel in channels" :key="channel.id" class="channel-card">
+          <header class="channel-card-head">
+            <span class="channel-icon" :class="channel.type">
+              <component :is="getChannelIcon(channel.type)" :size="16" />
+            </span>
+            <div class="channel-card-heading">
+              <span class="channel-name">{{ channel.name }}</span>
+              <span class="channel-type-label">{{ getChannelTypeName(channel.type) }}</span>
             </div>
-            <div class="channel-status">
-              <UiTag :type="channel.is_enabled ? 'success' : 'default'" size="small" :bordered="false">
-                {{ channel.is_enabled ? '已启用' : '已禁用' }}
-              </UiTag>
-            </div>
-          </div>
-          <div class="channel-card-body">
-            <div class="channel-name">{{ channel.name }}</div>
-            <div class="channel-type-label">{{ getChannelTypeName(channel.type) }}</div>
-          </div>
-          <div class="channel-card-footer">
+            <span class="channel-state" :class="channel.is_enabled ? 'is-on' : 'is-off'">
+              {{ channel.is_enabled ? '已启用' : '已禁用' }}
+            </span>
+          </header>
+          <footer class="channel-card-foot">
             <UiButton size="small" quaternary @click="testChannel(channel)" :loading="testingId === channel.id">
               <template #icon><Send /></template>
               测试
@@ -48,134 +46,140 @@
               </template>
               确定删除此渠道？
             </UiConfirm>
-          </div>
-        </div>
+          </footer>
+        </article>
       </div>
 
       <div v-else class="empty-state">
-        <div class="empty-icon">
-          <Bell :size="48" />
-        </div>
+        <Bell :size="40" class="empty-icon" />
         <div class="empty-title">暂无推送渠道</div>
         <div class="empty-desc">添加推送渠道后，定时任务结果将自动通知到您</div>
-        <UiButton type="primary" @click="showAddChannelModal" style="margin-top: 16px;">
+        <UiButton type="primary" size="small" @click="showAddChannelModal">
           <template #icon><Plus /></template>
           添加第一个渠道
         </UiButton>
       </div>
-    </UiLoading>
-  </div>
+    </div>
+  </UiLoading>
 
-  <UiModal v-model:show="showChannelModal" :mask-closable="false">
+  <UiModal v-model:show="showChannelModal" bare :width="480" :mask-closable="false">
     <div class="modal-container">
       <div class="modal-header">
         <h3>{{ editingChannel ? '编辑渠道' : '添加渠道' }}</h3>
         <UiButton text @click="showChannelModal = false">
-          <X :size="20" />
+          <X :size="18" />
         </UiButton>
       </div>
       <div class="modal-body">
-        <div class="form-item">
-          <label>渠道名称</label>
-          <UiInput v-model:value="channelForm.name" placeholder="给渠道起个名字" />
+        <div class="modal-grid">
+          <div class="form-item">
+            <label>渠道名称</label>
+            <UiInput v-model:value="channelForm.name" size="small" placeholder="给渠道起个名字" />
+          </div>
+          <div class="form-item">
+            <label>渠道类型</label>
+            <UiSelect v-model:value="channelForm.channel_type" :options="channelTypeOptions" size="small" :disabled="!!editingChannel" />
+          </div>
+          <div class="form-item form-item--row">
+            <label>启用状态</label>
+            <UiSwitch v-model:value="channelForm.is_enabled" size="small" />
+          </div>
         </div>
-        <div class="form-item">
-          <label>渠道类型</label>
-          <UiSelect v-model:value="channelForm.channel_type" :options="channelTypeOptions" :disabled="!!editingChannel" />
+
+        <div class="modal-grid modal-grid--config">
+          <div class="pane-section-title">渠道配置</div>
+
+          <template v-if="channelForm.channel_type === 'pushplus'">
+            <div class="form-item">
+              <label>Token</label>
+              <UiInput v-model:value="channelForm.config.token" size="small" placeholder="PushPlus Token" />
+            </div>
+          </template>
+
+          <template v-if="channelForm.channel_type === 'wechat_mp'">
+            <div class="form-item">
+              <label>AppID</label>
+              <UiInput v-model:value="channelForm.config.app_id" size="small" placeholder="公众号 AppID" />
+            </div>
+            <div class="form-item">
+              <label>AppSecret</label>
+              <UiInput v-model:value="channelForm.config.app_secret" type="password" show-password-on="click" size="small" placeholder="公众号 AppSecret" />
+            </div>
+            <div class="form-item">
+              <label>模板消息 ID</label>
+              <UiInput v-model:value="channelForm.config.template_id" size="small" placeholder="模板消息 ID" />
+            </div>
+            <div class="form-item">
+              <label>接收者 OpenID</label>
+              <UiInput v-model:value="channelForm.config.openid" size="small" placeholder="接收消息的用户 OpenID" />
+            </div>
+          </template>
+
+          <template v-if="channelForm.channel_type === 'wechat_work'">
+            <div class="form-item">
+              <label>Webhook URL</label>
+              <UiInput v-model:value="channelForm.config.webhook_url" size="small" placeholder="企业微信机器人 Webhook" />
+            </div>
+          </template>
+
+          <template v-if="channelForm.channel_type === 'dingtalk'">
+            <div class="form-item">
+              <label>Webhook URL</label>
+              <UiInput v-model:value="channelForm.config.webhook_url" size="small" placeholder="钉钉机器人 Webhook" />
+            </div>
+            <div class="form-item">
+              <label>签名密钥</label>
+              <UiInput v-model:value="channelForm.config.secret" size="small" placeholder="可选" />
+            </div>
+          </template>
+
+          <template v-if="channelForm.channel_type === 'feishu'">
+            <div class="form-item">
+              <label>Webhook URL</label>
+              <UiInput v-model:value="channelForm.config.webhook_url" size="small" placeholder="飞书机器人 Webhook" />
+            </div>
+            <div class="form-item">
+              <label>签名密钥</label>
+              <UiInput v-model:value="channelForm.config.secret" size="small" placeholder="可选" />
+            </div>
+          </template>
+
+          <template v-if="channelForm.channel_type === 'email'">
+            <div class="form-row">
+              <div class="form-item">
+                <label>SMTP 服务器</label>
+                <UiInput v-model:value="channelForm.config.smtp_host" size="small" placeholder="如 smtp.qq.com" />
+              </div>
+              <div class="form-item form-item--narrow">
+                <label>端口</label>
+                <UiNumberInput v-model:value="channelForm.config.smtp_port" :min="1" :max="65535" size="small" style="width: 100%;" />
+              </div>
+            </div>
+            <div class="form-item">
+              <label>发件邮箱</label>
+              <UiInput v-model:value="channelForm.config.username" size="small" placeholder="发件人邮箱" />
+            </div>
+            <div class="form-item">
+              <label>邮箱密码</label>
+              <UiInput v-model:value="channelForm.config.password" type="password" show-password-on="click" size="small" placeholder="密码或授权码" />
+            </div>
+            <div class="form-item form-item--row">
+              <label>使用 SSL</label>
+              <UiSwitch v-model:value="channelForm.config.use_ssl" size="small" />
+            </div>
+          </template>
         </div>
-        <div class="form-item">
-          <label>启用状态</label>
-          <UiSwitch v-model:value="channelForm.is_enabled" />
-        </div>
-
-        <template v-if="channelForm.channel_type === 'pushplus'">
-          <div class="form-item">
-            <label>Token</label>
-            <UiInput v-model:value="channelForm.config.token" placeholder="PushPlus Token" />
-          </div>
-        </template>
-
-        <template v-if="channelForm.channel_type === 'wechat_mp'">
-          <div class="form-item">
-            <label>AppID</label>
-            <UiInput v-model:value="channelForm.config.app_id" placeholder="公众号 AppID" />
-          </div>
-          <div class="form-item">
-            <label>AppSecret</label>
-            <UiInput v-model:value="channelForm.config.app_secret" type="password" placeholder="公众号 AppSecret" />
-          </div>
-          <div class="form-item">
-            <label>模板消息 ID</label>
-            <UiInput v-model:value="channelForm.config.template_id" placeholder="模板消息 ID" />
-          </div>
-          <div class="form-item">
-            <label>接收者 OpenID</label>
-            <UiInput v-model:value="channelForm.config.openid" placeholder="接收消息的用户 OpenID" />
-          </div>
-        </template>
-
-        <template v-if="channelForm.channel_type === 'wechat_work'">
-          <div class="form-item">
-            <label>Webhook URL</label>
-            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="企业微信机器人 Webhook" />
-          </div>
-        </template>
-
-        <template v-if="channelForm.channel_type === 'dingtalk'">
-          <div class="form-item">
-            <label>Webhook URL</label>
-            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="钉钉机器人 Webhook" />
-          </div>
-          <div class="form-item">
-            <label>签名密钥</label>
-            <UiInput v-model:value="channelForm.config.secret" placeholder="可选" />
-          </div>
-        </template>
-
-        <template v-if="channelForm.channel_type === 'feishu'">
-          <div class="form-item">
-            <label>Webhook URL</label>
-            <UiInput v-model:value="channelForm.config.webhook_url" placeholder="飞书机器人 Webhook" />
-          </div>
-          <div class="form-item">
-            <label>签名密钥</label>
-            <UiInput v-model:value="channelForm.config.secret" placeholder="可选" />
-          </div>
-        </template>
-
-        <template v-if="channelForm.channel_type === 'email'">
-          <div class="form-item">
-            <label>SMTP 服务器</label>
-            <UiInput v-model:value="channelForm.config.smtp_host" placeholder="如 smtp.qq.com" />
-          </div>
-          <div class="form-item">
-            <label>SMTP 端口</label>
-            <UiNumberInput v-model:value="channelForm.config.smtp_port" :min="1" :max="65535" style="width: 100%;" />
-          </div>
-          <div class="form-item">
-            <label>发件邮箱</label>
-            <UiInput v-model:value="channelForm.config.username" placeholder="发件人邮箱" />
-          </div>
-          <div class="form-item">
-            <label>邮箱密码</label>
-            <UiInput v-model:value="channelForm.config.password" type="password" placeholder="密码或授权码" />
-          </div>
-          <div class="form-item">
-            <label>使用 SSL</label>
-            <UiSwitch v-model:value="channelForm.config.use_ssl" />
-          </div>
-        </template>
       </div>
       <div class="modal-footer">
-        <UiButton @click="showChannelModal = false">取消</UiButton>
-        <UiButton type="primary" @click="saveChannel" :loading="savingChannel">保存</UiButton>
+        <UiButton size="small" @click="showChannelModal = false">取消</UiButton>
+        <UiButton size="small" type="primary" @click="saveChannel" :loading="savingChannel">保存</UiButton>
       </div>
     </div>
   </UiModal>
 </template>
 
 <script setup lang="ts">
-import { UiButton, UiConfirm, UiDivider, UiInput, UiLoading, UiModal, UiNumberInput, UiSelect, UiSwitch, UiTag } from '../../ui'
+import { UiButton, UiConfirm, UiInput, UiLoading, UiModal, UiNumberInput, UiSelect, UiSwitch } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
 import type { Component } from 'vue'
 import { Bell, Mail, MessageCircle, MessageSquare, Pencil, Plus, Send, Trash2, X } from 'lucide-vue-next'
@@ -302,134 +306,194 @@ onMounted(load)
 </script>
 
 <style scoped>
-.settings-panel :deep(.n-card__content) { padding: 0; }
-.settings-panel :deep(.n-card) { background: transparent; border: none; box-shadow: none; }
-
-.channel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-3);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.channel-header-info { flex: 1; }
-.channel-header-title {
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-.channel-header-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
-
 .channel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: var(--s3);
 }
 
 .channel-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
-  transition: border-color var(--transition-fast);
-}
-.channel-card:hover { border-color: var(--border-color); }
-
-.channel-card-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-raised);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.channel-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--lift-2);
+}
+
+.channel-card-head {
+  display: flex;
   align-items: center;
-  margin-bottom: var(--spacing-2);
+  gap: 10px;
+  padding: 12px 13px;
 }
 
 .channel-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  background: var(--primary-color-light);
-  color: var(--primary-color);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: var(--signal-wash);
+  color: var(--signal-deep);
 }
-.channel-icon.pushplus { background: var(--primary-color-light); color: var(--primary-color); }
+
 .channel-icon.wechat_mp,
-.channel-icon.wechat_work { background: var(--success-color-light); color: var(--success-color); }
-.channel-icon.dingtalk { background: var(--info-color-light); color: var(--info-color); }
-.channel-icon.feishu { background: var(--purple-light); color: var(--purple-color); }
-.channel-icon.email { background: var(--error-color-light); color: var(--error-color); }
+.channel-icon.wechat_work { background: var(--ok-wash); color: var(--ok); }
+.channel-icon.dingtalk { background: var(--info-wash); color: var(--info); }
+.channel-icon.feishu { background: var(--warn-wash); color: var(--warn); }
+.channel-icon.email { background: var(--bad-wash); color: var(--bad); }
 
-.channel-card-body { margin-bottom: var(--spacing-2); }
-.channel-name {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-  margin-bottom: 2px;
+.channel-card-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
-.channel-type-label { font-size: var(--text-xs); color: var(--text-tertiary); }
 
-.channel-card-footer {
+.channel-name {
+  overflow: hidden;
+  color: var(--ink-max);
+  font-size: var(--fn-md);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-type-label {
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
+}
+
+/* 状态用一个小圆点 + 文字，比塞一枚 tag 更安静 */
+.channel-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  font-size: var(--fn-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-wide);
+}
+
+.channel-state::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-full);
+}
+
+.channel-state.is-on { color: var(--ok); }
+.channel-state.is-on::before { background: var(--ok); box-shadow: 0 0 7px var(--ok); }
+.channel-state.is-off { color: var(--ink-ghost); }
+.channel-state.is-off::before { background: var(--ink-ghost); }
+
+.channel-card-foot {
   display: flex;
   gap: 2px;
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--border-color-light);
+  padding: 6px;
+  border-top: 1px solid var(--line-faint);
+  background: var(--surface-inset);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
-.channel-card-footer .n-button { flex: 1; }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--spacing-12) var(--spacing-5);
-  gap: var(--spacing-2);
-}
-.empty-icon { margin-bottom: var(--spacing-2); }
-.empty-title { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary); }
-.empty-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
+.channel-card-foot > * { flex: 1; }
+.channel-card-foot :deep(.ui-btn) { width: 100%; }
 
-.delete-btn:hover { color: var(--error-color) !important; }
+.empty-icon { color: var(--ink-ghost); }
+.delete-btn:hover { color: var(--bad); }
+
+/* ── 渠道编辑弹窗 */
 
 .modal-container {
-  width: min(480px, calc(100vw - 24px));
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface-overlay);
+  box-shadow: var(--lift-4);
 }
+
 .modal-header {
   display: flex;
-  justify-content: space-between;
+  flex: 0 0 auto;
   align-items: center;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
+  justify-content: space-between;
+  padding: 14px var(--s5);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-inset);
 }
-.modal-header h3 { margin: 0; font-size: var(--text-md); font-weight: var(--font-semibold); }
-.modal-body { padding: var(--spacing-4); max-height: 60vh; overflow-y: auto; }
 
-.form-item { margin-bottom: var(--spacing-3); }
-.form-item:last-child { margin-bottom: 0; }
-.form-item label {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-  margin-bottom: 6px;
+.modal-header h3 {
+  margin: 0;
+  font-size: var(--fn-lg);
+  font-weight: var(--weight-semibold);
 }
+
+.modal-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s5);
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  padding: var(--s5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.modal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.form-item { margin-bottom: 0; }
+
+.form-item--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.form-item--row label { margin-bottom: 0; }
+
+.form-row {
+  display: flex;
+  gap: var(--s3);
+}
+
+.form-row > .form-item { flex: 1; min-width: 0; }
+.form-row > .form-item--narrow { flex: 0 0 96px; }
 
 .modal-footer {
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
+  gap: var(--s2);
+  padding: 12px var(--s5);
+  border-top: 1px solid var(--line-faint);
+  background: var(--surface-inset);
 }
 
-@media (max-width: 768px) {
-  .channel-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-2); }
-  .channel-grid { grid-template-columns: 1fr; }
+@media (max-width: 560px) {
+  .form-row { flex-direction: column; }
+  .form-row > .form-item--narrow { flex: 1; }
 }
 </style>

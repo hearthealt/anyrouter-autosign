@@ -1,88 +1,86 @@
 <template>
-  <div class="card settings-panel">
-    <UiLoading :show="loading">
-      <div class="backup-section">
-        <div class="backup-header">
-          <div class="backup-header-info">
-            <div class="backup-header-title">数据备份</div>
-            <div class="backup-header-desc">导出或导入系统数据，用于迁移或恢复</div>
-          </div>
+  <UiLoading :show="loading">
+    <div class="settings-pane">
+      <div class="pane-head">
+        <div class="pane-heading">
+          <div class="pane-title"><DatabaseBackup :size="15" />数据备份</div>
+          <div class="pane-desc">导出或导入系统数据，用于迁移或恢复</div>
         </div>
+      </div>
 
-        <UiDivider style="margin: 16px 0;" />
-
-        <div class="backup-stats">
-          <div class="stat-item">
-            <div class="stat-value">{{ backupInfo.account_count || 0 }}</div>
-            <div class="stat-label">账号数量</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ backupInfo.sign_log_count || 0 }}</div>
-            <div class="stat-label">签到日志</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ backupInfo.notify_channel_count || 0 }}</div>
-            <div class="stat-label">推送渠道</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value">{{ backupInfo.setting_count || 0 }}</div>
-            <div class="stat-label">配置项</div>
-          </div>
+      <div class="backup-stats">
+        <div class="stat-item">
+          <div class="stat-value tabular">{{ backupInfo.account_count || 0 }}</div>
+          <div class="stat-label">账号数量</div>
         </div>
+        <div class="stat-item">
+          <div class="stat-value tabular">{{ backupInfo.sign_log_count || 0 }}</div>
+          <div class="stat-label">签到日志</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value tabular">{{ backupInfo.notify_channel_count || 0 }}</div>
+          <div class="stat-label">推送渠道</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value tabular">{{ backupInfo.setting_count || 0 }}</div>
+          <div class="stat-label">配置项</div>
+        </div>
+      </div>
 
-        <UiDivider style="margin: 16px 0;" />
-
-        <div class="backup-action-section">
-          <div class="action-info">
-            <div class="action-title">导出备份</div>
-            <div class="action-desc">将账号、设置、推送渠道等数据导出为 JSON 文件</div>
-          </div>
+      <div class="backup-actions">
+        <section class="backup-action">
+          <header class="action-head">
+            <span class="action-icon"><Download :size="16" /></span>
+            <div class="action-heading">
+              <span class="action-title">导出备份</span>
+              <span class="action-desc">将账号、设置、推送渠道等数据导出为 JSON 文件</span>
+            </div>
+          </header>
           <div class="action-controls">
-            <UiCheckbox v-model:checked="exportIncludeLogs">包含签到日志（最近1000条）</UiCheckbox>
-            <UiCheckbox v-model:checked="exportIncludeCredentials">
-              包含敏感凭证
-            </UiCheckbox>
-            <UiButton type="primary" @click="handleExport" :loading="exporting">
+            <UiCheckbox v-model:checked="exportIncludeLogs" size="small">包含签到日志（最近 1000 条）</UiCheckbox>
+            <UiCheckbox v-model:checked="exportIncludeCredentials" size="small">包含敏感凭证</UiCheckbox>
+            <UiButton type="primary" size="small" @click="handleExport" :loading="exporting">
               <template #icon><Download /></template>
               导出备份
             </UiButton>
           </div>
-        </div>
+        </section>
 
-        <UiDivider style="margin: 16px 0;" />
-
-        <div class="backup-action-section">
-          <div class="action-info">
-            <div class="action-title">导入备份</div>
-            <div class="action-desc">从备份文件恢复数据（支持 JSON 格式）</div>
-          </div>
+        <section class="backup-action">
+          <header class="action-head">
+            <span class="action-icon"><CloudUpload :size="16" /></span>
+            <div class="action-heading">
+              <span class="action-title">导入备份</span>
+              <span class="action-desc">从备份文件恢复数据（支持 JSON 格式）</span>
+            </div>
+          </header>
           <div class="action-controls">
-            <UiCheckbox v-model:checked="importOverwrite">覆盖现有数据</UiCheckbox>
+            <UiCheckbox v-model:checked="importOverwrite" size="small">覆盖现有数据</UiCheckbox>
             <UiFileDrop accept=".json" @select="handleImportFile">
-              <UiButton :loading="importing">
+              <UiButton size="small" :loading="importing">
                 <template #icon><CloudUpload :size="14" /></template>
                 选择文件导入
               </UiButton>
             </UiFileDrop>
           </div>
-        </div>
-
-        <div class="backup-tip">
-          <Info />
-          <span>
-            默认备份不包含 Cookie、Token、登录密码、代理地址和推送渠道配置；
-            勾选“包含敏感凭证”后可完整迁移，但请妥善保管导出的文件。
-          </span>
-        </div>
+        </section>
       </div>
-    </UiLoading>
-  </div>
+
+      <div class="pane-note is-warn">
+        <Info />
+        <span>
+          默认备份不包含 Cookie、Token、登录密码、代理地址和推送渠道配置；
+          勾选「包含敏感凭证」后可完整迁移，但请妥善保管导出的文件。
+        </span>
+      </div>
+    </div>
+  </UiLoading>
 </template>
 
 <script setup lang="ts">
-import { UiFileDrop, UiButton, UiCheckbox, UiDivider, UiLoading } from '../../ui'
+import { UiFileDrop, UiButton, UiCheckbox, UiLoading } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
-import { CloudUpload, Download, Info } from 'lucide-vue-next'
+import { CloudUpload, DatabaseBackup, Download, Info } from 'lucide-vue-next'
 import { backupApi } from '../../api'
 import { getToken } from '../../utils/auth'
 import { apiError } from '../../utils/apiError'
@@ -169,105 +167,99 @@ onMounted(load)
 </script>
 
 <style scoped>
-.settings-panel :deep(.n-card__content) { padding: 0; }
-.settings-panel :deep(.n-card) { background: transparent; border: none; box-shadow: none; }
-
-.backup-section { padding: 0; }
-
-.backup-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-4);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-.backup-header-info { flex: 1; }
-.backup-header-title {
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-.backup-header-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
-
 .backup-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s3);
 }
-.backup-stats .stat-item {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
+
+.stat-item {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-inset);
 }
-.backup-stats .stat-value {
+
+.stat-value {
+  color: var(--ink-max);
   font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+  font-size: var(--fn-2xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-tight);
   line-height: 1;
 }
-.backup-stats .stat-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
+
+.stat-label {
+  color: var(--ink-faint);
+  font-size: var(--fn-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.backup-action-section {
+.backup-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--s3);
+}
+
+.backup-action {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-3) 0;
-  border-bottom: 1px solid var(--border-color-light);
+  flex-direction: column;
+  gap: var(--s3);
+  padding: 14px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-raised);
 }
-.backup-action-section:last-child { border-bottom: none; }
 
-.action-info { flex: 1; }
+.action-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.action-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: var(--signal-wash);
+  color: var(--signal-deep);
+}
+
+.action-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .action-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-  margin-bottom: 2px;
+  color: var(--ink-max);
+  font-size: var(--fn-md);
+  font-weight: var(--weight-semibold);
 }
-.action-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
 
+.action-desc {
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
+  line-height: 1.5;
+}
+
+/* 勾选项竖排、按钮压在底部：两张卡的按钮因此永远在同一条基线上 */
 .action-controls {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.backup-tip {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--text-xs);
-  color: var(--warning-color);
-  padding: var(--spacing-2) var(--spacing-3);
-  background: var(--warning-color-light);
-  border-radius: var(--radius-sm);
-  border-left: 2px solid var(--warning-color);
-  margin-top: var(--spacing-3);
-}
-
-@media (max-width: 900px) {
-  .backup-stats { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (max-width: 768px) {
-  .backup-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-2); }
-  .backup-action-section { flex-direction: column; align-items: flex-start; gap: var(--spacing-2); }
-  .action-controls { width: 100%; flex-direction: column; align-items: stretch; }
-}
-
-@media (max-width: 560px) {
-  .backup-stats { grid-template-columns: 1fr; }
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  margin-top: auto;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line-faint);
 }
 </style>

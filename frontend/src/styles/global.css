@@ -196,12 +196,270 @@
   background: var(--surface-raised);
 }
 
+/**
+ * 设置面板 —— /settings 各标签页共用的内容骨架。
+ *
+ * 标签页外层已经是一张卡（Settings.vue 的 .tab-panel），所以这里不再画边框，
+ * 只负责标题、工具条、分节的节奏。原先每个标签页各写一套
+ * .channel-header / .backup-header，间距和字号都对不齐，统一收到这里。
+ */
+.settings-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.pane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.pane-heading { min-width: 0; }
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-max);
+  font-size: var(--fn-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-tight);
+}
+
+.pane-title svg {
+  flex: 0 0 auto;
+  color: var(--signal-deep);
+}
+
+.pane-desc {
+  margin-top: 4px;
+  max-width: 640px;
+  color: var(--ink-muted);
+  font-size: var(--fn-xs);
+  line-height: var(--leading-loose);
+}
+
+.pane-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+/**
+ * 工具条 —— 筛选控件的底托。
+ * 取代原先「分隔线 → 控件 → 分隔线」的三明治：两条通栏横线把内容切碎，
+ * 一块浅色底反而更容易读出"这一排是检索区"。
+ * 配合 .filter-strip 使用即可继承筛选控件的弹性宽度系统。
+ */
+.pane-toolbar {
+  padding: 8px 10px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-md);
+  background: var(--surface-inset);
+}
+
+/** 分节：一个标签页里的次级标题。 */
+.pane-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.pane-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink-faint);
+  font-size: var(--fn-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+
+.pane-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-faint);
+}
+
+/** 说明条：面板底部的补充提示。 */
+.pane-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: 10px 12px;
+  border-left: 2px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-inset);
+  color: var(--ink-muted);
+  font-size: var(--fn-xs);
+  line-height: var(--leading-loose);
+}
+
+.pane-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+}
+
+.pane-note.is-warn {
+  border-left-color: var(--warn);
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+/**
+ * 页面工具条 —— 顶部 hero 移除后承载动作入口。
+ *
+ * 页面标题已经由外壳顶栏给出，这里只放读数和按钮，保持一行高度。
+ */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+}
+
+.page-toolbar__summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  min-width: 0;
+}
+
+.page-toolbar__meta {
+  min-width: 0;
+}
+
+.page-toolbar__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  color: var(--ink-strong);
+  font-size: var(--fn-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.page-toolbar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/**
+ * 筛选条 —— 页面顶部的检索区。
+ *
+ * 每个控件用 `flex: 1 1 <basis>` + `max-width` 而不是固定 width：
+ * 宽屏时停在 max-width 不会拉成一条长条，窄屏时先压缩到 basis 再换行，
+ * 换行后填满整行。按钮永远不参与伸缩。
+ */
 .filter-strip {
   display: flex;
   align-items: center;
   gap: var(--s2);
   flex-wrap: wrap;
+  min-width: 0;
 }
+
+.filter-strip > * { min-width: 0; }
+
+.filter-strip .filter-field {
+  flex: 1 1 150px;
+  max-width: 180px;
+}
+
+.filter-strip .filter-field--lg {
+  flex: 1 1 190px;
+  max-width: 240px;
+}
+
+.filter-strip .filter-search {
+  flex: 2 1 260px;
+  max-width: min(100%, 360px);
+}
+
+/* 兼容业务页已有命名，并统一交给筛选条的弹性宽度系统。 */
+.filter-strip .search-input {
+  flex: 2 1 260px;
+  width: auto;
+  min-width: 0;
+  max-width: min(100%, 360px);
+}
+
+.filter-strip .filter-item {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+  max-width: 200px;
+}
+
+/* 按钮、开关这类固定尺寸控件不跟着筛选框伸缩 */
+.filter-strip .ui-btn,
+.filter-strip > button {
+  flex: 0 0 auto;
+}
+
+/* 把动作推到筛选条右端；换行后回到行首 */
+.filter-strip .filter-spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.filter-strip .filter-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+/* 筛选条里的只读读数（总数、成功/失败计数） */
+.filter-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s3);
+  color: var(--ink-muted);
+  font-size: var(--fn-xs);
+}
+
+.filter-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.filter-meta strong {
+  color: var(--ink-max);
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-meta .success strong { color: var(--ok); }
+.filter-meta .error strong { color: var(--bad); }
 
 .data-surface {
   overflow: hidden;
@@ -402,6 +660,13 @@
 @media (max-width: 768px) {
   .workspace-toolbar { gap: var(--s2); }
 
+  .pane-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pane-actions { width: 100%; }
+
   .toolbar-summary,
   .toolbar-actions { width: 100%; }
 
@@ -420,4 +685,44 @@
   }
 
   .control-strip { padding: var(--s2); }
+}
+
+/* 窄屏：筛选控件两列铺满，避免出现半行留白或横向溢出 */
+@media (max-width: 700px) {
+  .filter-strip .filter-field,
+  .filter-strip .filter-field--lg {
+    flex: 1 1 calc(50% - var(--s2));
+    max-width: none;
+  }
+
+  .filter-strip .filter-search,
+  .filter-strip .search-input {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .filter-strip .filter-item {
+    flex: 1 1 calc(50% - var(--s2));
+    max-width: none;
+  }
+
+  .filter-strip .filter-spacer { display: none; }
+
+  .filter-strip .filter-actions {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .page-toolbar__actions { margin-left: 0; width: 100%; }
+}
+
+@media (max-width: 460px) {
+  .filter-strip .filter-field,
+  .filter-strip .filter-field--lg,
+  .filter-strip .filter-item {
+    flex: 1 1 100%;
+  }
+
+  .filter-strip .filter-actions .ui-btn { flex: 1 1 auto; justify-content: center; }
+  .page-toolbar__actions .ui-btn { flex: 1 1 auto; justify-content: center; }
 }

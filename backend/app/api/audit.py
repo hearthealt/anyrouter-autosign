@@ -5,14 +5,18 @@ import io
 import csv
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.audit_log import AuditLog, AuditAction, ACTION_NAMES
-from app.schemas import ApiResponse
+from app.models import User
+from app.schemas import ApiResponse, LogCleanupRequest
+from app.services.audit import log_action
+from app.services.log_cleanup import cleanup_audit_logs
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/audit", tags=["审计日志"])
 
@@ -114,6 +118,40 @@ def get_action_types():
         for action, name in ACTION_NAMES.items()
     ]
     return ApiResponse(success=True, data=actions)
+
+
+@router.post("/cleanup", response_model=ApiResponse)
+def cleanup_logs(
+    data: LogCleanupRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    清理审计日志
+
+    before_days 为空或 0 表示清空全部；否则只删除该天数之前的记录。
+    """
+    before_days = data.before_days
+    deleted = cleanup_audit_logs(db, before_days)
+
+    # 这条记录写在删除之后，因此不会被本次清理带走 —— 留下操作痕迹
+    log_action(
+        db=db,
+        action=AuditAction.AUDIT_LOG_CLEAR,
+        user_id=current_user.id,
+        username=current_user.username,
+        target_type="audit_log",
+        detail={"before_days": before_days, "deleted": deleted},
+        request=request
+    )
+
+    scope = f"{before_days} 天前" if before_days else "全部"
+    return ApiResponse(
+        success=True,
+        message=f"已清理{scope}审计日志，共 {deleted} 条",
+        data={"deleted": deleted}
+    )
 
 
 @router.get("/export")

@@ -1,143 +1,164 @@
 <template>
   <div class="statistics-page">
-    <div class="workspace-toolbar">
-      <div class="toolbar-summary">
-        <div class="toolbar-label">数据统计</div>
-        <div class="toolbar-stats">
-          <span class="toolbar-stat">本月签到 <strong>{{ overview.month_success || 0 }}/{{ overview.month_total || 0 }}</strong></span>
-          <span class="toolbar-stat success">成功率 <strong>{{ overview.month_success_rate || 0 }}%</strong></span>
+    <section class="page-toolbar statistics-toolbar" aria-label="统计操作">
+      <div class="page-toolbar__summary">
+        <span class="page-toolbar__label"><Activity :size="15" /> 数据统计</span>
+        <div class="filter-meta page-toolbar__meta">
+          <span>本月成功率 <strong>{{ overview.month_success_rate || 0 }}%</strong></span>
+          <span class="success">成功 <strong>{{ overview.month_success || 0 }}</strong></span>
+          <span>执行 <strong>{{ overview.month_total || 0 }}</strong></span>
         </div>
       </div>
-      <div class="toolbar-actions">
-        <UiButton size="small" :loading="loadingAccounts" @click="loadAccountStats">
+      <div class="page-toolbar__actions">
+        <UiButton size="small" type="primary" :loading="loadingAccounts" @click="loadAccountStats">
           <template #icon><RefreshCw :size="14" /></template>
-          刷新
+          同步数据
         </UiButton>
       </div>
-    </div>
+    </section>
 
-    <!-- 指标卡 -->
-    <div class="stat-row">
-      <div class="stat-card">
-        <div class="stat-label">本月签到</div>
-        <div class="stat-value">
-          {{ overview.month_success || 0 }}<span class="stat-sub">/{{ overview.month_total || 0 }}</span>
-        </div>
-        <div class="stat-foot">
-          <span class="tag success">{{ overview.month_success_rate || 0 }}% 成功率</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">本月奖励</div>
-        <div class="stat-value">{{ monthRewardDisplay }}</div>
-        <div class="stat-foot">
-          <span class="muted">本月累计获得</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">累计奖励</div>
-        <div class="stat-value">{{ totalRewardDisplay }}</div>
-        <div class="stat-foot">
-          <span class="muted">全部签到所得</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">总成功率</div>
-        <div class="stat-value">{{ overview.success_rate || 0 }}<span class="stat-sub">%</span></div>
-        <div class="stat-foot">
-          <span class="muted">历史所有记录</span>
-        </div>
-      </div>
-    </div>
+    <section class="metric-deck" aria-label="统计概要">
+      <article class="metric-card metric-card--signal">
+        <div class="metric-top"><span>01 / MONTH</span><TrendingUp :size="16" /></div>
+        <div class="metric-label">本月签到</div>
+        <div class="metric-value">{{ overview.month_success || 0 }}<small>/{{ overview.month_total || 0 }}</small></div>
+        <div class="metric-foot"><span class="metric-dot"></span>{{ overview.month_success_rate || 0 }}% 执行成功</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span>02 / REWARD</span><ArrowUpRight :size="16" /></div>
+        <div class="metric-label">本月奖励</div>
+        <div class="metric-value metric-value--reward">{{ monthRewardDisplay }}</div>
+        <div class="metric-foot">当前自然月累计回报</div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-top"><span>03 / LIFETIME</span><BarChart3 :size="16" /></div>
+        <div class="metric-label">累计奖励</div>
+        <div class="metric-value metric-value--reward">{{ totalRewardDisplay }}</div>
+        <div class="metric-foot">全部历史签到所得</div>
+      </article>
+      <article class="metric-card metric-card--dark">
+        <div class="metric-top"><span>04 / RELIABILITY</span><CircleGauge :size="16" /></div>
+        <div class="metric-label">总成功率</div>
+        <div class="metric-value">{{ overview.success_rate || 0 }}<small>%</small></div>
+        <div class="metric-foot">全量记录稳定性基线</div>
+      </article>
+    </section>
 
-    <!-- 图表 -->
-    <div class="charts-row">
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">签到趋势</div>
-          <div class="trend-controls">
-            <UiSegment v-model:value="dailyDays" size="small" :disabled="!!customRange" :options="[{ label: '7 天', value: 7 }, { label: '30 天', value: 30 }, { label: '60 天', value: 60 }]" />
-            <UiDateRange
-              v-model:value="customRange"
-              type="daterange"
-              size="small"
-              clearable
-              class="trend-range"
-              :shortcuts="rangeShortcuts"
-            />
+    <section class="charts-row">
+      <article class="instrument-panel instrument-panel--wide">
+        <header class="instrument-head">
+          <div class="instrument-identity">
+            <span class="instrument-code">FLOW / 01</span>
+            <div>
+              <h3>签到趋势</h3>
+              <p>成功、失败与奖励的时间序列</p>
+            </div>
           </div>
-        </div>
-        <div class="chart-body">
+          <div class="trend-controls">
+            <UiSegment v-model:value="dailyDays" size="small" :options="[{ label: '7 天', value: 7 }, { label: '30 天', value: 30 }, { label: '60 天', value: 60 }]" />
+          </div>
+        </header>
+        <div class="chart-body chart-body--primary">
+          <span class="chart-axis-label">EVENT DENSITY</span>
           <div ref="trendChartRef" class="echarts-container" v-show="displayDailyData.length > 0"></div>
           <div v-if="displayDailyData.length === 0" class="chart-empty">暂无签到数据</div>
         </div>
-      </div>
+      </article>
 
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">月度统计</div>
-        </div>
+      <article class="instrument-panel instrument-panel--compact">
+        <header class="instrument-head">
+          <div class="instrument-identity">
+            <span class="instrument-code">CYCLE / 02</span>
+            <div>
+              <h3>月度统计</h3>
+              <p>六个月执行周期对比</p>
+            </div>
+          </div>
+        </header>
         <div class="chart-body">
           <div ref="monthlyChartRef" class="echarts-container" v-show="monthlyData.length > 0"></div>
           <div v-if="monthlyData.length === 0" class="chart-empty">暂无月度数据</div>
         </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <!-- 日历 -->
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title">签到日历</div>
-        <div class="calendar-controls">
-          <UiButton size="tiny" quaternary @click="changeMonth(-1)">
-            <template #icon><ChevronLeft :size="14" /></template>
-          </UiButton>
-          <span class="current-month">{{ currentMonthDisplay }}</span>
-          <UiButton size="tiny" quaternary :disabled="isCurrentMonth" @click="changeMonth(1)">
-            <template #icon><ChevronRight :size="14" /></template>
-          </UiButton>
+    <section class="insight-grid">
+      <article class="instrument-panel calendar-panel">
+        <header class="instrument-head instrument-head--calendar">
+          <div class="instrument-identity">
+            <span class="instrument-code">MATRIX / 03</span>
+            <div>
+              <h3>签到热力矩阵</h3>
+              <p>按自然日观察执行完整度</p>
+            </div>
+          </div>
+          <div class="calendar-controls">
+            <UiButton size="tiny" quaternary aria-label="上一个月" @click="changeMonth(-1)">
+              <template #icon><ChevronLeft :size="14" /></template>
+            </UiButton>
+            <span class="current-month">{{ currentMonthDisplay }}</span>
+            <UiButton size="tiny" quaternary aria-label="下一个月" :disabled="isCurrentMonth" @click="changeMonth(1)">
+              <template #icon><ChevronRight :size="14" /></template>
+            </UiButton>
+          </div>
+        </header>
+        <div class="calendar-legend">
+          <span class="legend-item"><span class="legend-dot success"></span>全部成功</span>
+          <span class="legend-item"><span class="legend-dot warning"></span>部分成功</span>
+          <span class="legend-item"><span class="legend-dot error"></span>全部失败</span>
+          <span class="legend-item"><span class="legend-dot default"></span>无签到</span>
         </div>
-      </div>
-      <div class="calendar-legend">
-        <span class="legend-item"><span class="legend-dot success"></span>全部成功</span>
-        <span class="legend-item"><span class="legend-dot warning"></span>部分成功</span>
-        <span class="legend-item"><span class="legend-dot error"></span>全部失败</span>
-        <span class="legend-item"><span class="legend-dot default"></span>无签到</span>
-      </div>
-      <div class="calendar-body">
-        <div class="weekdays">
-          <div v-for="day in weekdays" :key="day" class="weekday">{{ day }}</div>
-        </div>
-        <div class="days-grid">
-          <div
-            v-for="(day, index) in monthDays"
-            :key="index"
-            class="day-cell"
-            :class="getDayClass(day)"
-          >
-            <div v-if="day.date" class="day-number">{{ day.day }}</div>
-            <div v-if="day.date && (day.success > 0 || day.fail > 0)" class="day-status">
-              <span v-if="day.success > 0" class="day-pill success">{{ day.success }}</span>
-              <span v-if="day.fail > 0" class="day-pill error">{{ day.fail }}</span>
+        <div class="calendar-body">
+          <div class="calendar-decoration"><CalendarDays :size="18" /><span>ACTIVITY MAP</span></div>
+          <div class="weekdays">
+            <div v-for="day in weekdays" :key="day" class="weekday">{{ day }}</div>
+          </div>
+          <div class="days-grid">
+            <div
+              v-for="(day, index) in monthDays"
+              :key="index"
+              class="day-cell"
+              :class="getDayClass(day)"
+            >
+              <div v-if="day.date" class="day-number">{{ String(day.day).padStart(2, '0') }}</div>
+              <div v-if="day.date && (day.success > 0 || day.fail > 0)" class="day-status">
+                <span v-if="day.success > 0" class="day-pill success">S {{ day.success }}</span>
+                <span v-if="day.fail > 0" class="day-pill error">F {{ day.fail }}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </article>
 
-    <!-- 排行 -->
-    <div class="panel">
-      <div class="panel-head">
-        <div class="panel-title">账号排行</div>
-        <UiSelect
-          v-model:value="accountRankSort"
-          :options="accountRankSortOptions"
-          size="small"
-          class="rank-sort-select"
-        />
-      </div>
+      <aside class="matrix-note">
+        <span class="matrix-note__index">SIGNAL QUALITY / LIVE</span>
+        <CalendarDays :size="30" :stroke-width="1.4" />
+        <p>颜色不是装饰，而是任务完成度。聚焦异常日期，可以快速定位执行链路中的波动。</p>
+        <div class="matrix-note__line"><span></span></div>
+      </aside>
+    </section>
+
+    <section class="instrument-panel ranking-panel">
+      <header class="instrument-head">
+        <div class="instrument-identity">
+          <span class="instrument-code">RANKING / 04</span>
+          <div>
+            <h3>账号表现排行</h3>
+            <p>用连续性、成功率与奖励衡量长期质量</p>
+          </div>
+        </div>
+        <div class="ranking-controls">
+          <Trophy :size="16" />
+          <UiSelect
+            v-model:value="accountRankSort"
+            :options="accountRankSortOptions"
+            size="small"
+            class="rank-sort-select"
+          />
+        </div>
+      </header>
       <div v-if="loadingAccounts" class="table-wrap skeleton-table" aria-busy="true" aria-label="加载中">
-        <UiSkeleton v-for="i in 6" :key="i" :height="32" :sharp="false" style="margin-bottom: 8px" />
+        <UiSkeleton v-for="i in 6" :key="i" :height="36" :sharp="false" style="margin-bottom: 8px" />
       </div>
       <div v-else-if="accountStats.length > 0" class="table-wrap">
         <DataGrid
@@ -149,6 +170,7 @@
           size="small"
         />
         <div class="ranking-pagination">
+          <span class="pagination-caption">{{ accountPagination.itemCount }} ACCOUNTS INDEXED</span>
           <UiPagination
             v-model:page="accountPagination.page"
             v-model:page-size="accountPagination.pageSize"
@@ -162,14 +184,13 @@
         </div>
       </div>
       <div v-else class="chart-empty">暂无数据</div>
-    </div>
+    </section>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, h, nextTick } from 'vue'
-import { DataGrid, UiButton, UiDateRange, UiPagination, UiSegment, UiSelect, UiSkeleton, UiTag, type GridColumns } from '../ui'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
+import { DataGrid, UiButton, UiPagination, UiSegment, UiSelect, UiSkeleton, UiTag, type GridColumns } from '../ui'
+import { Activity, ArrowUpRight, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleGauge, Flame, RefreshCw, TrendingUp, Trophy } from 'lucide-vue-next'
 import { statisticsApi } from '../api'
 import { useViewRefresh } from '../composables'
 import * as echarts from 'echarts'
@@ -182,7 +203,6 @@ const accountStats = ref<any[]>([])
 const loadingAccounts = ref(false)
 
 const dailyDays = ref(7)
-const customRange = ref<[number, number] | null>(null)
 const calendarData = ref<any[]>([])
 const currentMonth = ref(new Date())
 type AccountRankSort = 'streak_days' | 'success_count' | 'success_rate' | 'total_reward'
@@ -208,30 +228,6 @@ const accountPagination = ref({
   pageSizes: [10, 20, 50, 100]
 })
 
-const formatYmd = (ts: number) => {
-  const d = new Date(ts)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-const rangeShortcuts = {
-  '最近 7 天': (): [number, number] => {
-    const end = Date.now()
-    return [end - 6 * 86400000, end]
-  },
-  '最近 30 天': (): [number, number] => {
-    const end = Date.now()
-    return [end - 29 * 86400000, end]
-  },
-  '本月': (): [number, number] => {
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-    return [start, Date.now()]
-  }
-}
-
 const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
 const trendChartRef = ref<HTMLElement | null>(null)
@@ -239,13 +235,9 @@ const monthlyChartRef = ref<HTMLElement | null>(null)
 let trendChart: echarts.ECharts | null = null
 let monthlyChart: echarts.ECharts | null = null
 
-const isDarkMode = ref(document.documentElement.dataset.theme === 'dark'
-  || window.matchMedia('(prefers-color-scheme: dark)').matches)
-const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-const handleThemeChange = (e: MediaQueryListEvent) => {
-  isDarkMode.value = e.matches
-  updateChartsTheme()
-}
+const readDarkMode = () => document.documentElement.dataset.theme === 'dark'
+const isDarkMode = ref(readDarkMode())
+let themeObserver: MutationObserver | null = null
 
 const getChartTheme = () => {
   return isDarkMode.value ? {
@@ -369,6 +361,8 @@ const accountColumns: GridColumns = [
   {
     title: '账号',
     key: 'username',
+    width: 220,
+    ellipsis: { tooltip: true },
     render: (row: any) => {
       const status = getAccountStatus(row)
       return h('div', { class: 'cell-account' }, [
@@ -393,7 +387,7 @@ const accountColumns: GridColumns = [
       if (row.streak_days > 0) {
         const isHot = row.streak_days >= 3
         return h('span', { class: ['streak', isHot ? 'hot' : 'warm'] }, [
-          h('span', { class: 'flame-icon' }, isHot ? '🔥' : ''),
+          isHot ? h(Flame, { class: 'flame-icon', size: 12, strokeWidth: 2.1 }) : null,
           ` ${row.streak_days}天`
         ])
       }
@@ -673,27 +667,14 @@ const loadOverview = async () => {
 
 const loadDailyStats = async () => {
   try {
-    if (customRange.value) {
-      const [s, e] = customRange.value
-      const days = Math.ceil((e - s) / 86400000) + 1
-      const res = await statisticsApi.getDaily(days, formatYmd(s), formatYmd(e))
-      dailyData.value = res.data || []
-    } else {
-      const res = await statisticsApi.getDaily(dailyDays.value)
-      dailyData.value = res.data || []
-    }
+    const res = await statisticsApi.getDaily(dailyDays.value)
+    dailyData.value = res.data || []
   } catch (e: any) {
     console.error('Failed to load daily stats:', e)
   }
 }
 
 watch(dailyDays, async () => {
-  if (customRange.value) return
-  await loadDailyStats()
-  nextTick(() => updateTrendChart())
-})
-
-watch(customRange, async () => {
   await loadDailyStats()
   nextTick(() => updateTrendChart())
 })
@@ -761,7 +742,16 @@ watch(accountRankSort, () => {
 })
 
 onMounted(async () => {
-  mediaQuery.addEventListener('change', handleThemeChange)
+  themeObserver = new MutationObserver(() => {
+    const nextDarkMode = readDarkMode()
+    if (nextDarkMode === isDarkMode.value) return
+    isDarkMode.value = nextDarkMode
+    updateChartsTheme()
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
 
   loadOverview()
   await Promise.all([loadDailyStats(), loadMonthlyStats()])
@@ -785,7 +775,7 @@ useViewRefresh(async () => {
 })
 
 onUnmounted(() => {
-  mediaQuery.removeEventListener('change', handleThemeChange)
+  themeObserver?.disconnect()
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()
   monthlyChart?.dispose()
@@ -796,421 +786,270 @@ onUnmounted(() => {
 .statistics-page {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: clamp(14px, 1.8vw, 24px);
+  padding-bottom: 48px;
 }
 
-.trend-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  flex-wrap: wrap;
-}
-
-.trend-range {
-  width: 240px;
-}
-
-/* 指标 */
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--spacing-3);
-}
-
-.stat-card {
-  padding: var(--spacing-3);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.stat-label {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.stat-value {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: var(--font-semibold);
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: var(--text-primary);
-}
-
-.stat-sub {
-  font-size: var(--text-md);
-  color: var(--text-tertiary);
-  margin-left: 2px;
-}
-
-.stat-foot {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-}
-
-.tag.success {
-  background: var(--success-color-light);
-  color: var(--success-color);
-}
-
-.muted {
-  color: var(--text-tertiary);
-}
-
-/* 图表 Panel */
-.charts-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: var(--spacing-3);
-}
-
-.panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  min-height: 40px;
-  padding: 0 var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.panel-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.rank-sort-select {
-  width: 120px;
-}
-
-.chart-body {
-  padding: var(--spacing-4);
-  min-height: 260px;
+.telemetry-hero {
   position: relative;
+  isolation: isolate;
+  min-height: 370px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: end;
+  overflow: hidden;
+  padding: clamp(28px, 5vw, 72px);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 78% 18%, var(--signal-wash), transparent 28%),
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-raised) 96%, var(--signal) 4%), var(--surface-inset));
+  box-shadow: var(--lift-3);
 }
 
-.echarts-container {
-  width: 100%;
-  height: 280px;
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  opacity: 0.48;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to right, black 28%, transparent 90%);
 }
 
-.chart-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 260px;
-  color: var(--text-quaternary);
-  font-size: var(--text-sm);
+.hero-signal {
+  position: absolute;
+  top: -22%;
+  right: -6%;
+  z-index: -1;
+  width: 390px;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--signal-deep) 26%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 54px color-mix(in srgb, var(--signal) 5%, transparent),
+    0 0 0 108px color-mix(in srgb, var(--signal) 3%, transparent);
 }
 
-/* Calendar */
-.calendar-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
+.hero-main { align-self: center; max-width: 790px; }
 
-.current-month {
+.hero-kicker,
+.metric-top,
+.instrument-code,
+.hero-sync,
+.matrix-note__index,
+.pagination-caption {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  min-width: 80px;
-  text-align: center;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.calendar-legend {
+.hero-kicker {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  padding: var(--spacing-2) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.legend-item {
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
+  color: var(--ink-muted);
 }
 
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
+.hero-index { margin-left: auto; color: var(--ink-faint); }
+.live-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px var(--signal-wash), 0 0 16px var(--signal-glow); }
 
-.legend-dot.success {
-  background: var(--success-color);
-}
-
-.legend-dot.warning {
-  background: var(--warning-color);
-}
-
-.legend-dot.error {
-  background: var(--error-color);
-}
-
-.legend-dot.default {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color-light);
-}
-
-.calendar-body {
-  padding: var(--spacing-3) var(--spacing-4);
-  max-width: 720px;
-}
-
-.weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.weekday {
-  padding: 6px 0;
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  font-weight: var(--font-medium);
-}
-
-.days-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-}
-
-.day-cell {
-  aspect-ratio: 2.2 / 1;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color-light);
+.hero-title {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  transition: all var(--transition-fast);
-  min-height: 32px;
+  margin: clamp(34px, 5vw, 62px) 0 20px;
+  color: var(--ink-max);
+  font-family: var(--font-display);
+  font-size: clamp(38px, 5.6vw, 84px);
+  font-weight: 470;
+  line-height: 0.98;
+  letter-spacing: -0.065em;
 }
 
-.day-cell.empty {
-  border-color: transparent;
+.hero-title strong { color: var(--signal-deep); font-weight: 720; }
+.hero-copy { max-width: 620px; margin: 0; color: var(--ink-muted); font-size: clamp(13px, 1.1vw, 15px); line-height: 1.9; }
+.hero-actions { display: flex; align-items: center; gap: 18px; margin-top: 28px; }
+.hero-sync { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-faint); }
+
+.hero-readout {
+  position: relative;
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface-overlay) 72%, transparent);
+  box-shadow: inset 0 1px color-mix(in srgb, white 24%, transparent);
+  backdrop-filter: blur(22px);
 }
 
-.day-cell.no-sign {
-  background: transparent;
+.readout-orbit { position: relative; display: grid; place-items: center; width: min(100%, 240px); margin: 0 auto 30px; aspect-ratio: 1; }
+.readout-orbit::before,
+.readout-orbit::after,
+.readout-orbit__track { content: ""; position: absolute; border-radius: 50%; }
+.readout-orbit::before { inset: 0; border: 1px solid var(--line); }
+.readout-orbit::after { inset: 16%; border: 1px dashed var(--line-strong); opacity: 0.55; animation: orbit-spin 24s linear infinite; }
+.readout-orbit__track { inset: 7%; border: 2px solid var(--signal); border-left-color: transparent; border-bottom-color: color-mix(in srgb, var(--signal) 30%, transparent); transform: rotate(28deg); box-shadow: 0 0 28px -14px var(--signal-glow); }
+.readout-value { display: flex; align-items: flex-start; color: var(--ink-max); line-height: 1; }
+.readout-value strong { font-family: var(--font-display); font-size: clamp(54px, 6vw, 82px); font-weight: 620; letter-spacing: -0.08em; }
+.readout-value span { margin: 9px 0 0 5px; color: var(--signal-deep); font-family: var(--font-mono); font-size: 13px; }
+.readout-node { position: absolute; width: 7px; height: 7px; border: 2px solid var(--surface-raised); border-radius: 50%; background: var(--signal); box-shadow: 0 0 12px var(--signal-glow); }
+.node-a { top: 11%; right: 25%; }
+.node-b { bottom: 19%; left: 12%; }
+.readout-caption { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; }
+.readout-caption strong { color: var(--ink-strong); font-size: 11px; }
+.readout-progress { height: 3px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: var(--line-faint); }
+.readout-progress span { display: block; height: 100%; border-radius: inherit; background: var(--signal); box-shadow: 0 0 12px var(--signal-glow); transition: width 0.6s cubic-bezier(.2,.8,.2,1); }
+
+.metric-deck { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--line-faint); box-shadow: var(--lift-2); }
+.metric-card { position: relative; min-height: 190px; display: flex; flex-direction: column; padding: 22px; overflow: hidden; background: var(--surface-raised); transition: transform .35s cubic-bezier(.2,.8,.2,1), background .35s; }
+.metric-card:hover { z-index: 1; transform: translateY(-3px); background: var(--surface-inset); }
+.metric-card--signal { background: linear-gradient(145deg, var(--signal), color-mix(in srgb, var(--signal) 72%, var(--surface-raised))); color: var(--signal-ink); }
+.metric-card--signal::after { content: ""; position: absolute; right: -50px; bottom: -90px; width: 190px; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--signal-ink) 22%, transparent); border-radius: 50%; box-shadow: 0 0 0 32px color-mix(in srgb, var(--signal-ink) 5%, transparent); }
+.metric-card--dark { background: linear-gradient(145deg, var(--surface-raised), var(--surface-inset)); color: var(--ink-strong); }
+.metric-top { display: flex; justify-content: space-between; align-items: center; color: var(--ink-faint); }
+.metric-card--signal .metric-top,
+.metric-card--signal .metric-label,
+.metric-card--signal .metric-foot { color: color-mix(in srgb, var(--signal-ink) 70%, transparent); }
+.metric-card--dark .metric-top,
+.metric-card--dark .metric-label,
+.metric-card--dark .metric-foot { color: var(--ink-faint); }
+.metric-label { margin-top: auto; color: var(--ink-muted); font-size: 12px; }
+.metric-value { margin-top: 8px; color: var(--ink-max); font-family: var(--font-display); font-size: clamp(35px, 3.6vw, 54px); font-weight: 590; line-height: 1; letter-spacing: -0.065em; white-space: nowrap; }
+.metric-card--signal .metric-value { color: var(--signal-ink); }
+.metric-card--dark .metric-value { color: var(--ink-max); }
+.metric-value small { margin-left: 5px; font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0; opacity: .54; }
+.metric-value--reward { overflow: hidden; font-size: clamp(25px, 2.6vw, 42px); text-overflow: ellipsis; }
+.metric-foot { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--ink-faint); font-size: 10px; }
+.metric-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--signal-ink); }
+
+.charts-row { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(330px, .85fr); gap: clamp(14px, 1.8vw, 24px); }
+.instrument-panel { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: color-mix(in srgb, var(--surface-raised) 95%, transparent); box-shadow: var(--lift-2); }
+.instrument-panel::before { content: ""; position: absolute; top: 0; left: 24px; width: 84px; height: 2px; z-index: 2; background: var(--signal); box-shadow: 0 0 14px var(--signal-glow); }
+.instrument-head { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 22px; border-bottom: 1px solid var(--line-faint); background: linear-gradient(90deg, var(--surface-inset), transparent); }
+.instrument-identity { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.instrument-code { align-self: flex-start; flex: 0 0 auto; padding-top: 5px; color: var(--signal-deep); writing-mode: vertical-rl; }
+.instrument-identity h3 { margin: 0; color: var(--ink-max); font-size: 16px; font-weight: 620; letter-spacing: -.02em; }
+.instrument-identity p { margin: 5px 0 0; color: var(--ink-faint); font-size: 11px; }
+.trend-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.chart-body { position: relative; min-height: 300px; padding: 14px 18px 16px; background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 32px 32px; }
+.chart-body--primary { min-height: 350px; }
+.chart-axis-label { position: absolute; top: 18px; left: 22px; z-index: 1; color: var(--ink-ghost); font-family: var(--font-mono); font-size: 8px; letter-spacing: .16em; writing-mode: vertical-rl; }
+.echarts-container { width: 100%; height: 320px; }
+.instrument-panel--wide .echarts-container { height: 350px; }
+.chart-empty { display: grid; place-items: center; min-height: 280px; color: var(--ink-faint); font-size: 12px; }
+
+.insight-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: clamp(14px, 1.8vw, 24px); }
+.calendar-panel { min-width: 0; }
+.calendar-controls { display: flex; align-items: center; gap: 5px; }
+.current-month { min-width: 92px; color: var(--ink-strong); font-family: var(--font-mono); font-size: 12px; font-weight: 650; text-align: center; }
+.calendar-legend { display: flex; flex-wrap: wrap; gap: 18px; padding: 11px 22px; border-bottom: 1px solid var(--line-faint); color: var(--ink-faint); font-size: 10px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 7px; height: 7px; border-radius: 2px; }
+.legend-dot.success { background: var(--ok); }
+.legend-dot.warning { background: var(--warn); }
+.legend-dot.error { background: var(--bad); }
+.legend-dot.default { border: 1px solid var(--line); background: var(--surface-inset); }
+.calendar-body { position: relative; padding: 22px; }
+.calendar-decoration { position: absolute; right: 22px; top: -36px; display: flex; align-items: center; gap: 7px; color: var(--ink-ghost); font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; }
+.weekdays,
+.days-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.weekdays { margin-bottom: 6px; }
+.weekday { padding: 5px 2px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-align: center; }
+.day-cell { position: relative; min-height: 62px; display: flex; flex-direction: column; justify-content: space-between; padding: 8px; overflow: hidden; border: 1px solid var(--line-faint); border-radius: 10px; background: var(--surface-inset); transition: transform .25s, border-color .25s; }
+.day-cell:not(.empty):hover { z-index: 1; transform: translateY(-2px); border-color: var(--line-strong); }
+.day-cell.empty { border-color: transparent; background: transparent; }
+.day-cell.no-sign { background: color-mix(in srgb, var(--surface-inset) 72%, transparent); }
+.day-cell.all-success { border-color: color-mix(in srgb, var(--ok) 24%, var(--line-faint)); background: linear-gradient(145deg, var(--ok-wash), var(--surface-inset)); }
+.day-cell.partial { border-color: color-mix(in srgb, var(--warn) 28%, var(--line-faint)); background: linear-gradient(145deg, var(--warn-wash), var(--surface-inset)); }
+.day-cell.all-fail { border-color: color-mix(in srgb, var(--bad) 28%, var(--line-faint)); background: linear-gradient(145deg, var(--bad-wash), var(--surface-inset)); }
+.day-cell.today { box-shadow: inset 0 0 0 1px var(--signal-deep), 0 0 18px -12px var(--signal-glow); }
+.day-number { color: var(--ink-strong); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.day-status { display: flex; gap: 4px; flex-wrap: wrap; }
+.day-pill { display: inline-flex; align-items: center; min-height: 15px; padding: 0 4px; border-radius: 4px; font-family: var(--font-mono); font-size: 8px; font-weight: 650; }
+.day-pill.success { background: var(--ok-wash); color: var(--ok); }
+.day-pill.error { background: var(--bad-wash); color: var(--bad); }
+
+.matrix-note { min-height: 100%; display: flex; flex-direction: column; justify-content: space-between; gap: 28px; padding: 26px; border: 1px solid var(--line); border-radius: 22px; background: radial-gradient(circle at 88% 12%, var(--signal-wash), transparent 38%), var(--surface-raised); color: var(--ink-strong); box-shadow: var(--lift-2); }
+.matrix-note__index { color: var(--ink-faint); }
+.matrix-note svg { color: var(--signal-deep); }
+.matrix-note p { margin: auto 0 0; color: var(--ink-muted); font-size: 12px; line-height: 1.9; }
+.matrix-note__line { height: 1px; background: var(--line-faint); }
+.matrix-note__line span { display: block; width: 42%; height: 100%; background: var(--signal); box-shadow: 0 0 12px var(--signal-glow); }
+
+.ranking-controls { display: flex; align-items: center; gap: 10px; color: var(--signal-deep); }
+.rank-sort-select { width: 132px; }
+.table-wrap { position: relative; }
+.skeleton-table { padding: 20px; }
+.table-wrap :deep(.n-data-table) { border: none; border-radius: 0; background: transparent; }
+.ranking-pagination { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 14px 20px; border-top: 1px solid var(--line-faint); background: var(--surface-inset); }
+.pagination-caption { color: var(--ink-faint); }
+.statistics-page :deep(.rank-num) { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-inset); color: var(--ink-muted); font-family: var(--font-mono); font-size: 9px; font-weight: 650; }
+.statistics-page :deep(.cell-account) { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.statistics-page :deep(.account-name) { min-width: 0; overflow: hidden; color: var(--ink-max); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.statistics-page :deep(.streak) { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.statistics-page :deep(.streak.warm) { background: var(--warn-wash); color: var(--warn); }
+.statistics-page :deep(.streak.hot) { background: var(--bad-wash); color: var(--bad); }
+.statistics-page :deep(.success-num) { color: var(--ok); font-family: var(--font-mono); font-weight: 650; }
+.statistics-page :deep(.reward-num) { color: var(--warn); font-family: var(--font-mono); font-weight: 600; }
+.statistics-page :deep(.success-rate-cell) { display: flex; align-items: center; gap: 9px; }
+.statistics-page :deep(.rate-bar) { flex: 1; height: 3px; overflow: hidden; border-radius: 99px; background: var(--line-faint); }
+.statistics-page :deep(.rate-fill) { height: 100%; transition: width .5s; }
+.statistics-page :deep(.rate-fill.high) { background: var(--ok); }
+.statistics-page :deep(.rate-fill.mid) { background: var(--warn); }
+.statistics-page :deep(.rate-fill.low) { background: var(--bad); }
+.statistics-page :deep(.rate-text) { color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; }
+.statistics-page :deep(.muted) { color: var(--ink-faint); }
+
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1180px) {
+  .telemetry-hero { grid-template-columns: minmax(0, 1.2fr) minmax(250px, .6fr); }
+  .metric-deck { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts-row { grid-template-columns: 1fr; }
+  .insight-grid { grid-template-columns: 1fr; }
+  .matrix-note { min-height: 210px; }
 }
 
-.day-cell.all-success {
-  background: var(--success-color-light);
-  border-color: rgba(22, 163, 74, 0.24);
+@media (max-width: 800px) {
+  .telemetry-hero { grid-template-columns: 1fr; align-items: stretch; padding: 28px; border-radius: 22px; }
+  .hero-readout { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 22px; }
+  .readout-orbit { margin: 0; }
+  .readout-caption { align-self: end; }
+  .readout-progress { grid-column: 2; margin-top: -70px; }
+  .instrument-head { align-items: flex-start; flex-direction: column; }
+  .trend-controls { width: 100%; justify-content: flex-start; }
+  .calendar-decoration { display: none; }
 }
 
-.day-cell.partial {
-  background: var(--warning-color-light);
-  border-color: rgba(217, 119, 6, 0.24);
+@media (max-width: 620px) {
+  .statistics-page { gap: 12px; }
+  .telemetry-hero { min-height: 0; padding: 22px; }
+  .hero-index { display: none; }
+  .hero-title { margin-top: 38px; font-size: clamp(38px, 12vw, 58px); }
+  .hero-actions { align-items: flex-start; flex-direction: column; }
+  .hero-readout { display: block; padding: 20px; }
+  .readout-orbit { width: 170px; margin: 0 auto 22px; }
+  .readout-progress { margin-top: 12px; }
+  .metric-deck { grid-template-columns: 1fr; border-radius: 16px; }
+  .metric-card { min-height: 160px; }
+  .trend-controls { align-items: stretch; flex-direction: column; }
+  .instrument-head { min-height: 0; padding: 17px; }
+  .instrument-identity { gap: 12px; }
+  .instrument-code { writing-mode: initial; }
+  .calendar-body { padding: 14px; overflow-x: auto; }
+  .weekdays, .days-grid { min-width: 560px; }
+  .ranking-pagination { align-items: flex-end; flex-direction: column; }
+  .pagination-caption { align-self: flex-start; }
 }
 
-.day-cell.all-fail {
-  background: var(--error-color-light);
-  border-color: rgba(220, 38, 38, 0.24);
-}
-
-.day-cell.today {
-  box-shadow: inset 0 0 0 2px var(--primary-color);
-}
-
-.day-number {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-}
-
-.day-status {
-  display: flex;
-  gap: 3px;
-  flex-wrap: wrap;
-}
-
-.day-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 3px;
-  height: 12px;
-  border-radius: var(--radius-xs);
-  font-size: 9px;
-  font-weight: var(--font-semibold);
-}
-
-.day-pill.success {
-  background: rgba(22, 163, 74, 0.2);
-  color: var(--success-color);
-}
-
-.day-pill.error {
-  background: rgba(220, 38, 38, 0.2);
-  color: var(--error-color);
-}
-
-/* Ranking */
-.table-wrap :deep(.n-data-table) {
-  border: none;
-  border-radius: 0;
-}
-
-.ranking-pagination {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
-}
-
-.statistics-page :deep(.rank-num) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.statistics-page :deep(.cell-account) {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.statistics-page :deep(.account-name) {
-  color: var(--text-primary);
-  font-weight: var(--font-medium);
-  font-size: var(--text-sm);
-}
-
-.statistics-page :deep(.streak) {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 6px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-}
-
-.statistics-page :deep(.streak.warm) {
-  background: var(--warning-color-light);
-  color: var(--warning-color);
-}
-
-.statistics-page :deep(.streak.hot) {
-  background: var(--error-color-light);
-  color: var(--error-color);
-}
-
-.statistics-page :deep(.success-num) {
-  color: var(--success-color);
-  font-weight: var(--font-semibold);
-  font-family: var(--font-mono);
-}
-
-.statistics-page :deep(.reward-num) {
-  color: var(--warning-color);
-  font-weight: var(--font-medium);
-  font-family: var(--font-mono);
-}
-
-.statistics-page :deep(.success-rate-cell) {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.statistics-page :deep(.rate-bar) {
-  flex: 1;
-  height: 3px;
-  background: var(--border-color-light);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.statistics-page :deep(.rate-fill) {
-  height: 100%;
-  transition: width var(--transition-slow);
-}
-
-.statistics-page :deep(.rate-fill.high) {
-  background: var(--success-color);
-}
-
-.statistics-page :deep(.rate-fill.mid) {
-  background: var(--warning-color);
-}
-
-.statistics-page :deep(.rate-fill.low) {
-  background: var(--error-color);
-}
-
-.statistics-page :deep(.rate-text) {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.statistics-page :deep(.muted) {
-  color: var(--text-quaternary);
-}
-
-@media (max-width: 1100px) {
-  .charts-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .stat-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .day-cell {
-    min-height: 36px;
-  }
-}
-
-@media (max-width: 480px) {
-  .stat-row {
-    grid-template-columns: 1fr;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .readout-orbit::after { animation: none; }
+  .metric-card,
+  .day-cell { transition: none; }
 }
 </style>

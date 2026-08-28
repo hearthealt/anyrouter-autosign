@@ -1,157 +1,193 @@
 <template>
   <UiLoading :show="loading">
-    <div class="settings-grid">
-      <div class="setting-card">
-        <div class="setting-card-header">
-          <div class="setting-card-icon auto-sign">
-            <Clock :size="20" />
-          </div>
-          <div class="setting-card-title">
-            <span>自动签到</span>
+    <div class="settings-pane">
+      <div class="pane-head">
+        <div class="pane-heading">
+          <div class="pane-title"><SlidersHorizontal :size="15" />常规设置</div>
+          <div class="pane-desc">定时签到、健康检查、失败重试、告警阈值与日志保留策略</div>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-signal"><Clock :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">自动签到</span>
+              <span class="setting-card-hint">每天在指定时间批量签到</span>
+            </div>
             <UiSwitch v-model:value="settings.auto_sign_enabled" size="small" />
+          </header>
+          <div class="setting-card-body">
+            <template v-if="settings.auto_sign_enabled">
+              <div class="setting-row">
+                <span class="setting-row-label">签到时间</span>
+                <UiTimeField v-model:value="signTimeValue" format="HH:mm" size="small" style="width: 104px;" />
+              </div>
+              <div class="setting-row" v-if="schedulerStatus.next_run">
+                <span class="setting-row-label">下次执行</span>
+                <UiTag size="small" type="info">{{ schedulerStatus.next_run }}</UiTag>
+              </div>
+            </template>
+            <p v-else class="setting-off">功能已关闭</p>
           </div>
-        </div>
-        <div class="setting-card-body" v-if="settings.auto_sign_enabled">
-          <div class="setting-row">
-            <span class="setting-row-label">签到时间</span>
-            <UiTimeField v-model:value="signTimeValue" format="HH:mm" size="small" style="width: 100px;" />
-          </div>
-          <div class="setting-row" v-if="schedulerStatus.next_run">
-            <span class="setting-row-label">下次执行</span>
-            <UiTag size="small" type="info">{{ schedulerStatus.next_run }}</UiTag>
-          </div>
-        </div>
-        <div class="setting-card-footer" v-else>
-          <span class="setting-disabled-text">开启后将在指定时间自动签到</span>
-        </div>
-      </div>
+        </section>
 
-      <div class="setting-card">
-        <div class="setting-card-header">
-          <div class="setting-card-icon health">
-            <Activity :size="20" />
-          </div>
-          <div class="setting-card-title">
-            <span>健康检查</span>
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-ok"><Activity :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">健康检查</span>
+              <span class="setting-card-hint">定期检查账号凭证是否仍然有效</span>
+            </div>
             <UiSwitch v-model:value="settings.health_check_enabled" size="small" />
-          </div>
-        </div>
-        <div class="setting-card-body" v-if="settings.health_check_enabled">
-          <div class="setting-row">
-            <span class="setting-row-label">检查间隔</span>
-            <div class="setting-row-control">
-              <UiNumberInput v-model:value="settings.health_check_interval" :min="1" :max="24" size="small" style="width: 70px;" />
-              <span class="setting-row-unit">小时</span>
+          </header>
+          <div class="setting-card-body">
+            <div v-if="settings.health_check_enabled" class="setting-row">
+              <span class="setting-row-label">检查间隔</span>
+              <div class="setting-row-control">
+                <UiNumberInput v-model:value="settings.health_check_interval" :min="1" :max="24" size="small" style="width: 76px;" />
+                <span class="setting-row-unit">小时</span>
+              </div>
             </div>
+            <p v-else class="setting-off">功能已关闭</p>
           </div>
-        </div>
-        <div class="setting-card-footer" v-else>
-          <span class="setting-disabled-text">定期检查凭证有效性</span>
-        </div>
-      </div>
+        </section>
 
-      <div class="setting-card">
-        <div class="setting-card-header">
-          <div class="setting-card-icon retry">
-            <RefreshCw :size="20" />
-          </div>
-          <div class="setting-card-title">
-            <span>失败重试</span>
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-warn"><RefreshCw :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">失败重试</span>
+              <span class="setting-card-hint">定时签到失败后按间隔自动重试</span>
+            </div>
             <UiSwitch v-model:value="settings.sign_retry_enabled" size="small" />
+          </header>
+          <div class="setting-card-body">
+            <template v-if="settings.sign_retry_enabled">
+              <div class="setting-row">
+                <span class="setting-row-label">最大次数</span>
+                <div class="setting-row-control">
+                  <UiNumberInput v-model:value="settings.sign_max_retries" :min="1" :max="10" size="small" style="width: 76px;" />
+                  <span class="setting-row-unit">次</span>
+                </div>
+              </div>
+              <div class="setting-row">
+                <span class="setting-row-label">重试间隔</span>
+                <div class="setting-row-control">
+                  <UiNumberInput v-model:value="settings.sign_retry_interval" :min="5" :max="120" size="small" style="width: 76px;" />
+                  <span class="setting-row-unit">分</span>
+                </div>
+              </div>
+            </template>
+            <p v-else class="setting-off">功能已关闭</p>
           </div>
-        </div>
-        <div class="setting-card-body" v-if="settings.sign_retry_enabled">
-          <div class="setting-row">
-            <span class="setting-row-label">最大次数</span>
-            <div class="setting-row-control">
-              <UiNumberInput v-model:value="settings.sign_max_retries" :min="1" :max="10" size="small" style="width: 70px;" />
-              <span class="setting-row-unit">次</span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <span class="setting-row-label">重试间隔</span>
-            <div class="setting-row-control">
-              <UiNumberInput v-model:value="settings.sign_retry_interval" :min="5" :max="120" size="small" style="width: 70px;" />
-              <span class="setting-row-unit">分</span>
-            </div>
-          </div>
-        </div>
-        <div class="setting-card-footer" v-else>
-          <span class="setting-disabled-text">签到失败后自动重试</span>
-        </div>
-      </div>
+        </section>
 
-      <div class="setting-card">
-        <div class="setting-card-header">
-          <div class="setting-card-icon notify">
-            <Bell :size="20" />
-          </div>
-          <div class="setting-card-title">
-            <span>签到推送</span>
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-info"><Bell :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">签到推送</span>
+              <span class="setting-card-hint">定时签到与定时重试的结果汇总</span>
+            </div>
             <UiSwitch v-model:value="settings.sign_notify_enabled" size="small" />
+          </header>
+          <div class="setting-card-body">
+            <template v-if="settings.sign_notify_enabled">
+              <div class="setting-stack">
+                <span class="setting-row-label">推送渠道</span>
+                <UiSelect
+                  v-model:value="settings.sign_notify_channel_ids"
+                  multiple
+                  size="small"
+                  :options="notifyChannelOptions"
+                  :loading="loadingChannels"
+                  placeholder="选择接收定时签到汇总的渠道"
+                  clearable
+                />
+              </div>
+              <p class="setting-note">仅定时签到和定时重试会发送汇总，手动签到不推送</p>
+            </template>
+            <p v-else class="setting-off">功能已关闭</p>
           </div>
-        </div>
-        <div class="setting-card-body" v-if="settings.sign_notify_enabled">
-          <div class="setting-stack">
-            <span class="setting-row-label">推送渠道</span>
-            <UiSelect
-              v-model:value="settings.sign_notify_channel_ids"
-              multiple
-              size="small"
-              :options="notifyChannelOptions"
-              :loading="loadingChannels"
-              placeholder="选择接收定时签到汇总的渠道"
-              clearable
-            />
-          </div>
-          <div class="setting-note">
-            仅定时签到和定时重试会发送汇总，手动签到不推送
-          </div>
-        </div>
-        <div class="setting-card-footer" v-else>
-          <span class="setting-disabled-text">开启后可选择定时签到汇总接收渠道</span>
-        </div>
-      </div>
+        </section>
 
-      <div class="setting-card">
-        <div class="setting-card-header">
-          <div class="setting-card-icon quota">
-            <TriangleAlert :size="20" />
-          </div>
-          <div class="setting-card-title">
-            <span>额度告警</span>
-          </div>
-        </div>
-        <div class="setting-card-body">
-          <div class="setting-row">
-            <span class="setting-row-label">阈值</span>
-            <div class="setting-row-control">
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-bad"><TriangleAlert :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">额度告警</span>
+              <span class="setting-card-hint">余额低于阈值时高亮提示</span>
+            </div>
+          </header>
+          <div class="setting-card-body">
+            <div class="setting-row">
+              <span class="setting-row-label">告警阈值</span>
               <UiNumberInput
                 v-model:value="settings.quota_warning_threshold"
                 :min="0"
                 :precision="2"
                 size="small"
-                style="width: 96px;"
+                style="width: 104px;"
               >
                 <template #prefix>$</template>
               </UiNumberInput>
             </div>
+            <p class="setting-note">低于该额度时，账号列表和仪表盘会显示红色高亮与告警提示</p>
           </div>
-          <div class="setting-note">
-            低于该额度时，账号列表和仪表盘会显示红色高亮与告警提示
-          </div>
-        </div>
-      </div>
-    </div>
+        </section>
 
-    <div class="settings-footer">
-      <div class="settings-tip">
-        <Info />
-        已选择的推送渠道会接收定时签到汇总；账号编辑里的渠道仅用于定时健康告警
+        <section class="setting-card">
+          <header class="setting-card-head">
+            <span class="setting-card-icon is-muted"><Archive :size="16" /></span>
+            <div class="setting-card-heading">
+              <span class="setting-card-name">日志保留</span>
+              <span class="setting-card-hint">超期记录与归档文件的自动清理</span>
+            </div>
+          </header>
+          <div class="setting-card-body">
+            <div class="setting-row">
+              <span class="setting-row-label">审计日志</span>
+              <div class="setting-row-control">
+                <UiNumberInput
+                  v-model:value="settings.audit_log_retention_days"
+                  :min="0"
+                  :max="365"
+                  size="small"
+                  style="width: 76px;"
+                />
+                <span class="setting-row-unit">天</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span class="setting-row-label">系统日志</span>
+              <div class="setting-row-control">
+                <UiNumberInput
+                  v-model:value="settings.system_log_retention_days"
+                  :min="0"
+                  :max="365"
+                  size="small"
+                  style="width: 76px;"
+                />
+                <span class="setting-row-unit">天</span>
+              </div>
+            </div>
+            <p class="setting-note">每天 03:17 自动清理，0 表示不清理；也可在「日志」标签页手动清理</p>
+          </div>
+        </section>
       </div>
-      <UiButton type="primary" @click="saveSettings" :loading="saving">
-        保存设置
-      </UiButton>
+
+      <div class="settings-footer">
+        <div class="pane-note">
+          <Info />
+          <span>这里选择的渠道接收定时签到汇总；账号编辑里的渠道仅用于定时健康告警</span>
+        </div>
+        <UiButton type="primary" @click="saveSettings" :loading="saving">
+          <template #icon><Save /></template>
+          保存设置
+        </UiButton>
+      </div>
     </div>
   </UiLoading>
 </template>
@@ -159,7 +195,7 @@
 <script setup lang="ts">
 import { UiButton, UiLoading, UiNumberInput, UiSelect, UiSwitch, UiTag, UiTimeField } from '../../ui'
 import { ref, computed, onMounted, watch } from 'vue'
-import { Activity, Bell, Clock, Info, RefreshCw, TriangleAlert } from 'lucide-vue-next'
+import { Activity, Archive, Bell, Clock, Info, RefreshCw, Save, SlidersHorizontal, TriangleAlert } from 'lucide-vue-next'
 import { notifyApi, settingsApi } from '../../api'
 import { apiError } from '../../utils/apiError'
 import type { NotifyChannel, SelectOption } from '../../types'
@@ -182,7 +218,9 @@ const settings = ref({
   sign_retry_interval: 30,
   sign_notify_enabled: false,
   sign_notify_channel_ids: [] as number[],
-  quota_warning_threshold: 5
+  quota_warning_threshold: 5,
+  audit_log_retention_days: 0,
+  system_log_retention_days: 0
 })
 const schedulerStatus = ref({
   next_run: null as string | null
@@ -257,145 +295,156 @@ onMounted(load)
 </script>
 
 <style scoped>
+/**
+ * 卡片网格：auto-fit + minmax 而不是写死两列 —— 侧栏折叠或超宽屏时
+ * 会自动变三列，窄屏自动掉到一列，不用堆断点。
+ */
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
+  grid-template-columns: repeat(auto-fit, minmax(288px, 1fr));
+  gap: var(--s3);
 }
 
 .setting-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-4);
-  transition: border-color var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-raised);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
 .setting-card:hover {
-  border-color: var(--border-color);
+  border-color: var(--line);
+  box-shadow: var(--lift-2);
 }
 
-.setting-card-header {
+.setting-card-head {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-3);
+  align-items: flex-start;
+  gap: 10px;
 }
 
+/* 图标用语义色的 wash 底 —— 六张卡各自一个色相，扫一眼就能定位 */
 .setting-card-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
 }
 
-.setting-card-icon.auto-sign { background: var(--primary-color-light); color: var(--primary-color); }
-.setting-card-icon.health { background: var(--info-color-light); color: var(--info-color); }
-.setting-card-icon.retry { background: var(--warning-color-light); color: var(--warning-color); }
-.setting-card-icon.notify { background: var(--cyan-light); color: var(--cyan-color); }
-.setting-card-icon.quota { background: var(--warning-color-light); color: var(--warning-color); }
+.setting-card-icon.is-signal { background: var(--signal-wash); color: var(--signal-deep); }
+.setting-card-icon.is-ok { background: var(--ok-wash); color: var(--ok); }
+.setting-card-icon.is-warn { background: var(--warn-wash); color: var(--warn); }
+.setting-card-icon.is-info { background: var(--info-wash); color: var(--info); }
+.setting-card-icon.is-bad { background: var(--bad-wash); color: var(--bad); }
+.setting-card-icon.is-muted { background: var(--surface-sunken); color: var(--ink-muted); }
 
-.setting-card-title {
-  flex: 1;
+.setting-card-heading {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-2);
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 1px;
 }
 
-.setting-card-title span {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+.setting-card-name {
+  color: var(--ink-max);
+  font-size: var(--fn-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-tight);
+}
+
+.setting-card-hint {
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
+  line-height: 1.45;
 }
 
 .setting-card-body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--border-color-light);
-}
-
-.setting-card-footer {
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--border-color-light);
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-faint);
 }
 
 .setting-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
   min-height: 28px;
 }
 
 .setting-row-label {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: var(--ink);
+  font-size: var(--fn-sm);
+  font-weight: var(--weight-medium);
 }
 
 .setting-row-control {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 7px;
 }
 
 .setting-row-unit {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
 }
 
 .setting-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: 7px;
 }
 
 .setting-note {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  line-height: 1.5;
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
+  line-height: var(--leading-loose);
 }
 
-.setting-disabled-text {
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
+/* 关闭态：只留一行灰字，卡片高度不塌，网格行高保持一致 */
+.setting-off {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  color: var(--ink-ghost);
+  font-size: var(--fn-sm);
+}
+
+.setting-off::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--ink-ghost);
 }
 
 .settings-footer {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding-top: var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
+  gap: var(--s3);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line-faint);
 }
 
-.settings-tip {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  padding: var(--spacing-2) var(--spacing-3);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-}
-
-@media (max-width: 900px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.settings-footer .pane-note { flex: 1; }
 
 @media (max-width: 560px) {
   .settings-footer {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--spacing-2);
   }
 }
 </style>

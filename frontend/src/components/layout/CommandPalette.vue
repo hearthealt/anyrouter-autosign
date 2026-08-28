@@ -1,5 +1,5 @@
 <template>
-  <UiModal :show="show" @update:show="(val: boolean) => emit('update:show', val)">
+  <UiModal :show="show" bare :width="680" @update:show="(val: boolean) => emit('update:show', val)">
     <div class="command-palette">
       <div class="cp-search">
         <Search :size="16" />
@@ -14,9 +14,9 @@
           @keydown.esc.prevent="close"
         />
         <div class="cp-hints">
-          <kbd class="cp-kbd">↑</kbd>
-          <kbd class="cp-kbd">↓</kbd>
-          <kbd class="cp-kbd">↵</kbd>
+          <kbd class="cp-kbd"><ArrowUp :size="11" /></kbd>
+          <kbd class="cp-kbd"><ArrowDown :size="11" /></kbd>
+          <kbd class="cp-kbd"><CornerDownLeft :size="11" /></kbd>
           <kbd class="cp-kbd">ESC</kbd>
         </div>
       </div>
@@ -59,7 +59,7 @@
 import { UiModal } from '../../ui'
 import { ref, computed, watch, nextTick, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { Activity, Clock, LayoutDashboard, Plus, RefreshCw, Search, Server, Settings, Users, Zap } from 'lucide-vue-next'
+import { Activity, ArrowDown, ArrowUp, Clock, CornerDownLeft, LayoutDashboard, Plus, RefreshCw, Search, Server, Settings, Users, Zap } from 'lucide-vue-next'
 import { accountApi, platformApi, signApi } from '../../api'
 import type { Account, Platform, SignLog } from '../../types'
 import { apiError } from '../../utils/apiError'
@@ -371,141 +371,28 @@ watch(commandItems, (items) => {
 </script>
 
 <style scoped>
-.command-palette {
-  width: min(640px, calc(100vw - 32px));
-  max-height: 70vh;
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.cp-search {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.cp-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-md);
-  color: var(--text-primary);
-}
-
-.cp-input::placeholder { color: var(--text-placeholder); }
-
-.cp-hints {
-  display: flex;
-  gap: 2px;
-  color: var(--text-tertiary);
-}
-
-.cp-kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  padding: 0 4px;
-  height: 18px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-tertiary);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-xs);
-  background: var(--bg-secondary);
-}
-
-.cp-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-2);
-}
-
-.cp-section-title {
-  padding: var(--spacing-2) var(--spacing-3) 4px;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: var(--font-medium);
-}
-
-.cp-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  color: var(--text-primary);
-}
-
-.cp-item.active {
-  background: var(--primary-color-light);
-}
-
-.cp-item-icon {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.cp-item-icon.action { background: var(--primary-color-light); color: var(--primary-color); }
-.cp-item-icon.account { background: var(--info-color-light); color: var(--info-color); }
-.cp-item-icon.platform { background: var(--success-color-light); color: var(--success-color); }
-.cp-item-icon.log { background: var(--warning-color-light); color: var(--warning-color); }
-
-.cp-item-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.cp-item-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.cp-item-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.cp-item-kind {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
-.cp-item-desc {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cp-state,
-.cp-empty {
-  padding: var(--spacing-8) var(--spacing-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
+.command-palette { position: relative; display: flex; width: 100%; min-width: 0; min-height: 0; max-height: inherit; overflow: hidden; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface-overlay); box-shadow: var(--lift-4); }
+.command-palette::before { position: absolute; z-index: 2; top: 0; right: 0; left: 0; height: 2px; content: ''; pointer-events: none; background: linear-gradient(90deg, var(--signal-deep), transparent 68%); }
+.cp-search { display: flex; align-items: center; gap: 12px; padding: 17px 19px; border-bottom: 1px solid var(--line-faint); background: linear-gradient(to right, var(--grid-line) 1px, transparent 1px), var(--surface-inset); background-size: 18px 18px; }
+.cp-search > svg { flex: 0 0 auto; color: var(--signal-deep); }
+.cp-input { min-width: 0; flex: 1; padding: 0; border: 0; outline: 0; color: var(--ink-max); background: transparent; font-size: var(--fn-lg); }
+.cp-input::placeholder { color: var(--ink-ghost); }
+.cp-hints { display: flex; gap: 3px; color: var(--ink-faint); }
+.cp-kbd { display: inline-grid; min-width: 21px; height: 21px; padding: 0 5px; place-items: center; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--ink-muted); background: var(--surface-raised); box-shadow: 0 1px 0 var(--line); font-family: var(--font-mono); font-size: 9px; }
+.cp-body { flex: 1; min-height: 0; padding: 8px; overflow-y: auto; overscroll-behavior: contain; }
+.cp-section-title { padding: 10px 12px 7px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: var(--weight-semibold); letter-spacing: .12em; text-transform: uppercase; }
+.cp-item { display: flex; width: 100%; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--r-md); color: var(--ink-strong); background: transparent; text-align: left; transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-bounce); }
+.cp-item.active { border-color: color-mix(in srgb, var(--signal-deep) 22%, transparent); background: var(--signal-wash); transform: translateX(3px); }
+.cp-item-icon { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line-faint); border-radius: 50%; color: var(--ink-muted); background: var(--surface-inset); }
+.cp-item-icon.action { color: var(--signal-deep); background: var(--signal-wash); }
+.cp-item-icon.account { color: var(--info); background: var(--info-wash); }
+.cp-item-icon.platform { color: var(--ok); background: var(--ok-wash); }
+.cp-item-icon.log { color: var(--warn); background: var(--warn-wash); }
+.cp-item-body { min-width: 0; flex: 1; }
+.cp-item-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
+.cp-item-title { color: var(--ink-strong); font-size: var(--fn-sm); font-weight: var(--weight-semibold); }
+.cp-item-kind { flex: 0 0 auto; color: var(--ink-faint); font-family: var(--font-mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.cp-item-desc { margin-top: 2px; overflow: hidden; color: var(--ink-muted); font-size: var(--fn-xs); text-overflow: ellipsis; white-space: nowrap; }
+.cp-state, .cp-empty { padding: var(--s10) var(--s4); color: var(--ink-faint); font-size: var(--fn-sm); text-align: center; }
+@media (max-width: 560px) { .cp-hints { display: none; } .cp-search { padding-inline: 15px; } }
 </style>

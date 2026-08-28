@@ -1,32 +1,35 @@
 <template>
-  <div class="card settings-panel">
-    <UiLoading :show="loading">
-      <div class="channel-header">
-        <div class="channel-header-info">
-          <div class="channel-header-title">账号分组</div>
-          <div class="channel-header-desc">创建分组来组织和管理账号</div>
+  <UiLoading :show="loading">
+    <div class="settings-pane">
+      <div class="pane-head">
+        <div class="pane-heading">
+          <div class="pane-title"><FolderOpen :size="15" />账号分组</div>
+          <div class="pane-desc">创建分组来组织和管理账号，分组颜色会显示在账号列表里</div>
         </div>
-        <UiButton type="primary" @click="showAddGroupModal">
-          <template #icon><Plus /></template>
-          新建分组
-        </UiButton>
+        <div class="pane-actions">
+          <UiButton type="primary" size="small" @click="showAddGroupModal">
+            <template #icon><Plus /></template>
+            新建分组
+          </UiButton>
+        </div>
       </div>
 
-      <UiDivider style="margin: 16px 0;" />
-
       <div v-if="groups.length > 0" class="group-grid">
-        <div v-for="group in groups" :key="group.id" class="group-card">
-          <div class="group-card-header">
-            <div class="group-color-dot" :style="{ background: getGroupColor(group.color) }"></div>
-            <div class="group-account-count">
-              <UiTag size="small" :bordered="false">{{ group.account_count }} 个账号</UiTag>
+        <article
+          v-for="group in groups"
+          :key="group.id"
+          class="group-card"
+          :style="{ '--group-color': getGroupColor(group.color) }"
+        >
+          <header class="group-card-head">
+            <span class="group-color-dot"></span>
+            <div class="group-card-heading">
+              <span class="group-name">{{ group.name }}</span>
+              <span class="group-desc">{{ group.description || '暂无描述' }}</span>
             </div>
-          </div>
-          <div class="group-card-body">
-            <div class="group-name">{{ group.name }}</div>
-            <div class="group-desc">{{ group.description || '暂无描述' }}</div>
-          </div>
-          <div class="group-card-footer">
+            <span class="group-count mono">{{ group.account_count }}</span>
+          </header>
+          <footer class="group-card-foot">
             <UiButton size="small" quaternary @click="editGroup(group)">
               <template #icon><Pencil /></template>
               编辑
@@ -40,67 +43,68 @@
               </template>
               删除分组后，账号将变为未分组状态
             </UiConfirm>
-          </div>
-        </div>
+          </footer>
+        </article>
       </div>
 
       <div v-else class="empty-state">
-        <div class="empty-icon">
-          <FolderOpen :size="48" />
-        </div>
+        <FolderOpen :size="40" class="empty-icon" />
         <div class="empty-title">暂无分组</div>
         <div class="empty-desc">创建分组来更好地组织和管理您的账号</div>
-        <UiButton type="primary" @click="showAddGroupModal" style="margin-top: 16px;">
+        <UiButton type="primary" size="small" @click="showAddGroupModal">
           <template #icon><Plus /></template>
           创建第一个分组
         </UiButton>
       </div>
-    </UiLoading>
-  </div>
+    </div>
+  </UiLoading>
 
-  <UiModal v-model:show="showGroupModal" :mask-closable="false">
+  <UiModal v-model:show="showGroupModal" bare :width="440" :mask-closable="false">
     <div class="modal-container">
       <div class="modal-header">
         <h3>{{ editingGroup ? '编辑分组' : '新建分组' }}</h3>
         <UiButton text @click="showGroupModal = false">
-          <X :size="20" />
+          <X :size="18" />
         </UiButton>
       </div>
       <div class="modal-body">
         <div class="form-item">
           <label>分组名称</label>
-          <UiInput v-model:value="groupForm.name" placeholder="输入分组名称" />
+          <UiInput v-model:value="groupForm.name" size="small" placeholder="输入分组名称" />
         </div>
         <div class="form-item">
           <label>分组描述（可选）</label>
-          <UiInput v-model:value="groupForm.description" placeholder="输入分组描述" />
+          <UiInput v-model:value="groupForm.description" size="small" placeholder="输入分组描述" />
         </div>
         <div class="form-item">
           <label>分组颜色</label>
           <div class="color-picker">
-            <div
+            <button
               v-for="color in colorOptions"
               :key="color.value"
+              type="button"
               class="color-option"
-              :class="{ active: groupForm.color === color.value }"
-              :style="{ background: color.hex }"
+              :class="{ 'is-active': groupForm.color === color.value }"
+              :style="{ '--swatch': color.hex }"
+              :aria-label="color.value"
+              :aria-pressed="groupForm.color === color.value"
               @click="groupForm.color = color.value"
             >
-              <Check :size="14" />
-            </div>
+              <Check :size="13" />
+            </button>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <UiButton @click="showGroupModal = false">取消</UiButton>
-        <UiButton type="primary" @click="saveGroup" :loading="savingGroup">保存</UiButton>
+        <UiButton size="small" @click="showGroupModal = false">取消</UiButton>
+        <UiButton size="small" type="primary" @click="saveGroup" :loading="savingGroup">保存</UiButton>
       </div>
     </div>
   </UiModal>
 </template>
 
 <script setup lang="ts">
-import { UiButton, UiConfirm, UiDivider, UiInput, UiLoading, UiModal, UiTag } from '../../ui'
+import { UiButton, UiConfirm, UiInput, UiLoading, UiModal } from '../../ui'
 import { ref, onMounted, watch } from 'vue'
 import { Check, FolderOpen, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
 import { groupsApi } from '../../api'
@@ -211,145 +215,190 @@ onMounted(load)
 </script>
 
 <style scoped>
-.settings-panel :deep(.n-card__content) { padding: 0; }
-.settings-panel :deep(.n-card) { background: transparent; border: none; box-shadow: none; }
-
-.channel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-3);
-  padding-bottom: var(--spacing-3);
-  border-bottom: 1px solid var(--border-color-light);
-}
-.channel-header-info { flex: 1; }
-.channel-header-title {
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-.channel-header-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
-
 .group-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--spacing-3);
+  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  gap: var(--s3);
 }
 
+/**
+ * 分组色通过 --group-color 传进来，卡片左边一条竖线用它上色 ——
+ * 比原来一个 20px 色块更能把"这张卡属于哪个分组"讲清楚。
+ */
 .group-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-3);
-  transition: border-color var(--transition-fast);
-}
-.group-card:hover { border-color: var(--border-color); }
-
-.group-card-header {
+  position: relative;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-lg);
+  background: var(--surface-raised);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.group-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--group-color);
+}
+
+.group-card:hover {
+  border-color: var(--line);
+  box-shadow: var(--lift-2);
+}
+
+.group-card-head {
+  display: flex;
   align-items: center;
-  margin-bottom: var(--spacing-2);
+  gap: 10px;
+  padding: 12px 13px 12px 16px;
 }
 
 .group-color-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-full);
+  background: var(--group-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--group-color) 18%, transparent);
 }
 
-.group-card-body { margin-bottom: var(--spacing-2); }
+.group-card-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .group-name {
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-primary);
-  margin-bottom: 2px;
+  overflow: hidden;
+  color: var(--ink-max);
+  font-size: var(--fn-md);
+  font-weight: var(--weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.group-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
 
-.group-card-footer {
+.group-desc {
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: var(--fn-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 账号数用等宽数字读数，右侧对齐 */
+.group-count {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  font-size: var(--fn-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.group-card-foot {
   display: flex;
   gap: 2px;
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--border-color-light);
+  padding: 6px;
+  border-top: 1px solid var(--line-faint);
+  background: var(--surface-inset);
 }
-.group-card-footer .n-button { flex: 1; }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--spacing-12) var(--spacing-5);
-  gap: var(--spacing-2);
-}
-.empty-icon { margin-bottom: var(--spacing-2); }
-.empty-title { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary); }
-.empty-desc { font-size: var(--text-xs); color: var(--text-tertiary); }
+.group-card-foot > * { flex: 1; }
+.group-card-foot :deep(.ui-btn) { width: 100%; }
 
-.delete-btn:hover { color: var(--error-color) !important; }
+.empty-icon { color: var(--ink-ghost); }
+.delete-btn:hover { color: var(--bad); }
+
+/* ── 分组编辑弹窗 */
 
 .modal-container {
-  width: min(480px, calc(100vw - 24px));
-  background: var(--bg-modal);
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: inherit;
+  flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface-overlay);
+  box-shadow: var(--lift-4);
 }
+
 .modal-header {
   display: flex;
-  justify-content: space-between;
+  flex: 0 0 auto;
   align-items: center;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 1px solid var(--border-color-light);
+  justify-content: space-between;
+  padding: 14px var(--s5);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-inset);
 }
-.modal-header h3 { margin: 0; font-size: var(--text-md); font-weight: var(--font-semibold); }
-.modal-body { padding: var(--spacing-4); max-height: 60vh; overflow-y: auto; }
 
-.form-item { margin-bottom: var(--spacing-3); }
-.form-item:last-child { margin-bottom: 0; }
-.form-item label {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-  margin-bottom: 6px;
+.modal-header h3 {
+  margin: 0;
+  font-size: var(--fn-lg);
+  font-weight: var(--weight-semibold);
 }
+
+.modal-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s4);
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  padding: var(--s5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.form-item { margin-bottom: 0; }
 
 .modal-footer {
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 1px solid var(--border-color-light);
-  background: var(--bg-card-hover);
+  gap: var(--s2);
+  padding: 12px var(--s5);
+  border-top: 1px solid var(--line-faint);
+  background: var(--surface-inset);
 }
 
 .color-picker {
   display: flex;
-  gap: var(--spacing-2);
   flex-wrap: wrap;
+  gap: var(--s2);
 }
 
 .color-option {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
   display: grid;
   place-items: center;
-  transition: transform var(--transition-fast);
+  width: 28px;
+  height: 28px;
   border: 2px solid transparent;
-}
-.color-option:hover { transform: scale(1.08); }
-.color-option.active {
-  border-color: var(--bg-card);
-  box-shadow: 0 0 0 2px currentColor;
+  border-radius: var(--r-md);
+  background: var(--swatch);
+  color: transparent;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-@media (max-width: 768px) {
-  .channel-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-2); }
-  .group-grid { grid-template-columns: 1fr; }
+.color-option:hover { transform: scale(1.08); }
+
+/* 选中态：白勾 + 一圈同色光环，暗色主题下也看得出选了哪个 */
+.color-option.is-active {
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--swatch);
 }
 </style>
