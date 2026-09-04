@@ -752,6 +752,26 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
     return ApiResponse(success=True, data=build_account_response(db, account))
 
 
+# 只落本地库、不依赖平台凭证的字段
+LOCAL_ONLY_UPDATE_FIELDS = {"is_active", "group_id", "note"}
+
+
+def apply_local_account_fields(account: Account, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """应用不依赖平台凭证的本地字段，返回审计用的变更摘要。"""
+    changes: Dict[str, Any] = {}
+    if "is_active" in updates:
+        account.is_active = bool(updates["is_active"])
+        changes["is_active"] = "已启用" if account.is_active else "已禁用"
+    if "group_id" in updates:
+        group_id = updates["group_id"]
+        account.group_id = group_id if group_id and group_id > 0 else None
+        changes["group_id"] = account.group_id
+    if "note" in updates:
+        account.note = clean_optional_note(updates.get("note"))
+        changes["note"] = "已更新"
+    return changes
+
+
 @router.put("/{account_id}", response_model=ApiResponse)
 def update_account(
     account_id: int,
@@ -766,6 +786,25 @@ def update_account(
         raise HTTPException(status_code=404, detail="账号不存在")
 
     updates = data.model_dump(exclude_unset=True)
+
+    # 只调整本地状态（禁用/分组/备注）时不回平台校验凭证：凭证已失效的账号也要能禁用。
+    # 启用账号会走下面的完整流程，仍然确认凭证可用。
+    if updates and set(updates) <= LOCAL_ONLY_UPDATE_FIELDS and updates.get("is_active") is not True:
+        local_changes = apply_local_account_fields(account, updates)
+        account.updated_at = datetime.now()
+        db.commit()
+        db.refresh(account)
+
+        log_action(
+            db=db, action=AuditAction.ACCOUNT_UPDATE, user_id=current_user.id,
+            username=current_user.username, target_type="account", target_id=account.id,
+            target_name=account.username, detail=local_changes or None, request=request,
+        )
+        publish_event("account_changed", {
+            "account_id": account.id, "username": account.username or "", "action": "updated",
+        })
+        return ApiResponse(success=True, message="账号更新成功", data=build_account_response(db, account))
+
     target_platform_id = updates.get("platform_id", account.platform_id)
     target_platform = get_platform_by_id(db, target_platform_id)
     if not target_platform:
@@ -946,13 +985,7 @@ def update_account(
 
     account.proxy_mode = proxy_mode
     account.proxy_url = proxy_url
-    if "is_active" in updates:
-        account.is_active = bool(updates["is_active"])
-    if "group_id" in updates:
-        group_id = updates["group_id"]
-        account.group_id = group_id if group_id and group_id > 0 else None
-    if "note" in updates:
-        account.note = clean_optional_note(updates.get("note"))
+    changes.update(apply_local_account_fields(account, updates))
     account.updated_at = datetime.now()
     db.commit()
     db.refresh(account)
