@@ -32,10 +32,13 @@ function createSystemUpdate() {
   const updateHint = ref(initialUpdate ? '正在连接新版本服务，请稍候' : '')
   // 保留原字段名，数值改为“已等待秒数”，避免影响已有组件调用。
   const reloadCountdown = ref(initialUpdate ? elapsedSeconds(initialUpdate.startedAt) : 0)
+  // 达到超时上限前只自动刷新：容器重启中途手动刷新只会刷出 502，反而像是更新失败。
+  const waitedOut = ref(false)
 
   let activeUpdate: PersistedUpdate | null = initialUpdate
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let reloadTimer: ReturnType<typeof setTimeout> | null = null
+  let tickTimer: ReturnType<typeof setInterval> | null = null
   let pollInFlight = false
   let autoReloading = false
   let pollingEnabled = false
@@ -48,6 +51,9 @@ function createSystemUpdate() {
     versionStore.hasNewVersion &&
     !updating.value
   ))
+
+  // 只有等满超时上限、自动确认失败后才放出手动刷新入口。
+  const canManualReload = computed(() => updating.value && waitedOut.value)
 
   const reloadPage = () => window.location.reload()
 
@@ -119,9 +125,35 @@ function createSystemUpdate() {
     }
   }
 
+  /**
+   * 每秒推进“已等待秒数”，并在等满超时上限的那一秒就放出手动刷新入口。
+   * 轮询间隔是 3 秒、单次健康请求还有 5 秒超时，只靠轮询回调推进会让秒数跳着走，
+   * 手动刷新入口也会比超时时刻晚几秒才出现。
+   */
+  function startElapsedTicker() {
+    if (tickTimer) return
+    tickTimer = setInterval(() => {
+      if (!activeUpdate || !updating.value || autoReloading || !pollingEnabled) {
+        stopElapsedTicker()
+        return
+      }
+      const elapsed = elapsedSeconds(activeUpdate.startedAt)
+      reloadCountdown.value = elapsed
+      if (elapsed >= activeUpdate.timeoutSeconds) enterTimeoutState(elapsed)
+    }, 1000)
+  }
+
+  function stopElapsedTicker() {
+    if (tickTimer) {
+      clearInterval(tickTimer)
+      tickTimer = null
+    }
+  }
+
   function clearTimers() {
     clearPollTimer()
     clearReloadTimer()
+    stopElapsedTicker()
   }
 
   function setWaitingMessage(message: string, elapsed = activeUpdate ? elapsedSeconds(activeUpdate.startedAt) : 0) {
@@ -151,11 +183,13 @@ function createSystemUpdate() {
   function finishAndReload() {
     const elapsed = activeUpdate ? elapsedSeconds(activeUpdate.startedAt) : reloadCountdown.value
     clearPollTimer()
+    stopElapsedTicker()
     clearPersistedUpdate()
     updating.value = true
     updateStage.value = '服务已恢复，正在刷新页面'
     setWaitingMessage('已确认新版本服务恢复', elapsed)
     autoReloading = true
+    waitedOut.value = false
     clearReloadTimer()
     reloadTimer = setTimeout(() => {
       reloadTimer = null
@@ -163,11 +197,23 @@ function createSystemUpdate() {
     }, RELOAD_AFTER_READY_MS)
   }
 
+  /** 等满超时上限仍未确认服务恢复：停止轮询，放出手动刷新入口。 */
+  function enterTimeoutState(elapsed: number) {
+    clearPollTimer()
+    stopElapsedTicker()
+    clearPersistedUpdate()
+    waitedOut.value = true
+    updating.value = true
+    updateStage.value = '更新仍在进行'
+    setWaitingMessage('暂未确认新版本服务恢复，可手动刷新页面', elapsed)
+  }
+
   function stopWithError(message: string, notify = true) {
     clearTimers()
     clearPersistedUpdate()
     updating.value = false
     autoReloading = false
+    waitedOut.value = false
     updateStage.value = ''
     updateHint.value = ''
     reloadCountdown.value = 0
@@ -184,11 +230,7 @@ function createSystemUpdate() {
 
     if (elapsed >= update.timeoutSeconds) {
       pollInFlight = false
-      clearPollTimer()
-      clearPersistedUpdate()
-      updating.value = true
-      updateStage.value = '更新仍在进行'
-      setWaitingMessage('暂未确认新版本服务恢复，可稍后手动刷新', elapsed)
+      enterTimeoutState(elapsed)
       return
     }
 
@@ -197,7 +239,9 @@ function createSystemUpdate() {
       const data = res.data as SystemHealthInfo
       const serverElapsed = typeof data.elapsed_seconds === 'number' ? data.elapsed_seconds : 0
       const currentElapsed = Math.max(elapsed, serverElapsed)
-      reloadCountdown.value = currentElapsed
+      // 请求在途期间可能已被定时器按超时收尾（或被新任务取代），此时秒数要停在超时值上。
+      const stale = activeUpdate !== update
+      if (!stale) reloadCountdown.value = currentElapsed
 
       if (data.ready === true || data.update_status === 'ready') {
         finishAndReload()
@@ -215,12 +259,14 @@ function createSystemUpdate() {
         return
       }
 
+      if (stale) return
       updateStage.value = data.update_status === 'updating'
         ? '正在拉取新镜像并重启服务'
         : '正在等待新版本服务恢复'
       setWaitingMessage(data.message || '服务正在更新，请稍候', currentElapsed)
     } catch (error) {
       // 502/503/网络超时都可能是容器正在重启，继续轮询直到达到超时上限。
+      if (activeUpdate !== update) return
       const currentElapsed = elapsedSeconds(update.startedAt)
       reloadCountdown.value = currentElapsed
       updateStage.value = '正在等待新版本服务恢复'
@@ -233,9 +279,7 @@ function createSystemUpdate() {
       if (activeUpdate === update && updating.value && !autoReloading && pollingEnabled) {
         const currentElapsed = elapsedSeconds(update.startedAt)
         if (currentElapsed >= update.timeoutSeconds) {
-          clearPersistedUpdate()
-          updateStage.value = '更新仍在进行'
-          setWaitingMessage('暂未确认新版本服务恢复，可稍后手动刷新', currentElapsed)
+          enterTimeoutState(currentElapsed)
         } else {
           schedulePoll(update.pollIntervalSeconds * 1000)
         }
@@ -249,8 +293,10 @@ function createSystemUpdate() {
     updating.value = true
     pollingEnabled = true
     autoReloading = false
+    waitedOut.value = false
     updateStage.value = '正在等待新版本服务恢复'
     setWaitingMessage('更新任务已创建，正在确认服务状态')
+    startElapsedTicker()
     void pollUpdateStatus()
   }
 
@@ -286,9 +332,11 @@ function createSystemUpdate() {
     updating.value = true
     pollingEnabled = true
     autoReloading = false
+    waitedOut.value = false
     reloadCountdown.value = 0
     updateStage.value = '正在创建更新任务'
     updateHint.value = '正在通知服务器执行更新，请稍候'
+    startElapsedTicker()
 
     try {
       const res = await systemApi.triggerUpdate(update.updateId)
@@ -340,6 +388,7 @@ function createSystemUpdate() {
     updateHint,
     reloadCountdown,
     canUpdate,
+    canManualReload,
     doUpdate,
     reloadPage,
     resumeFromStorage,

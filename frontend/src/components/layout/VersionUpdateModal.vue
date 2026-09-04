@@ -16,9 +16,9 @@
           <div class="update-actions">
             <div v-if="reloadCountdown > 0" class="update-countdown">
               <strong>{{ reloadCountdown }}</strong>
-              <span>秒，正在确认服务恢复</span>
+              <span>{{ canManualReload ? '秒，仍未确认服务恢复' : '秒，正在确认服务恢复' }}</span>
             </div>
-            <UiButton size="small" @click="reloadPage">立即刷新</UiButton>
+            <UiButton v-if="canManualReload" size="small" @click="reloadPage">立即刷新</UiButton>
           </div>
         </div>
       </template>
@@ -123,6 +123,7 @@ const {
   updateHint,
   reloadCountdown,
   canUpdate,
+  canManualReload,
   doUpdate,
   reloadPage
 } = useSystemUpdate()
